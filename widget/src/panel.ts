@@ -284,8 +284,8 @@ export function attachPanelEvents(
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.message ?? `Ошибка отправки (${res.status})`);
+        const errBody = await res.json().catch(() => null);
+        throw new Error(errBody?.error ?? errBody?.message ?? `Ошибка отправки (${res.status})`);
       }
 
       // Success

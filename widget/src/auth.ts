@@ -2,7 +2,7 @@ const TOKEN_KEY = '__scout_token__';
 const USER_KEY = '__scout_user__';
 
 interface ScoutUser {
-  id: number;
+  id: string;
   email: string;
   name?: string;
 }
@@ -58,7 +58,7 @@ export async function login(apiUrl: string, email: string, password: string): Pr
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Ошибка входа (${res.status})`);
+    throw new Error(body?.error ?? body?.message ?? `Ошибка входа (${res.status})`);
   }
 
   const json: LoginResponse = await res.json();
@@ -67,9 +67,9 @@ export async function login(apiUrl: string, email: string, password: string): Pr
   return { token, user };
 }
 
-let cachedProjectId: number | null = null;
+let cachedProjectId: string | null = null;
 
-export async function resolveProjectId(apiUrl: string, projectSlug: string): Promise<number> {
+export async function resolveProjectId(apiUrl: string, projectSlug: string): Promise<string> {
   if (cachedProjectId !== null) return cachedProjectId;
 
   const token = getToken();
@@ -93,7 +93,7 @@ export async function resolveProjectId(apiUrl: string, projectSlug: string): Pro
   }
 
   const json = await res.json();
-  const items: Array<{ id: number; slug: string }> = json.data?.items ?? [];
+  const items: Array<{ id: string; slug: string }> = json.data?.items ?? [];
   const project = items.find((p) => p.slug === projectSlug);
 
   if (!project) {

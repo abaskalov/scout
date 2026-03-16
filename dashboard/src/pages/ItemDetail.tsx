@@ -151,10 +151,10 @@ export default function ItemDetail() {
   if (!item) return null;
 
   const screenshotUrl = item.screenshotPath
-    ? `/storage/screenshots/${item.screenshotPath}`
+    ? `/${item.screenshotPath}`
     : null;
   const recordingUrl = item.sessionRecordingPath
-    ? `/storage/recordings/${item.sessionRecordingPath}`
+    ? `/${item.sessionRecordingPath}`
     : null;
 
   return (

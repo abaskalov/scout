@@ -46,33 +46,25 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
     }
   }
 
-  try {
-    // Use full document dimensions so html2canvas renders the entire
-    // scrollable page, not just the visible viewport.
-    const fullWidth = Math.max(
-      document.documentElement.scrollWidth,
-      document.body.scrollWidth,
-      window.innerWidth,
-    );
-    const fullHeight = Math.max(
-      document.documentElement.scrollHeight,
-      document.body.scrollHeight,
-      window.innerHeight,
-    );
+  // Scroll to top so html2canvas captures the full page from the beginning
+  const prevScrollX = window.scrollX;
+  const prevScrollY = window.scrollY;
+  window.scrollTo(0, 0);
 
+  try {
     const canvas = await html2canvas(document.body, {
       useCORS: true,
       allowTaint: true,
       scale: 1,
       logging: false,
       backgroundColor: '#ffffff',
-      windowWidth: fullWidth,
-      windowHeight: fullHeight,
     });
 
     const dataUrl = canvas.toDataURL('image/png');
     return dataUrl.replace(/^data:image\/png;base64,/, '');
   } finally {
+    // Restore scroll position
+    window.scrollTo(prevScrollX, prevScrollY);
     if (highlightOverlay) {
       highlightOverlay.remove();
     }

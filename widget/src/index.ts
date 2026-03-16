@@ -8,6 +8,8 @@ import { startRecording } from './recorder';
 interface ScoutConfig {
   apiUrl: string;
   projectSlug: string;
+  /** Set to false to disable widget. Default: true. Override with ?scout=1 in URL. */
+  enabled?: boolean;
 }
 
 declare global {
@@ -21,6 +23,12 @@ function init(): void {
   if (!config?.apiUrl || !config?.projectSlug) {
     console.warn('[Scout] Missing window.__SCOUT_CONFIG__ (apiUrl, projectSlug)');
     return;
+  }
+
+  // Visibility control: config.enabled + URL override ?scout=1
+  const urlOverride = new URLSearchParams(window.location.search).get('scout') === '1';
+  if (config.enabled === false && !urlOverride) {
+    return; // Widget disabled by config, no URL override
   }
 
   const { apiUrl, projectSlug } = config;

@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch server/index.ts",
-    "dev:all": "concurrently -n api,dash,widget \"pnpm dev\" \"pnpm --filter dashboard dev\" \"pnpm --filter widget build:watch\"",
-    "build": "pnpm build:server && pnpm --filter dashboard build && pnpm --filter widget build",
+    "dev:all": "concurrently -n api,dash,widget \"pnpm dev\" \"pnpm --filter scout-dashboard dev\" \"pnpm --filter scout-widget build:watch\"",
+    "orchestrator": "tsx orchestrator/process-bugs.ts",
+    "build": "pnpm build:server && pnpm --filter scout-dashboard build && pnpm --filter scout-widget build",
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
     "test": "vitest run",

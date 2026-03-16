@@ -62,6 +62,8 @@ export function startRecording(): void {
     },
     maskAllInputs: false,
     recordCrossOriginIframes: false,
+    // Exclude Scout widget from recording
+    blockSelector: '#scout-widget-root',
     // Create a new FullSnapshot periodically so the rolling buffer always has one
     checkoutEveryNms: CHECKOUT_INTERVAL_MS,
   };

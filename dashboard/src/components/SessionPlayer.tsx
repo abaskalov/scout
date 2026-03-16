@@ -4,6 +4,11 @@ interface SessionPlayerProps {
   recordingPath: string;
 }
 
+interface RRWebEvent {
+  type: number;
+  data?: { width?: number; height?: number };
+}
+
 export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -21,11 +26,10 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
 
         const res = await fetch(recordingPath);
         if (!res.ok) throw new Error(`Не удалось загрузить запись: ${res.status}`);
-        const events = await res.json();
+        const events: RRWebEvent[] = await res.json();
 
         if (cancelled || !containerRef.current || !wrapperRef.current) return;
 
-        // Dynamically import rrweb-player
         const rrwebPlayer = await import('rrweb-player');
         await import('rrweb-player/dist/style.css');
 
@@ -33,18 +37,20 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
 
         containerRef.current.innerHTML = '';
 
-        // Calculate responsive size based on container width
-        const containerWidth = wrapperRef.current.clientWidth;
-        const playerWidth = Math.min(containerWidth, 900);
-        const playerHeight = Math.round(playerWidth * 0.6); // 16:10 aspect ratio
+        // Extract original viewport from Meta event (type 4)
+        const metaEvent = events.find((e) => e.type === 4);
+        const originalWidth = metaEvent?.data?.width || 1440;
+        const originalHeight = metaEvent?.data?.height || 900;
 
+        // Use original viewport dimensions so recorded page CSS renders correctly.
+        // Container scrolls horizontally if player is wider than available space.
         const RRWebPlayer = rrwebPlayer.default;
         playerRef.current = new RRWebPlayer({
           target: containerRef.current,
           props: {
             events,
-            width: playerWidth,
-            height: playerHeight,
+            width: originalWidth,
+            height: originalHeight,
             autoPlay: false,
             showController: true,
           },
@@ -83,7 +89,10 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
       {loading && (
         <div className="py-4 text-sm text-gray-500">Загрузка записи...</div>
       )}
-      <div ref={containerRef} className="w-full overflow-hidden rounded-lg border border-gray-200" />
+      <div
+        ref={containerRef}
+        className="w-full overflow-x-auto rounded-lg border border-gray-200"
+      />
     </div>
   );
 }

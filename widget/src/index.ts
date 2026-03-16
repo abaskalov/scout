@@ -1,5 +1,5 @@
 import { WIDGET_STYLES } from './styles';
-import { getToken, login, clearAuth, preloadBridge, restoreAuthFromBridge } from './auth';
+import { getToken, login, clearAuth } from './auth';
 import { createFab, showFab, hideFab } from './fab';
 import { pickElement, type PickedElement } from './element-picker';
 import { createPanel, showPanel, hidePanel, attachPanelEvents, type PanelCallbacks } from './panel';
@@ -51,8 +51,7 @@ function init(): void {
 
   const { apiUrl, projectSlug } = config;
 
-  // Preload auth bridge for cross-site SSO
-  preloadBridge(apiUrl);
+
 
   // --- Shadow DOM setup ---
   const host = document.createElement('div');
@@ -286,10 +285,6 @@ function init(): void {
 
   // --- Create FAB ---
   const fab = createFab(async () => {
-    // Try to restore auth from bridge (cross-site SSO)
-    if (!getToken()) {
-      await restoreAuthFromBridge(apiUrl);
-    }
     const token = getToken();
     if (!token) {
       hideFab(fab);

@@ -12,6 +12,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router": "^7.1.5",
+    "rrweb": "2.0.0-alpha.20",
     "rrweb-player": "^2.0.0-alpha.17"
   },
   "devDependencies": {

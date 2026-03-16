@@ -3,17 +3,17 @@ import { api } from '../lib/api';
 import Pagination from '../components/Pagination';
 
 interface UserItem {
-  id: number;
+  id: string;
   email: string;
   name: string;
   role: 'admin' | 'member' | 'agent';
   isActive: boolean;
-  projectIds?: number[];
+  projectIds?: string[];
   createdAt: string;
 }
 
 interface Project {
-  id: number;
+  id: string;
   name: string;
 }
 
@@ -30,7 +30,7 @@ const emptyForm = {
   name: '',
   role: 'member' as 'admin' | 'member' | 'agent',
   isActive: true,
-  projectIds: [] as number[],
+  projectIds: [] as string[],
 };
 
 export default function Users() {
@@ -44,7 +44,7 @@ export default function Users() {
   });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -137,7 +137,7 @@ export default function Users() {
     }
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete(id: string) {
     if (!confirm('Удалить этого пользователя?')) return;
     try {
       await api('/api/users/delete', { id });
@@ -147,7 +147,7 @@ export default function Users() {
     }
   }
 
-  function toggleProject(pid: number) {
+  function toggleProject(pid: string) {
     setForm((f) => ({
       ...f,
       projectIds: f.projectIds.includes(pid)

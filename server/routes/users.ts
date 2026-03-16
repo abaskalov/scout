@@ -88,9 +88,26 @@ export const userRoutes = new Hono()
         total = cnt;
       }
 
+      // Attach projectIds to each user
+      const userIds = userList.map((u) => u.id);
+      const pivots = userIds.length
+        ? db.select().from(pivotUsersProjects)
+            .where(inArray(pivotUsersProjects.userId, userIds))
+            .all()
+        : [];
+      const pivotMap = new Map<string, string[]>();
+      for (const p of pivots) {
+        const arr = pivotMap.get(p.userId);
+        if (arr) arr.push(p.projectId);
+        else pivotMap.set(p.userId, [p.projectId]);
+      }
+
       return c.json({
         data: {
-          items: userList.map(stripPassword),
+          items: userList.map((u) => ({
+            ...stripPassword(u),
+            projectIds: pivotMap.get(u.id) ?? [],
+          })),
           pagination: { page, perPage, total, totalPages: Math.ceil(total / perPage) },
         },
       });

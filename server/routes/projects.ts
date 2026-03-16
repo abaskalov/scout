@@ -1,0 +1,111 @@
+import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
+import { eq, count, desc } from 'drizzle-orm';
+import { db } from '../db/client.js';
+import { projects, scoutItems } from '../db/schema.js';
+import { authMiddleware } from '../middleware/auth.js';
+import { requireRole } from '../middleware/permissions.js';
+import { randomUUID } from 'node:crypto';
+import { NotFoundError, ConflictError, ValidationError } from '../lib/errors.js';
+import {
+  createProjectSchema, updateProjectSchema,
+  getProjectSchema, deleteProjectSchema, listProjectsSchema,
+} from '../lib/schemas.js';
+
+export const projectRoutes = new Hono()
+  .use('/*', authMiddleware)
+  .use('/*', requireRole('admin'))
+
+  // CREATE
+  .post('/create',
+    zValidator('json', createProjectSchema),
+    async (c) => {
+      const { name, slug, allowedOrigins } = c.req.valid('json');
+
+      // Check unique slug
+      const existing = db.select().from(projects).where(eq(projects.slug, slug)).get();
+      if (existing) throw new ConflictError(`Project with slug '${slug}' already exists`);
+
+      const id = randomUUID();
+      db.insert(projects).values({
+        id, name, slug,
+        allowedOrigins: JSON.stringify(allowedOrigins),
+      }).run();
+
+      const project = db.select().from(projects).where(eq(projects.id, id)).get()!;
+      return c.json({ data: project }, 201);
+    })
+
+  // LIST
+  .post('/list',
+    zValidator('json', listProjectsSchema),
+    async (c) => {
+      const { page, perPage } = c.req.valid('json');
+
+      const items = db.select().from(projects)
+        .orderBy(desc(projects.createdAt))
+        .limit(perPage)
+        .offset((page - 1) * perPage)
+        .all();
+
+      const [{ total }] = db.select({ total: count() }).from(projects).all();
+
+      return c.json({
+        data: {
+          items,
+          pagination: { page, perPage, total, totalPages: Math.ceil(total / perPage) },
+        },
+      });
+    })
+
+  // GET
+  .post('/get',
+    zValidator('json', getProjectSchema),
+    async (c) => {
+      const { id } = c.req.valid('json');
+      const project = db.select().from(projects).where(eq(projects.id, id)).get();
+      if (!project) throw new NotFoundError('Project');
+      return c.json({ data: project });
+    })
+
+  // UPDATE
+  .post('/update',
+    zValidator('json', updateProjectSchema),
+    async (c) => {
+      const { id, name, allowedOrigins, autofixEnabled, isActive } = c.req.valid('json');
+
+      const existing = db.select().from(projects).where(eq(projects.id, id)).get();
+      if (!existing) throw new NotFoundError('Project');
+
+      const updateData: Record<string, unknown> = {
+        updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      };
+      if (name !== undefined) updateData.name = name;
+      if (allowedOrigins !== undefined) updateData.allowedOrigins = JSON.stringify(allowedOrigins);
+      if (autofixEnabled !== undefined) updateData.autofixEnabled = autofixEnabled;
+      if (isActive !== undefined) updateData.isActive = isActive;
+
+      db.update(projects).set(updateData).where(eq(projects.id, id)).run();
+      const project = db.select().from(projects).where(eq(projects.id, id)).get()!;
+      return c.json({ data: project });
+    })
+
+  // DELETE
+  .post('/delete',
+    zValidator('json', deleteProjectSchema),
+    async (c) => {
+      const { id } = c.req.valid('json');
+
+      const existing = db.select().from(projects).where(eq(projects.id, id)).get();
+      if (!existing) throw new NotFoundError('Project');
+
+      // Check if project has items
+      const [{ total }] = db.select({ total: count() }).from(scoutItems)
+        .where(eq(scoutItems.projectId, id)).all();
+      if (total > 0) {
+        throw new ValidationError(`Cannot delete project with ${total} items. Delete items first.`);
+      }
+
+      db.delete(projects).where(eq(projects.id, id)).run();
+      return c.json({ data: { success: true } });
+    });

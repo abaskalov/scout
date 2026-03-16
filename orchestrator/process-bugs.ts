@@ -140,19 +140,18 @@ async function processItem(item: ScoutItem, projectConfig: ProjectConfig): Promi
     projectConfig.repoPath);
   exec(`git push origin ${branchName}`, projectConfig.repoPath);
 
-  // 8. Create MR
-  console.log(`  Creating MR...`);
+  // 8. Create PR (GitHub) or MR (GitLab)
+  console.log(`  Creating PR...`);
   let mrUrl = '';
   try {
-    const mrOutput = exec(
-      `glab mr create --target-branch ${projectConfig.targetBranch} ` +
+    const prOutput = exec(
+      `gh pr create --base ${projectConfig.targetBranch} ` +
       `--title "fix(scout): ${item.message.slice(0, 60)}" ` +
-      `--description "Scout item: ${item.id}\n\n${item.message}" ` +
-      `--no-editor`,
+      `--body "Scout item: ${item.id}\n\n${item.message}" `,
       projectConfig.repoPath,
     );
-    // Extract MR URL from glab output
-    const urlMatch = mrOutput.match(/https?:\/\/\S+merge_requests\/\d+/);
+    // Extract PR URL from gh output
+    const urlMatch = prOutput.match(/https?:\/\/github\.com\/\S+\/pull\/\d+/);
     mrUrl = urlMatch ? urlMatch[0] : '';
   } catch {
     mrUrl = '';

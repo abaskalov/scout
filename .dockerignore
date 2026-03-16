@@ -1,0 +1,14 @@
+node_modules
+dist
+data
+storage
+.git
+.env
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+test
+orchestrator
+*.png
+*.jpg

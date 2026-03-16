@@ -6,6 +6,7 @@ interface SessionPlayerProps {
 
 export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const playerRef = useRef<unknown>(null);
@@ -22,25 +23,28 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
         if (!res.ok) throw new Error(`Не удалось загрузить запись: ${res.status}`);
         const events = await res.json();
 
-        if (cancelled || !containerRef.current) return;
+        if (cancelled || !containerRef.current || !wrapperRef.current) return;
 
         // Dynamically import rrweb-player
         const rrwebPlayer = await import('rrweb-player');
-        // Import the CSS
         await import('rrweb-player/dist/style.css');
 
         if (cancelled || !containerRef.current) return;
 
-        // Clear previous player
         containerRef.current.innerHTML = '';
+
+        // Calculate responsive size based on container width
+        const containerWidth = wrapperRef.current.clientWidth;
+        const playerWidth = Math.min(containerWidth, 900);
+        const playerHeight = Math.round(playerWidth * 0.6); // 16:10 aspect ratio
 
         const RRWebPlayer = rrwebPlayer.default;
         playerRef.current = new RRWebPlayer({
           target: containerRef.current,
           props: {
             events,
-            width: 900,
-            height: 550,
+            width: playerWidth,
+            height: playerHeight,
             autoPlay: false,
             showController: true,
           },
@@ -75,11 +79,11 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
   }
 
   return (
-    <div>
+    <div ref={wrapperRef} className="w-full">
       {loading && (
         <div className="py-4 text-sm text-gray-500">Загрузка записи...</div>
       )}
-      <div ref={containerRef} />
+      <div ref={containerRef} className="w-full overflow-hidden rounded-lg border border-gray-200" />
     </div>
   );
 }

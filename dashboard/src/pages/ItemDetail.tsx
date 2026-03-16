@@ -278,17 +278,20 @@ export default function ItemDetail() {
         </div>
       )}
 
-      {/* Screenshot — full width with scroll on mobile */}
+      {/* Screenshot with lightbox */}
       {screenshotUrl && (
         <div className="mb-4 md:mb-6">
           <h3 className="mb-2 text-sm font-medium text-gray-700">Скриншот</h3>
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <img
-              src={screenshotUrl}
-              alt="Скриншот"
-              className="max-h-[500px] w-auto max-w-full md:max-w-none"
-            />
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
+            <a href={screenshotUrl} target="_blank" rel="noopener noreferrer" title="Открыть на весь экран">
+              <img
+                src={screenshotUrl}
+                alt="Скриншот"
+                className="w-full h-auto cursor-zoom-in hover:opacity-90 transition-opacity"
+              />
+            </a>
           </div>
+          <p className="mt-1 text-xs text-gray-400">Нажмите для просмотра в полном размере</p>
         </div>
       )}
 

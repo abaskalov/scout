@@ -1,128 +1,177 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
+// rrweb replayer styles — injected into player container
+const REPLAYER_CSS = `
+.replayer-wrapper { position: relative !important; }
+.replayer-wrapper iframe {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 1 !important;
+  border: none !important;
+}
+.replayer-mouse {
+  position: absolute !important;
+  z-index: 100 !important;
+  width: 20px;
+  height: 20px;
+  transition: left 0.05s linear, top 0.05s linear;
+  background-size: contain;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-image: url('data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9JzMwMHB4JyB3aWR0aD0nMzAwcHgnICBmaWxsPSIjMDAwMDAwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGRhdGEtbmFtZT0iTGF5ZXIgMSIgdmlld0JveD0iMCAwIDUwIDUwIiB4PSIwcHgiIHk9IjBweCI+PHRpdGxlPkRlc2lnbl90bnA8L3RpdGxlPjxwYXRoIGQ9Ik00OC43MSw0Mi45MUwzNC4wOCwyOC4yOSw0NC4zMywxOEExLDEsMCwwLDAsNDQsMTYuMzlMMi4zNSwxLjA2QTEsMSwwLDAsMCwxLjA2LDIuMzVMMTYuMzksNDRhMSwxLDAsMCwwLDEuNjUuMzZMMjguMjksMzQuMDgsNDIuOTEsNDguNzFhMSwxLDAsMCwwLDEuNDEsMGw0LjM4LTQuMzhBMSwxLDAsMCwwLDQ4LjcxLDQyLjkxWm0tNS4wOSwzLjY3TDI5LDMyYTEsMSwwLDAsMC0xLjQxLDBsLTkuODUsOS44NUwzLjY5LDMuNjlsMzguMTIsMTRMMzIsMjcuNThBMSwxLDAsMCwwLDMyLDI5TDQ2LjU5LDQzLjYyWiI+PC9wYXRoPjwvc3ZnPg==');
+}
+.replayer-mouse::after {
+  content: '';
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  background: rgb(73, 80, 246);
+  border-radius: 100%;
+  transform: translate(-50%, -50%);
+  opacity: 0.3;
+}
+.replayer-mouse.active::after {
+  animation: click 0.4s ease-in-out 1;
+}
+.replayer-mouse-tail {
+  position: absolute !important;
+  z-index: 99 !important;
+  pointer-events: none;
+}
+@keyframes click {
+  0% { opacity: 0.3; width: 40px; height: 40px; }
+  50% { opacity: 0.6; width: 16px; height: 16px; }
+  100% { opacity: 0.3; width: 32px; height: 32px; }
+}
+`;
+
 interface SessionPlayerProps {
   recordingPath: string;
 }
 
-interface RRWebEvent {
-  type: number;
-  timestamp: number;
-  data?: { width?: number; height?: number; href?: string };
-}
-
-/**
- * Session replay player using raw rrweb Replayer (not rrweb-player).
- * Pattern from PostHog/Highlight: CSS transform: scale() for responsive fit.
- */
 export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const replayerRef = useRef<{ wrapper: HTMLElement; play: () => void; pause: () => void; getMirror: () => unknown } | null>(null);
+  const replayerRef = useRef<any>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState('00:00');
   const [totalTime, setTotalTime] = useState('00:00');
+  const [duration, setDuration] = useState(0);
 
-  const formatTime = (ms: number) => {
+  const fmt = (ms: number) => {
     const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   };
 
-  // Scale replayer to fit container — PostHog/Highlight pattern
-  const scaleToFit = useCallback(() => {
+  const rescale = useCallback(() => {
     const replayer = replayerRef.current;
     const container = wrapperRef.current;
-    if (!replayer?.wrapper || !container) return;
+    if (!replayer?.wrapper || !container || !frameRef.current) return;
 
     const iframe = replayer.wrapper.querySelector('iframe');
     if (!iframe) return;
 
-    const replayWidth = iframe.width ? parseInt(iframe.width) : (iframe as HTMLIFrameElement).contentWindow?.innerWidth || 1440;
-    const replayHeight = iframe.height ? parseInt(iframe.height) : (iframe as HTMLIFrameElement).contentWindow?.innerHeight || 900;
-
-    const containerWidth = container.clientWidth;
-    // Cap at 0.999 to avoid Chrome GPU compositing bug (PostHog fix)
-    const scale = Math.min(containerWidth / replayWidth, 0.999);
-    const scaledHeight = Math.round(replayHeight * scale);
+    const w = parseInt(iframe.width) || 1440;
+    const h = parseInt(iframe.height) || 900;
+    const containerW = container.clientWidth;
+    const scale = Math.min(containerW / w, 0.999);
 
     replayer.wrapper.style.transformOrigin = 'top left';
     replayer.wrapper.style.transform = `scale(${scale})`;
-    replayer.wrapper.style.width = `${replayWidth}px`;
-    replayer.wrapper.style.height = `${replayHeight}px`;
+    replayer.wrapper.style.position = 'relative';
+    replayer.wrapper.style.width = `${w}px`;
+    replayer.wrapper.style.height = `${h}px`;
 
-    // Set frame container height to match scaled replay
-    if (frameRef.current) {
-      frameRef.current.style.height = `${scaledHeight}px`;
-    }
+    // CSS handles positioning via REPLAYER_CSS injected above:
+    // iframe: position absolute z-index 1
+    // .replayer-mouse: position absolute z-index 100
+    // .replayer-mouse-tail: position absolute z-index 99
+
+    frameRef.current.style.height = `${Math.round(h * scale)}px`;
   }, []);
+
+  const startTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      const r = replayerRef.current;
+      if (!r || !duration) return;
+      const meta = r.getMetaData?.();
+      if (!meta) return;
+      const elapsed = r.getCurrentTime?.() || 0;
+      setCurrentTime(fmt(elapsed));
+      setProgress(Math.min(100, (elapsed / duration) * 100));
+    }, 200);
+  }, [duration]);
+
+  const stopTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadPlayer() {
+    async function load() {
       try {
         setLoading(true);
         setError(null);
 
         const res = await fetch(recordingPath);
         if (!res.ok) throw new Error(`Не удалось загрузить запись: ${res.status}`);
-        const events: RRWebEvent[] = await res.json();
+        const events = await res.json();
 
         if (cancelled || !frameRef.current) return;
 
-        // Check if events have FullSnapshot (type 2)
-        const hasFullSnapshot = events.some((e) => e.type === 2);
-        if (!hasFullSnapshot) {
+        if (!events.some((e: any) => e.type === 2)) {
           setError('Запись повреждена: отсутствует начальный снимок страницы');
           setLoading(false);
           return;
         }
 
-        // Calculate total duration
         const first = events[0]?.timestamp || 0;
         const last = events[events.length - 1]?.timestamp || 0;
-        setTotalTime(formatTime(last - first));
+        const dur = last - first;
+        setDuration(dur);
+        setTotalTime(fmt(dur));
 
-        // Dynamic import to avoid SSR issues
         const { Replayer } = await import('rrweb');
-
         if (cancelled || !frameRef.current) return;
 
         frameRef.current.innerHTML = '';
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const replayer = new Replayer(events as any, {
           root: frameRef.current,
           triggerFocus: false,
-          mouseTail: {
-            strokeStyle: '#3b82f6',
-            lineWidth: 2,
-          },
           UNSAFE_replayCanvas: true,
-          useVirtualDom: false,
+          skipInactive: true,
+          mouseTail: { strokeStyle: '#3b82f6', lineWidth: 2 },
         });
 
-        replayerRef.current = replayer as unknown as typeof replayerRef.current;
+        replayerRef.current = replayer;
+        replayer.pause(0);
 
-        // Listen for resize events from recorded session
-        replayer.on('resize', () => scaleToFit());
+        // Inject cursor/mouse styles into player container
+        const styleEl = document.createElement('style');
+        styleEl.textContent = REPLAYER_CSS;
+        frameRef.current.prepend(styleEl);
 
-        // Timer update
-        replayer.on('event-cast', (e: unknown) => {
-          const ev = e as { timestamp?: number };
-          if (first && ev.timestamp) {
-            setCurrentTime(formatTime(ev.timestamp - first));
-          }
+        replayer.on('finish', () => {
+          setPlaying(false);
+          stopTimer();
         });
 
-        replayer.on('finish', () => setPlaying(false));
-
-        // Initial scale after first render
-        setTimeout(scaleToFit, 100);
-
-        setLoading(false);
+        requestAnimationFrame(() => {
+          rescale();
+          setLoading(false);
+        });
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Не удалось загрузить запись');
@@ -131,74 +180,126 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
       }
     }
 
-    loadPlayer();
-
-    // Re-scale on window resize
-    window.addEventListener('resize', scaleToFit);
+    load();
+    window.addEventListener('resize', rescale);
 
     return () => {
       cancelled = true;
-      window.removeEventListener('resize', scaleToFit);
+      stopTimer();
+      window.removeEventListener('resize', rescale);
+      replayerRef.current = null;
       if (frameRef.current) {
         frameRef.current.innerHTML = '';
+        frameRef.current.style.height = '';
       }
-      replayerRef.current = null;
     };
-  }, [recordingPath, scaleToFit]);
+  }, [recordingPath, rescale]);
 
-  const togglePlay = () => {
-    const replayer = replayerRef.current;
-    if (!replayer) return;
+  const toggle = () => {
+    const r = replayerRef.current;
+    if (!r) return;
     if (playing) {
-      (replayer as unknown as { pause: () => void }).pause();
+      r.pause();
       setPlaying(false);
+      stopTimer();
     } else {
-      (replayer as unknown as { play: (t?: number) => void }).play();
+      // If at end, restart from beginning
+      const current = r.getCurrentTime?.() || 0;
+      const atEnd = duration > 0 && current >= duration - 100;
+      const startFrom = atEnd ? 0 : current;
+      if (atEnd) {
+        setProgress(0);
+        setCurrentTime('00:00');
+      }
+      r.play(startFrom);
+      r.setConfig?.({ speed });
       setPlaying(true);
+      startTimer();
     }
   };
 
-  if (error) {
-    return (
-      <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-        {error}
-      </div>
-    );
-  }
+  const changeSpeed = (s: number) => {
+    setSpeed(s);
+    const r = replayerRef.current;
+    if (r) r.setConfig?.({ speed: s });
+  };
+
+  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const r = replayerRef.current;
+    if (!r || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const time = Math.round(pct * duration);
+    r.pause(time);
+    setCurrentTime(fmt(time));
+    setProgress(pct * 100);
+    if (playing) {
+      r.play(time);
+      r.setConfig?.({ speed });
+    }
+  };
 
   return (
     <div ref={wrapperRef} className="w-full">
-      {loading && (
-        <div className="py-4 text-sm text-gray-500">Загрузка записи...</div>
+      {loading && <div className="py-4 text-sm text-gray-500">Загрузка записи...</div>}
+      {error && (
+        <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       )}
-      {/* Replay frame — scaled to fit container */}
-      <div
-        ref={frameRef}
-        className="w-full overflow-hidden rounded-t-lg border border-gray-200 bg-white relative"
-      />
-      {/* Simple controls */}
-      {!loading && !error && (
-        <div className="flex items-center gap-3 rounded-b-lg border border-t-0 border-gray-200 bg-gray-50 px-4 py-2">
-          <button
-            onClick={togglePlay}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors"
-            title={playing ? 'Пауза' : 'Воспроизвести'}
-          >
-            {playing ? (
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-                <rect x="1" y="1" width="3.5" height="10" rx="1" />
-                <rect x="7.5" y="1" width="3.5" height="10" rx="1" />
-              </svg>
-            ) : (
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-                <polygon points="2,0 12,6 2,12" />
-              </svg>
-            )}
-          </button>
-          <span className="text-xs font-mono text-gray-500">
-            {currentTime} / {totalTime}
-          </span>
-        </div>
+      {!error && (
+        <>
+          <div ref={frameRef} className="w-full overflow-hidden rounded-t-lg border border-gray-200 bg-white" />
+          {!loading && (
+            <div className="rounded-b-lg border border-t-0 border-gray-200 bg-gray-50 px-4 py-2">
+              {/* Timeline */}
+              <div
+                className="mb-2 h-1.5 w-full cursor-pointer rounded-full bg-gray-200"
+                onClick={seek}
+              >
+                <div
+                  className="h-full rounded-full bg-blue-500 transition-all duration-200"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              {/* Controls */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={toggle}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600"
+                  title={playing ? 'Пауза' : 'Воспроизвести'}
+                >
+                  {playing ? (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                      <rect x="1" y="0" width="3" height="10" rx="1" />
+                      <rect x="6" y="0" width="3" height="10" rx="1" />
+                    </svg>
+                  ) : (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                      <polygon points="1,0 10,5 1,10" />
+                    </svg>
+                  )}
+                </button>
+                <span className="text-xs font-mono text-gray-500 min-w-[90px]">
+                  {currentTime} / {totalTime}
+                </span>
+                <div className="flex gap-1">
+                  {[0.25, 0.5, 1, 2, 4, 8].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => changeSpeed(s)}
+                      className={`rounded px-1.5 py-0.5 text-xs font-medium transition-colors ${
+                        speed === s
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                      }`}
+                    >
+                      {s}x
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

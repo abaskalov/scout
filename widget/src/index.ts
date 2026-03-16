@@ -3,7 +3,7 @@ import { getToken, login, clearAuth, preloadBridge, restoreAuthFromBridge } from
 import { createFab, showFab, hideFab } from './fab';
 import { pickElement, type PickedElement } from './element-picker';
 import { createPanel, showPanel, hidePanel, attachPanelEvents, type PanelCallbacks } from './panel';
-import { startRecording } from './recorder';
+import { startRecording, pauseRecording, resumeRecording } from './recorder';
 
 interface ScoutConfig {
   apiUrl: string;
@@ -57,6 +57,7 @@ function init(): void {
   // --- Shadow DOM setup ---
   const host = document.createElement('div');
   host.id = 'scout-widget-root';
+
   document.body.appendChild(host);
   const shadow = host.attachShadow({ mode: 'open' });
 
@@ -234,10 +235,12 @@ function init(): void {
   const panelCallbacks: PanelCallbacks = {
     onClose: () => {
       currentPicked = null;
+      resumeRecording();
       showFab(fab);
     },
     onSubmitSuccess: () => {
       currentPicked = null;
+      resumeRecording();
       showFab(fab);
       showToast('Баг отправлен!');
     },
@@ -258,6 +261,7 @@ function init(): void {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !panelElements.backdrop.classList.contains('hidden')) {
       hidePanel(panelElements);
+      resumeRecording();
       panelCallbacks.onClose();
     }
   }, true);
@@ -265,11 +269,13 @@ function init(): void {
   // --- Scout mode ---
   async function startScoutMode(): Promise<void> {
     hideFab(fab);
+    pauseRecording(); // Stop recording Scout UI interactions
 
     const picked = await pickElement(shadow, overlay, highlight);
 
     if (!picked) {
       // Cancelled
+      resumeRecording();
       showFab(fab);
       return;
     }

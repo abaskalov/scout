@@ -1,5 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { Fancybox } from '@fancyapps/ui';
+import '@fancyapps/ui/dist/fancybox/fancybox.css';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/date';
 import StatusBadge from '../components/StatusBadge';
@@ -71,6 +73,12 @@ export default function ItemDetail() {
     loadItem();
   }, [id]);
 
+  // Fancybox for screenshot zoom
+  useEffect(() => {
+    Fancybox.bind('[data-fancybox]', {});
+    return () => { Fancybox.destroy(); };
+  }, [item]);
+
   async function handleAction(
     action: 'claim' | 'cancel' | 'update-status',
     extra?: Record<string, unknown>,
@@ -115,6 +123,8 @@ export default function ItemDetail() {
     }
   }
 
+  const notesRef = useRef<HTMLDivElement>(null);
+
   async function handleAddNote(e: FormEvent) {
     e.preventDefault();
     if (!item || !noteContent.trim()) return;
@@ -125,7 +135,9 @@ export default function ItemDetail() {
         content: noteContent.trim(),
       });
       setNoteContent('');
-      await loadItem();
+      // Add note to local state without full reload to preserve scroll
+      const getRes = await api<{ notes: typeof item.notes }>('/api/items/get', { id: item.id });
+      setItem((prev) => prev ? { ...prev, notes: getRes.notes } : prev);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось добавить заметку');
     } finally {
@@ -285,8 +297,8 @@ export default function ItemDetail() {
       {screenshotUrl && (
         <div className="mb-4 md:mb-6">
           <h3 className="mb-2 text-sm font-medium text-gray-700">Скриншот</h3>
-          <div className="rounded-lg border border-gray-200 overflow-hidden">
-            <a href={screenshotUrl} target="_blank" rel="noopener noreferrer" title="Открыть на весь экран">
+          <div className="rounded-lg border border-gray-200 overflow-auto max-h-[400px]">
+            <a href={screenshotUrl} data-fancybox="screenshot" data-caption="Скриншот страницы">
               <img
                 src={screenshotUrl}
                 alt="Скриншот"
@@ -294,7 +306,7 @@ export default function ItemDetail() {
               />
             </a>
           </div>
-          <p className="mt-1 text-xs text-gray-400">Нажмите для просмотра в полном размере</p>
+          <p className="mt-1 text-xs text-gray-400">Нажмите для увеличения. Скролл для просмотра.</p>
         </div>
       )}
 
@@ -309,7 +321,7 @@ export default function ItemDetail() {
       )}
 
       {/* Notes timeline — full width */}
-      <div className="mb-4 md:mb-6">
+      <div className="mb-4 md:mb-6" ref={notesRef}>
         <h3 className="mb-3 text-sm font-medium text-gray-700">Заметки</h3>
         <div className="space-y-3">
           {item.notes.length === 0 ? (
@@ -329,7 +341,7 @@ export default function ItemDetail() {
                       noteTypeColors[note.type] ?? 'bg-gray-100 text-gray-600'
                     }`}
                   >
-                    {note.type}
+                    {{ comment: 'Комментарий', status_change: 'Статус', assignment: 'Назначение' }[note.type] || note.type}
                   </span>
                   <span>{formatDate(note.createdAt)}</span>
                 </div>

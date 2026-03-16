@@ -1,7 +1,7 @@
 import html2canvas from 'html2canvas';
 
 /**
- * Capture a screenshot of the current VIEWPORT (what the user sees).
+ * Capture a screenshot of the current page using html2canvas.
  * If a CSS selector is provided, highlights the selected element with a red outline.
  *
  * Returns a base64-encoded PNG string (without the data:image/png;base64, prefix).
@@ -16,14 +16,12 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
   }
 
   // Add highlight on selected element using ABSOLUTE positioning
-  // (fixed won't work with html2canvas viewport capture)
   let highlightOverlay: HTMLDivElement | null = null;
   if (highlightSelector) {
     try {
       const el = document.querySelector(highlightSelector);
       if (el) {
         const rect = el.getBoundingClientRect();
-        // Convert viewport coords to absolute (add scroll offset)
         const absTop = rect.top + window.scrollY;
         const absLeft = rect.left + window.scrollX;
 
@@ -49,21 +47,12 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
   }
 
   try {
-    // Capture only the visible viewport, not the full page
-    const canvas = await html2canvas(document.documentElement, {
+    const canvas = await html2canvas(document.body, {
       useCORS: true,
       allowTaint: true,
       scale: 1,
       logging: false,
       backgroundColor: '#ffffff',
-      x: window.scrollX,
-      y: window.scrollY,
-      width: window.innerWidth,
-      height: window.innerHeight,
-      scrollX: -window.scrollX,
-      scrollY: -window.scrollY,
-      windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight,
     });
 
     const dataUrl = canvas.toDataURL('image/png');

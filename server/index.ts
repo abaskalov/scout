@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { HTTPException } from 'hono/http-exception';
+import { readFileSync } from 'node:fs';
 import { authRoutes } from './routes/auth.js';
 import { projectRoutes } from './routes/projects.js';
 import { userRoutes } from './routes/users.js';
@@ -10,6 +12,12 @@ import { itemRoutes } from './routes/items.js';
 import { sqlite } from './db/client.js';
 
 const app = new Hono();
+
+// Request logging
+app.use('*', logger());
+
+// Health check (for Docker, monitoring)
+app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 // CORS — allow widget origins (permissive in dev, validate in production)
 app.use('/api/*', cors({
@@ -41,9 +49,16 @@ app.use('/widget/*', serveStatic({
 // Demo stand
 app.use('/demo/*', serveStatic({ root: './', rewriteRequestPath: (path) => path }));
 
-// Dashboard SPA (built by Vite, catch-all for client-side routing)
+// Dashboard SPA — try static file first, fallback to index.html for client-side routing
 app.use('/*', serveStatic({ root: './dashboard/dist/' }));
-app.get('/*', serveStatic({ root: './dashboard/dist/', path: 'index.html' }));
+app.get('/*', (c) => {
+  try {
+    const html = readFileSync('./dashboard/dist/index.html', 'utf-8');
+    return c.html(html);
+  } catch {
+    return c.text('Dashboard not built. Run: pnpm build', 404);
+  }
+});
 
 // Global error handler — no stack traces to client
 app.onError((err, c) => {

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { scoutItems, scoutItemNotes, projects } from '../db/schema.js';
+import { scoutItems, scoutItemNotes, projects, users } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireRole } from '../middleware/permissions.js';
 import { randomUUID } from 'node:crypto';
@@ -13,6 +13,25 @@ import {
   cancelItemSchema, updateItemStatusSchema, addNoteSchema,
 } from '../lib/schemas.js';
 import { createItem, claimItem, updateItemStatus } from '../services/items.js';
+
+/** Resolve user name by id, with simple cache */
+const userNameCache = new Map<string, string>();
+function getUserName(userId: string | null): string | null {
+  if (!userId) return null;
+  if (userNameCache.has(userId)) return userNameCache.get(userId)!;
+  const user = db.select({ name: users.name }).from(users).where(eq(users.id, userId)).get();
+  const name = user?.name ?? null;
+  if (name) userNameCache.set(userId, name);
+  return name;
+}
+
+function enrichItem(item: typeof scoutItems.$inferSelect) {
+  return {
+    ...item,
+    reporterName: getUserName(item.reporterId),
+    assigneeName: getUserName(item.assigneeId),
+  };
+}
 
 export const itemRoutes = new Hono()
   .use('/*', authMiddleware)
@@ -56,7 +75,7 @@ export const itemRoutes = new Hono()
 
       return c.json({
         data: {
-          items,
+          items: items.map(enrichItem),
           pagination: {
             page,
             perPage,
@@ -80,7 +99,12 @@ export const itemRoutes = new Hono()
         .orderBy(scoutItemNotes.createdAt)
         .all();
 
-      return c.json({ data: { ...item, notes } });
+      const enrichedNotes = notes.map((n) => ({
+        ...n,
+        userName: getUserName(n.userId),
+      }));
+
+      return c.json({ data: { ...enrichItem(item), notes: enrichedNotes } });
     })
 
   // COUNT — all roles

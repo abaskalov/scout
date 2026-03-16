@@ -6,6 +6,14 @@ import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { NotFoundError, ConflictError, ValidationError } from '../lib/errors.js';
 
+const STATUS_LABELS: Record<ItemStatus, string> = {
+  new: 'новые',
+  in_progress: 'в работе',
+  review: 'на ревью',
+  done: 'готово',
+  cancelled: 'отменено',
+};
+
 const VALID_TRANSITIONS: Record<ItemStatus, ItemStatus[]> = {
   new: ['in_progress', 'cancelled'],
   in_progress: ['review', 'done', 'cancelled'],
@@ -122,8 +130,8 @@ export function claimItem(itemId: string, user: User) {
     throw new ConflictError('Item already claimed or not in "new" status');
   }
 
-  addAutoNote(itemId, user.id, `Claimed by ${user.name}`, 'assignment');
-  addAutoNote(itemId, user.id, 'Status changed: new → in_progress', 'status_change');
+  addAutoNote(itemId, user.id, `Назначено: ${user.name}`, 'assignment');
+  addAutoNote(itemId, user.id, 'Статус: новые → в работе', 'status_change');
 
   return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
 }
@@ -160,7 +168,9 @@ export function updateItemStatus(
   }
 
   db.update(scoutItems).set(updateData).where(eq(scoutItems.id, itemId)).run();
-  addAutoNote(itemId, user.id, `Status changed: ${item.status} → ${newStatus}`, 'status_change');
+  const fromLabel = STATUS_LABELS[item.status as ItemStatus] || item.status;
+  const toLabel = STATUS_LABELS[newStatus] || newStatus;
+  addAutoNote(itemId, user.id, `Статус: ${fromLabel} → ${toLabel}`, 'status_change');
 
   return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
 }

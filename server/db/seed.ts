@@ -7,19 +7,19 @@ import { eq } from 'drizzle-orm';
 function seed() {
   console.log('Seeding Scout database...');
 
-  // Project: Avtozor
-  const existingProject = db.select().from(projects).where(eq(projects.slug, 'avtozor')).get();
+  // Demo project
+  const existingProject = db.select().from(projects).where(eq(projects.slug, 'my-app')).get();
   if (!existingProject) {
     db.insert(projects).values({
       id: randomUUID(),
-      name: 'Avtozor',
-      slug: 'avtozor',
-      allowedOrigins: JSON.stringify(['http://localhost:3002', 'http://localhost:3001']),
+      name: 'My App',
+      slug: 'my-app',
+      allowedOrigins: JSON.stringify(['http://localhost:3000']),
       autofixEnabled: true,
     }).run();
-    console.log('  Created project: Avtozor');
+    console.log('  Created project: My App');
   } else {
-    console.log('  Project Avtozor already exists, skipping');
+    console.log('  Project My App already exists, skipping');
   }
 
   // Admin
@@ -52,9 +52,9 @@ function seed() {
     console.log('  Agent already exists, skipping');
   }
 
-  // Pivot: agent → avtozor
+  // Pivot: agent → project
   const agent = db.select().from(users).where(eq(users.email, 'agent@scout.local')).get();
-  const project = db.select().from(projects).where(eq(projects.slug, 'avtozor')).get();
+  const project = db.select().from(projects).where(eq(projects.slug, 'my-app')).get();
 
   if (agent && project) {
     const existing = db.select().from(pivotUsersProjects)
@@ -64,7 +64,7 @@ function seed() {
         userId: agent.id,
         projectId: project.id,
       }).run();
-      console.log('  Linked AI Agent → Avtozor');
+      console.log('  Linked AI Agent → My App');
     }
   }
 

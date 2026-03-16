@@ -108,11 +108,11 @@ if (userCount.cnt === 0) {
   sqlite.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)`)
     .run(agentId, 'agent@scout.local', agentHash, 'AI Agent', 'agent');
   sqlite.prepare(`INSERT INTO projects (id, name, slug, allowed_origins) VALUES (?, ?, ?, ?)`)
-    .run(projectId, 'Avtozor', 'avtozor', '["http://localhost:3002","http://localhost:3001"]');
+    .run(projectId, 'My App', 'my-app', '["http://localhost:3000"]');
   sqlite.prepare(`INSERT INTO pivot_users_projects (user_id, project_id) VALUES (?, ?)`)
     .run(agentId, projectId);
 
-  console.log('Auto-seeded: admin@scout.local/admin, agent@scout.local/agent, project Avtozor');
+  console.log('Auto-seeded: admin@scout.local/admin, agent@scout.local/agent, project My App');
 }
 
 export const db = drizzle(sqlite, { schema });

@@ -38,14 +38,14 @@ export function loadConfig(): OrchestratorConfig {
     agentPassword: process.env.SCOUT_AGENT_PASSWORD || 'agent',
     opencodeBin: process.env.OPENCODE_BIN || 'opencode',
     projects: {
-      // Default config for avtozor — override via env or edit this file
-      'avtozor': {
-        repoPath: process.env.AVTOZOR_REPO_PATH || '/Users/aaa/Work/avtozor',
-        targetBranch: 'staging',
-        typecheckCmd: 'npm run typecheck',
-        lintCmd: 'npm run lint:fix',
-        maxAttempts: 3,
-      },
+      // Example: map Scout project slug to git repository
+      // 'my-app': {
+      //   repoPath: '/path/to/my-app',
+      //   targetBranch: 'main',
+      //   typecheckCmd: 'npm run typecheck',
+      //   lintCmd: 'npm run lint:fix',
+      //   maxAttempts: 3,
+      // },
     },
   };
 }

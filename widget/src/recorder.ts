@@ -2,54 +2,68 @@ import type { eventWithTime, recordOptions } from 'rrweb';
 import { record } from 'rrweb';
 
 const BUFFER_DURATION_MS = 30_000; // 30 seconds
+const CHECKOUT_INTERVAL_MS = 10_000; // full snapshot every 10 seconds
 
 let events: eventWithTime[] = [];
 let stopFn: (() => void) | null = null;
 
+// rrweb event types
+const EVENT_TYPE_FULL_SNAPSHOT = 2;
+const EVENT_TYPE_META = 4;
+
 /**
- * Trim events older than 30 seconds relative to the most recent event timestamp.
+ * Trim events older than 30 seconds, but always keep the last FullSnapshot
+ * and everything after it (rrweb-player needs FullSnapshot to replay).
  */
 function trimBuffer(): void {
   if (events.length === 0) return;
+
   const now = Date.now();
   const cutoff = now - BUFFER_DURATION_MS;
-  // Find the first event that is within the buffer window
-  let startIdx = 0;
-  for (let i = 0; i < events.length; i++) {
-    if (events[i].timestamp >= cutoff) {
-      startIdx = i;
+
+  // Find the last FullSnapshot within the buffer window
+  let lastSnapshotIdx = -1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i]!.type === EVENT_TYPE_FULL_SNAPSHOT) {
+      lastSnapshotIdx = i;
       break;
     }
-    // If we reach the end, keep at least the last event
-    if (i === events.length - 1) {
-      startIdx = i;
-    }
   }
-  if (startIdx > 0) {
+
+  if (lastSnapshotIdx <= 0) return; // No snapshot to anchor to, keep everything
+
+  // Find the Meta event right before the FullSnapshot (if any)
+  let startIdx = lastSnapshotIdx;
+  if (startIdx > 0 && events[startIdx - 1]!.type === EVENT_TYPE_META) {
+    startIdx = startIdx - 1;
+  }
+
+  // Only trim if the snapshot is within our time window
+  if (events[lastSnapshotIdx]!.timestamp >= cutoff && startIdx > 0) {
     events = events.slice(startIdx);
   }
 }
 
 /**
  * Start the rrweb recorder with a rolling 30-second buffer.
+ * Uses checkoutEveryNms to create periodic FullSnapshots so trimming works.
  */
 export function startRecording(): void {
-  if (stopFn) return; // already recording
+  if (stopFn) return;
 
   events = [];
 
   const opts: recordOptions<eventWithTime> = {
     emit(event: eventWithTime) {
       events.push(event);
-      // Trim periodically (every 50 events to avoid perf overhead)
       if (events.length % 50 === 0) {
         trimBuffer();
       }
     },
-    // Mask inputs for privacy
     maskAllInputs: false,
-    // Record cross-origin iframes if possible
     recordCrossOriginIframes: false,
+    // Create a new FullSnapshot periodically so the rolling buffer always has one
+    checkoutEveryNms: CHECKOUT_INTERVAL_MS,
   };
 
   stopFn = record(opts) ?? null;
@@ -66,21 +80,18 @@ export function stopRecording(): void {
 }
 
 /**
- * Get the current buffer as a JSON string (trimmed to last 30 seconds).
- * Returns a base64-encoded JSON string.
+ * Get the current buffer as a base64-encoded JSON string (trimmed to last 30 seconds).
  */
 export function getRecordingBase64(): string {
   trimBuffer();
   const json = JSON.stringify(events);
-  // Use btoa with UTF-8 encoding
   try {
     return btoa(unescape(encodeURIComponent(json)));
   } catch {
-    // Fallback for large strings: use TextEncoder + manual base64
     const bytes = new TextEncoder().encode(json);
     let binary = '';
     for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
+      binary += String.fromCharCode(bytes[i]!);
     }
     return btoa(binary);
   }

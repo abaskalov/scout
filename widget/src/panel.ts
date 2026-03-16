@@ -247,13 +247,9 @@ export function attachPanelEvents(
       // Collect optional data
       let screenshot: string | undefined;
       if (elements.screenshotCheckbox.checked) {
-        // Hide panel temporarily for screenshot
+        // Hide panel for clean screenshot, don't restore — panel will close after submit
         elements.backdrop.style.display = 'none';
-        try {
-          screenshot = await captureScreenshot();
-        } finally {
-          elements.backdrop.style.display = '';
-        }
+        screenshot = await captureScreenshot(p.cssSelector);
       }
 
       let sessionRecording: string | undefined;
@@ -293,6 +289,8 @@ export function attachPanelEvents(
       hidePanel(elements);
       callbacks.onSubmitSuccess();
     } catch (err: unknown) {
+      // Restore panel visibility if it was hidden for screenshot
+      elements.backdrop.style.display = '';
       const msg = err instanceof Error ? err.message : 'Неизвестная ошибка';
       elements.submitBtn.disabled = false;
       elements.submitBtn.textContent = 'Отправить';

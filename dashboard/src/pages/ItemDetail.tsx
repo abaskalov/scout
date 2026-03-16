@@ -13,8 +13,8 @@ interface Note {
 }
 
 interface ItemData {
-  id: number;
-  projectId: number;
+  id: string;
+  projectId: string;
   message: string;
   status: string;
   pageUrl: string | null;
@@ -172,11 +172,13 @@ export default function ItemDetail() {
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
           <div className="min-w-0">
-            <h1 className="text-lg md:text-xl font-bold text-gray-900 break-words">{item.message}</h1>
-            <div className="mt-1 flex flex-wrap items-center gap-2 md:gap-3 text-sm text-gray-500">
+            <div className="flex flex-wrap items-center gap-2 md:gap-3 text-sm text-gray-500">
               <StatusBadge status={item.status} />
-              <span>#{item.id}</span>
+              <span className="font-mono text-xs">#{item.id.slice(0, 8)}</span>
               <span>{new Date(item.createdAt).toLocaleString()}</span>
+            </div>
+            <div className="mt-2 text-sm md:text-base text-gray-800 break-words whitespace-pre-line leading-relaxed">
+              {item.message}
             </div>
           </div>
 

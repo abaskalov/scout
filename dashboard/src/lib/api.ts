@@ -39,7 +39,29 @@ export async function api<T = unknown>(
   const json = await res.json();
 
   if (!res.ok) {
-    throw new ApiError(res.status, json.message ?? 'Request failed');
+    let message = 'Ошибка запроса';
+    if (typeof json.error === 'string') {
+      message = json.error;
+    } else if (json.error?.issues) {
+      // Zod validation errors
+      const fieldNames: Record<string, string> = {
+        password: 'Пароль', email: 'Эл. почта', name: 'Имя',
+        slug: 'Слаг', message: 'Сообщение', role: 'Роль',
+      };
+      message = json.error.issues.map((i: { path: string[]; message: string }) => {
+        const pathKey = i.path?.[0] || '';
+        const field = fieldNames[pathKey] || pathKey;
+        const msg = i.message
+          .replace('String must contain at least', 'Минимум')
+          .replace('character(s)', 'символов')
+          .replace('Invalid email', 'Некорректный email')
+          .replace('Required', 'Обязательное поле');
+        return field ? `${field}: ${msg}` : msg;
+      }).join('. ');
+    } else if (json.message) {
+      message = json.message;
+    }
+    throw new ApiError(res.status, message);
   }
 
   return json.data as T;

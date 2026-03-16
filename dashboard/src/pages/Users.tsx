@@ -356,6 +356,8 @@ export default function Users() {
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 required={!editingId}
+                minLength={6}
+                placeholder="Минимум 6 символов"
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
               />
             </label>

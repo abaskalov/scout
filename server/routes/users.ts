@@ -122,7 +122,7 @@ export const userRoutes = new Hono()
       if (!existing) throw new NotFoundError('User');
 
       const updateData: Record<string, unknown> = {
-        updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        updatedAt: new Date().toISOString(),
       };
       if (name !== undefined) updateData.name = name;
       if (role !== undefined) updateData.role = role;

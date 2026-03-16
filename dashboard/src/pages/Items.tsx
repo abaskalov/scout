@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../lib/api';
+import { formatDate, formatDateShort } from '../lib/date';
 import StatusBadge from '../components/StatusBadge';
 import Pagination from '../components/Pagination';
 
@@ -214,7 +215,7 @@ export default function Items() {
                     {item.assigneeName ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-gray-500">
-                    {new Date(item.createdAt).toLocaleString()}
+                    {formatDate(item.createdAt)}
                   </td>
                 </tr>
               ))
@@ -244,7 +245,7 @@ export default function Items() {
               </div>
               <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
                 <span>{item.reporterName ?? '—'}</span>
-                <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+                <span>{formatDateShort(item.createdAt)}</span>
               </div>
             </div>
           ))

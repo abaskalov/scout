@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { api } from '../lib/api';
+import { formatDate } from '../lib/date';
 import StatusBadge from '../components/StatusBadge';
 import SessionPlayer from '../components/SessionPlayer';
 
@@ -175,7 +176,7 @@ export default function ItemDetail() {
             <div className="flex flex-wrap items-center gap-2 md:gap-3 text-sm text-gray-500">
               <StatusBadge status={item.status} />
               <span className="font-mono text-xs">#{item.id.slice(0, 8)}</span>
-              <span>{new Date(item.createdAt).toLocaleString()}</span>
+              <span>{formatDate(item.createdAt)}</span>
             </div>
             <div className="mt-2 text-sm md:text-base text-gray-800 break-words whitespace-pre-line leading-relaxed">
               {item.message}
@@ -330,7 +331,7 @@ export default function ItemDetail() {
                   >
                     {note.type}
                   </span>
-                  <span>{new Date(note.createdAt).toLocaleString()}</span>
+                  <span>{formatDate(note.createdAt)}</span>
                 </div>
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">
                   {note.content}

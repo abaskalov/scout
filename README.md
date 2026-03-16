@@ -47,6 +47,7 @@ Tester clicks element  →  Widget captures context + screenshot + recording
 - **Roles** — admin, member (report bugs), agent (fix bugs)
 - **Single process** — API + dashboard + widget on one port
 - **Mobile** — Bottom nav, card layouts, CapacitorJS safe areas
+- **Cross-site SSO** — Login once on any site, authenticated on all sites with Scout widget
 - **Auto-deploy** — Push to main → CI → Docker → deploy to production
 
 ## Quickstart

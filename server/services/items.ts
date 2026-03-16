@@ -23,7 +23,7 @@ const VALID_TRANSITIONS: Record<ItemStatus, ItemStatus[]> = {
 };
 
 function now(): string {
-  return new Date().toISOString().replace('T', ' ').slice(0, 19);
+  return new Date().toISOString();
 }
 
 function addAutoNote(

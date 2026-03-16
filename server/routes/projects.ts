@@ -80,7 +80,7 @@ export const projectRoutes = new Hono()
       if (!existing) throw new NotFoundError('Project');
 
       const updateData: Record<string, unknown> = {
-        updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
+        updatedAt: new Date().toISOString(),
       };
       if (name !== undefined) updateData.name = name;
       if (allowedOrigins !== undefined) updateData.allowedOrigins = JSON.stringify(allowedOrigins);

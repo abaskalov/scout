@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* rrweb-player styles */
+.rr-player {
+  width: 100% !important;
+  max-width: 960px;
+}
+.rr-player iframe {
+  width: 100% !important;
+}

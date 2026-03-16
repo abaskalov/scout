@@ -1,0 +1,39 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
+import { isAuthenticated } from './lib/auth';
+import Layout from './components/Layout';
+import Login from './pages/Login';
+import Items from './pages/Items';
+import ItemDetail from './pages/ItemDetail';
+import Projects from './pages/Projects';
+import Users from './pages/Users';
+
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/*"
+          element={
+            <AuthGuard>
+              <Layout />
+            </AuthGuard>
+          }
+        >
+          <Route index element={<Navigate to="/items" replace />} />
+          <Route path="items" element={<Items />} />
+          <Route path="items/:id" element={<ItemDetail />} />
+          <Route path="projects" element={<Projects />} />
+          <Route path="users" element={<Users />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+}

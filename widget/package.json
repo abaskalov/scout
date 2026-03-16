@@ -1,0 +1,19 @@
+{
+  "name": "scout-widget",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "build:watch": "vite build --watch"
+  },
+  "dependencies": {
+    "rrweb": "2.0.0-alpha.20",
+    "html2canvas": "^1"
+  },
+  "devDependencies": {
+    "vite": "^6",
+    "typescript": "^5.7"
+  }
+}

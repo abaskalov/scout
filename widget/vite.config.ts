@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  publicDir: 'public',
   build: {
     lib: {
       entry: 'src/index.ts',
@@ -9,6 +10,7 @@ export default defineConfig({
       fileName: () => 'scout-widget.js',
     },
     outDir: 'dist',
+    copyPublicDir: true,
     rollupOptions: {
       output: { inlineDynamicImports: true },
     },

@@ -51,6 +51,8 @@ export function startRecording(): void {
         trimBuffer();
       }
     },
+    // Exclude Scout widget from rrweb snapshots so it never appears in recordings
+    blockSelector: '#scout-widget-root',
     maskAllInputs: false,
     recordCrossOriginIframes: false,
     checkoutEveryNms: CHECKOUT_INTERVAL_MS,

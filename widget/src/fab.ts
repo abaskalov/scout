@@ -5,8 +5,8 @@
 export function createFab(onClick: () => void): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.className = 'scout-fab';
-  btn.setAttribute('aria-label', 'Report a bug');
-  btn.title = 'Report a bug';
+  btn.setAttribute('aria-label', 'Сообщить о баге');
+  btn.title = 'Сообщить о баге';
 
   // Bug/report icon (simplified)
   btn.innerHTML = `

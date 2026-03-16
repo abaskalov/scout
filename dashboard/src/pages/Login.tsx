@@ -23,7 +23,7 @@ export default function Login() {
       await login(email, password);
       navigate('/items', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : 'Ошибка входа');
     } finally {
       setLoading(false);
     }
@@ -34,7 +34,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold text-gray-900">Scout</h1>
-          <p className="mt-1 text-sm text-gray-500">Sign in to your account</p>
+          <p className="mt-1 text-sm text-gray-500">Войти в аккаунт</p>
         </div>
 
         <form
@@ -48,7 +48,7 @@ export default function Login() {
           )}
 
           <label className="block">
-            <span className="text-sm font-medium text-gray-700">Email</span>
+            <span className="text-sm font-medium text-gray-700">Эл. почта</span>
             <input
               type="email"
               value={email}
@@ -61,14 +61,14 @@ export default function Login() {
           </label>
 
           <label className="mt-4 block">
-            <span className="text-sm font-medium text-gray-700">Password</span>
+            <span className="text-sm font-medium text-gray-700">Пароль</span>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-              placeholder="Password"
+              placeholder="Пароль"
             />
           </label>
 
@@ -77,7 +77,7 @@ export default function Login() {
             disabled={loading}
             className="mt-6 w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {loading ? 'Signing in...' : 'Sign in'}
+            {loading ? 'Вход...' : 'Войти'}
           </button>
         </form>
       </div>

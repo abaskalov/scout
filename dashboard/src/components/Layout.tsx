@@ -69,7 +69,7 @@ export default function Layout() {
               <path d="M2 17l10 5 10-5" />
               <path d="M2 12l10 5 10-5" />
             </svg>
-            Items
+            Задачи
             {newCount > 0 && (
               <span className="ml-auto rounded-full bg-yellow-400 px-2 py-0.5 text-xs font-semibold text-yellow-900">
                 {newCount}
@@ -82,7 +82,7 @@ export default function Layout() {
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
                 </svg>
-                Projects
+                Проекты
               </NavLink>
               <NavLink to="/users" className={linkClass}>
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -91,7 +91,7 @@ export default function Layout() {
                   <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
-                Users
+                Пользователи
               </NavLink>
             </>
           )}
@@ -106,7 +106,7 @@ export default function Layout() {
             onClick={logout}
             className="mt-2 text-xs text-red-600 hover:text-red-800"
           >
-            Logout
+            Выйти
           </button>
         </div>
       </aside>

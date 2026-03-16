@@ -14,10 +14,10 @@ import {
 
 export const projectRoutes = new Hono()
   .use('/*', authMiddleware)
-  .use('/*', requireRole('admin'))
 
-  // CREATE
+  // CREATE — admin only
   .post('/create',
+    requireRole('admin'),
     zValidator('json', createProjectSchema),
     async (c) => {
       const { name, slug, allowedOrigins } = c.req.valid('json');
@@ -58,8 +58,9 @@ export const projectRoutes = new Hono()
       });
     })
 
-  // GET
+  // GET — admin only
   .post('/get',
+    requireRole('admin'),
     zValidator('json', getProjectSchema),
     async (c) => {
       const { id } = c.req.valid('json');
@@ -68,8 +69,9 @@ export const projectRoutes = new Hono()
       return c.json({ data: project });
     })
 
-  // UPDATE
+  // UPDATE — admin only
   .post('/update',
+    requireRole('admin'),
     zValidator('json', updateProjectSchema),
     async (c) => {
       const { id, name, allowedOrigins, autofixEnabled, isActive } = c.req.valid('json');
@@ -90,8 +92,9 @@ export const projectRoutes = new Hono()
       return c.json({ data: project });
     })
 
-  // DELETE
+  // DELETE — admin only
   .post('/delete',
+    requireRole('admin'),
     zValidator('json', deleteProjectSchema),
     async (c) => {
       const { id } = c.req.valid('json');

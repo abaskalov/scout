@@ -74,7 +74,7 @@ function init(): void {
   const loginHeader = document.createElement('div');
   loginHeader.className = 'scout-panel-header';
   const loginTitle = document.createElement('h2');
-  loginTitle.textContent = 'Scout — Log In';
+  loginTitle.textContent = 'Scout — Вход';
   const loginCloseBtn = document.createElement('button');
   loginCloseBtn.className = 'scout-panel-close';
   loginCloseBtn.setAttribute('aria-label', 'Close');
@@ -86,21 +86,21 @@ function init(): void {
   loginBody.className = 'scout-login';
 
   const loginSubtitle = document.createElement('h3');
-  loginSubtitle.textContent = 'Sign in to report bugs';
+  loginSubtitle.textContent = 'Войдите, чтобы сообщать о багах';
 
   const loginDesc = document.createElement('p');
-  loginDesc.textContent = 'Use your Scout account credentials.';
+  loginDesc.textContent = 'Используйте учётные данные Scout.';
 
   const emailInput = document.createElement('input');
   emailInput.className = 'scout-input';
   emailInput.type = 'email';
-  emailInput.placeholder = 'Email';
+  emailInput.placeholder = 'Эл. почта';
   emailInput.autocomplete = 'email';
 
   const passwordInput = document.createElement('input');
   passwordInput.className = 'scout-input';
   passwordInput.type = 'password';
-  passwordInput.placeholder = 'Password';
+  passwordInput.placeholder = 'Пароль';
   passwordInput.autocomplete = 'current-password';
 
   const loginError = document.createElement('p');
@@ -127,7 +127,7 @@ function init(): void {
     passwordInput.value = '';
     loginError.textContent = '';
     loginBtn.disabled = false;
-    loginBtn.textContent = 'Log In';
+    loginBtn.textContent = 'Войти';
     loginContainer.classList.remove('hidden');
     void loginContainer.offsetHeight;
     loginContainer.classList.add('visible');
@@ -146,12 +146,12 @@ function init(): void {
     const password = passwordInput.value;
 
     if (!email || !password) {
-      loginError.textContent = 'Email and password are required.';
+      loginError.textContent = 'Введите эл. почту и пароль.';
       return false;
     }
 
     loginBtn.disabled = true;
-    loginBtn.innerHTML = '<span class="scout-spinner"></span>Signing in...';
+    loginBtn.innerHTML = '<span class="scout-spinner"></span>Вход...';
     loginError.textContent = '';
 
     try {
@@ -159,10 +159,10 @@ function init(): void {
       hideLoginForm();
       return true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Login failed';
+      const msg = err instanceof Error ? err.message : 'Ошибка входа';
       loginError.textContent = msg;
       loginBtn.disabled = false;
-      loginBtn.textContent = 'Log In';
+  loginBtn.textContent = 'Войти';
       return false;
     }
   }
@@ -210,7 +210,7 @@ function init(): void {
     onSubmitSuccess: () => {
       currentPicked = null;
       showFab(fab);
-      showToast('Bug reported!');
+      showToast('Баг отправлен!');
     },
     onSubmitError: (msg: string) => {
       showToast(msg, true);

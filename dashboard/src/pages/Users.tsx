@@ -131,19 +131,19 @@ export default function Users() {
       setShowModal(false);
       await loadUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save');
+      setError(err instanceof Error ? err.message : 'Ошибка сохранения');
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('Delete this user?')) return;
+    if (!confirm('Удалить этого пользователя?')) return;
     try {
       await api('/api/users/delete', { id });
       await loadUsers();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Delete failed');
+      alert(err instanceof Error ? err.message : 'Ошибка удаления');
     }
   }
 
@@ -165,12 +165,12 @@ export default function Users() {
   return (
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Users</h1>
+        <h1 className="text-xl font-bold text-gray-900">Пользователи</h1>
         <button
           onClick={openCreate}
           className="rounded-md bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
         >
-          Create User
+          Создать пользователя
         </button>
       </div>
 
@@ -178,24 +178,24 @@ export default function Users() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3 w-24">Role</th>
-              <th className="px-4 py-3 w-20 text-center">Active</th>
-              <th className="px-4 py-3 w-28 text-right">Actions</th>
+              <th className="px-4 py-3">Имя</th>
+              <th className="px-4 py-3">Эл. почта</th>
+              <th className="px-4 py-3 w-24">Роль</th>
+              <th className="px-4 py-3 w-20 text-center">Активен</th>
+              <th className="px-4 py-3 w-28 text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
-                  Loading...
+                  Загрузка...
                 </td>
               </tr>
             ) : users.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
-                  No users yet
+                  Нет данных
                 </td>
               </tr>
             ) : (
@@ -211,14 +211,14 @@ export default function Users() {
                         roleBadge[u.role] ?? 'bg-gray-100 text-gray-600'
                       }`}
                     >
-                      {u.role}
+                      {u.role === 'admin' ? 'Админ' : u.role === 'member' ? 'Участник' : u.role === 'agent' ? 'Агент' : u.role}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     {u.isActive ? (
-                      <span className="text-green-600">Yes</span>
+                      <span className="text-green-600">Да</span>
                     ) : (
-                      <span className="text-gray-400">No</span>
+                      <span className="text-gray-400">Нет</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -226,13 +226,13 @@ export default function Users() {
                       onClick={() => openEdit(u)}
                       className="text-sm text-blue-600 hover:underline"
                     >
-                      Edit
+                      Изменить
                     </button>
                     <button
                       onClick={() => handleDelete(u.id)}
                       className="ml-3 text-sm text-red-600 hover:underline"
                     >
-                      Delete
+                      Удалить
                     </button>
                   </td>
                 </tr>
@@ -256,7 +256,7 @@ export default function Users() {
             className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto"
           >
             <h3 className="mb-4 text-lg font-semibold text-gray-900">
-              {editingId ? 'Edit User' : 'Create User'}
+              {editingId ? 'Редактирование пользователя' : 'Создание пользователя'}
             </h3>
 
             {error && (
@@ -266,7 +266,7 @@ export default function Users() {
             )}
 
             <label className="block">
-              <span className="text-sm font-medium text-gray-700">Name</span>
+              <span className="text-sm font-medium text-gray-700">Имя</span>
               <input
                 type="text"
                 value={form.name}
@@ -277,7 +277,7 @@ export default function Users() {
             </label>
 
             <label className="mt-3 block">
-              <span className="text-sm font-medium text-gray-700">Email</span>
+              <span className="text-sm font-medium text-gray-700">Эл. почта</span>
               <input
                 type="email"
                 value={form.email}
@@ -290,7 +290,7 @@ export default function Users() {
 
             <label className="mt-3 block">
               <span className="text-sm font-medium text-gray-700">
-                Password{editingId ? ' (leave empty to keep)' : ''}
+                Пароль{editingId ? ' (оставьте пустым, чтобы не менять)' : ''}
               </span>
               <input
                 type="password"
@@ -302,7 +302,7 @@ export default function Users() {
             </label>
 
             <label className="mt-3 block">
-              <span className="text-sm font-medium text-gray-700">Role</span>
+              <span className="text-sm font-medium text-gray-700">Роль</span>
               <select
                 value={form.role}
                 onChange={(e) =>
@@ -313,9 +313,9 @@ export default function Users() {
                 }
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
               >
-                <option value="admin">Admin</option>
-                <option value="member">Member</option>
-                <option value="agent">Agent</option>
+                <option value="admin">Админ</option>
+                <option value="member">Участник</option>
+                <option value="agent">Агент</option>
               </select>
             </label>
 
@@ -329,14 +329,14 @@ export default function Users() {
                   }
                   className="rounded border-gray-300"
                 />
-                Active
+                Активен
               </label>
             )}
 
             {projects.length > 0 && (
               <div className="mt-4">
                 <span className="text-sm font-medium text-gray-700">
-                  Projects
+                  Проекты
                 </span>
                 <div className="mt-1 max-h-36 space-y-1 overflow-y-auto rounded-md border border-gray-200 p-2">
                   {projects.map((p) => (
@@ -363,14 +363,14 @@ export default function Users() {
                 onClick={() => setShowModal(false)}
                 className="rounded-md border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
-                Cancel
+                Отмена
               </button>
               <button
                 type="submit"
                 disabled={saving}
                 className="rounded-md bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
               >
-                {saving ? 'Saving...' : editingId ? 'Update' : 'Create'}
+                {saving ? 'Сохранение...' : 'Сохранить'}
               </button>
             </div>
           </form>

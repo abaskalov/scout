@@ -38,7 +38,7 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   header.className = 'scout-panel-header';
 
   const title = document.createElement('h2');
-  title.textContent = 'Scout — Report Bug';
+  title.textContent = 'Scout — Сообщить о баге';
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'scout-panel-close';
@@ -58,14 +58,14 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
 
   const selectorLabel = document.createElement('div');
   selectorLabel.className = 'scout-element-info-label';
-  selectorLabel.textContent = 'Element';
+  selectorLabel.textContent = 'Элемент';
 
   const selectorDisplay = document.createElement('div');
   selectorDisplay.className = 'scout-element-info-value';
 
   const textLabel = document.createElement('div');
   textLabel.className = 'scout-element-info-label';
-  textLabel.textContent = 'Text';
+  textLabel.textContent = 'Текст';
 
   const textDisplay = document.createElement('div');
   textDisplay.className = 'scout-element-text';
@@ -80,10 +80,10 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   field.className = 'scout-field';
 
   const label = document.createElement('label');
-  label.innerHTML = 'Describe the bug <span class="scout-required">*</span>';
+  label.innerHTML = 'Опишите проблему <span class="scout-required">*</span>';
 
   const textarea = document.createElement('textarea');
-  textarea.placeholder = 'What went wrong? What did you expect to happen?';
+  textarea.placeholder = 'Что пошло не так? Что вы ожидали?';
   textarea.setAttribute('minlength', '3');
   textarea.setAttribute('maxlength', '5000');
 
@@ -110,7 +110,7 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   screenshotCheckbox.type = 'checkbox';
   screenshotCheckbox.checked = true;
   screenshotLabel.appendChild(screenshotCheckbox);
-  screenshotLabel.appendChild(document.createTextNode('Attach screenshot'));
+  screenshotLabel.appendChild(document.createTextNode('Прикрепить скриншот'));
 
   const recordingLabel = document.createElement('label');
   recordingLabel.className = 'scout-checkbox';
@@ -118,7 +118,7 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   recordingCheckbox.type = 'checkbox';
   recordingCheckbox.checked = true;
   recordingLabel.appendChild(recordingCheckbox);
-  recordingLabel.appendChild(document.createTextNode('Attach session recording'));
+  recordingLabel.appendChild(document.createTextNode('Прикрепить запись сессии'));
 
   body.appendChild(elementInfo);
   body.appendChild(field);
@@ -131,11 +131,11 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
 
   const submitBtn = document.createElement('button');
   submitBtn.className = 'scout-btn scout-btn-primary';
-  submitBtn.textContent = 'Submit';
+  submitBtn.textContent = 'Отправить';
 
   const cancelBtn = document.createElement('button');
   cancelBtn.className = 'scout-btn scout-btn-secondary';
-  cancelBtn.textContent = 'Cancel';
+  cancelBtn.textContent = 'Отмена';
 
   footer.appendChild(submitBtn);
   footer.appendChild(cancelBtn);
@@ -170,14 +170,14 @@ export function showPanel(
   picked: PickedElement,
 ): void {
   elements.selectorDisplay.textContent = picked.cssSelector;
-  elements.textDisplay.textContent = picked.elementText || '(no text)';
+  elements.textDisplay.textContent = picked.elementText || '(нет текста)';
   elements.textarea.value = '';
   elements.textarea.classList.remove('error');
   elements.charCount.textContent = '0 / 5000';
   elements.screenshotCheckbox.checked = true;
   elements.recordingCheckbox.checked = true;
   elements.submitBtn.disabled = false;
-  elements.submitBtn.textContent = 'Submit';
+  elements.submitBtn.textContent = 'Отправить';
 
   elements.backdrop.classList.remove('hidden');
   // Trigger reflow for transition
@@ -236,11 +236,11 @@ export function attachPanelEvents(
     }
 
     elements.submitBtn.disabled = true;
-    elements.submitBtn.innerHTML = '<span class="scout-spinner"></span>Submitting...';
+    elements.submitBtn.innerHTML = '<span class="scout-spinner"></span>Отправка...';
 
     try {
       const token = getToken();
-      if (!token) throw new Error('Not authenticated');
+      if (!token) throw new Error('Вы не авторизованы');
 
       const projectId = await resolveProjectId(apiUrl, projectSlug);
 
@@ -285,7 +285,7 @@ export function attachPanelEvents(
 
       if (!res.ok) {
         const err = await res.json().catch(() => null);
-        throw new Error(err?.message ?? `Submit failed (${res.status})`);
+        throw new Error(err?.message ?? `Ошибка отправки (${res.status})`);
       }
 
       // Success
@@ -293,9 +293,9 @@ export function attachPanelEvents(
       hidePanel(elements);
       callbacks.onSubmitSuccess();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
+      const msg = err instanceof Error ? err.message : 'Неизвестная ошибка';
       elements.submitBtn.disabled = false;
-      elements.submitBtn.textContent = 'Submit';
+      elements.submitBtn.textContent = 'Отправить';
       callbacks.onSubmitError(msg);
     }
   });

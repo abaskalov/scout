@@ -19,7 +19,7 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
         setError(null);
 
         const res = await fetch(recordingPath);
-        if (!res.ok) throw new Error(`Failed to load recording: ${res.status}`);
+        if (!res.ok) throw new Error(`Не удалось загрузить запись: ${res.status}`);
         const events = await res.json();
 
         if (cancelled || !containerRef.current) return;
@@ -49,7 +49,7 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
         setLoading(false);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load recording');
+          setError(err instanceof Error ? err.message : 'Не удалось загрузить запись');
           setLoading(false);
         }
       }
@@ -77,7 +77,7 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
   return (
     <div>
       {loading && (
-        <div className="py-4 text-sm text-gray-500">Loading recording...</div>
+        <div className="py-4 text-sm text-gray-500">Загрузка записи...</div>
       )}
       <div ref={containerRef} />
     </div>

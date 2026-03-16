@@ -33,7 +33,13 @@ app.route('/api/items', itemRoutes);
 app.use('/storage/*', serveStatic({ root: './' }));
 
 // Widget JS (built by Vite)
-app.use('/widget/*', serveStatic({ root: './widget/dist/' }));
+app.use('/widget/*', serveStatic({
+  root: './',
+  rewriteRequestPath: (path) => path.replace('/widget/', '/widget/dist/'),
+}));
+
+// Demo stand
+app.use('/demo/*', serveStatic({ root: './', rewriteRequestPath: (path) => path }));
 
 // Dashboard SPA (built by Vite, catch-all for client-side routing)
 app.use('/*', serveStatic({ root: './dashboard/dist/' }));

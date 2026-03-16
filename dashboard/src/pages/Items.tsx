@@ -37,12 +37,12 @@ interface Counts {
 const STATUSES = ['all', 'new', 'in_progress', 'review', 'done', 'cancelled'] as const;
 
 const statusLabels: Record<string, string> = {
-  all: 'All',
-  new: 'New',
-  in_progress: 'In Progress',
-  review: 'Review',
-  done: 'Done',
-  cancelled: 'Cancelled',
+  all: 'Все',
+  new: 'Новые',
+  in_progress: 'В работе',
+  review: 'На ревью',
+  done: 'Готово',
+  cancelled: 'Отменено',
 };
 
 export default function Items() {
@@ -130,7 +130,7 @@ export default function Items() {
   return (
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Items</h1>
+        <h1 className="text-xl font-bold text-gray-900">Задачи</h1>
         <select
           value={selectedProject ?? ''}
           onChange={handleProjectChange}
@@ -174,24 +174,24 @@ export default function Items() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-              <th className="px-4 py-3">Message</th>
-              <th className="px-4 py-3 w-28">Status</th>
-              <th className="px-4 py-3 w-36">Reporter</th>
-              <th className="px-4 py-3 w-36">Assignee</th>
-              <th className="px-4 py-3 w-40">Created</th>
+              <th className="px-4 py-3">Сообщение</th>
+              <th className="px-4 py-3 w-28">Статус</th>
+              <th className="px-4 py-3 w-36">Автор</th>
+              <th className="px-4 py-3 w-36">Исполнитель</th>
+              <th className="px-4 py-3 w-40">Создано</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
-                  Loading...
+                  Загрузка...
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
-                  No items found
+                  Нет данных
                 </td>
               </tr>
             ) : (

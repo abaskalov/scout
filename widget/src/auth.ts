@@ -58,7 +58,7 @@ export async function login(apiUrl: string, email: string, password: string): Pr
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Login failed (${res.status})`);
+    throw new Error(body?.message ?? `Ошибка входа (${res.status})`);
   }
 
   const json: LoginResponse = await res.json();
@@ -73,7 +73,7 @@ export async function resolveProjectId(apiUrl: string, projectSlug: string): Pro
   if (cachedProjectId !== null) return cachedProjectId;
 
   const token = getToken();
-  if (!token) throw new Error('Not authenticated');
+  if (!token) throw new Error('Вы не авторизованы');
 
   const res = await fetch(`${apiUrl}/api/projects/list`, {
     method: 'POST',
@@ -87,9 +87,9 @@ export async function resolveProjectId(apiUrl: string, projectSlug: string): Pro
   if (!res.ok) {
     if (res.status === 401) {
       clearAuth();
-      throw new Error('Session expired. Please log in again.');
+      throw new Error('Сессия истекла. Войдите снова.');
     }
-    throw new Error(`Failed to fetch projects (${res.status})`);
+    throw new Error(`Не удалось загрузить проекты (${res.status})`);
   }
 
   const json = await res.json();
@@ -97,7 +97,7 @@ export async function resolveProjectId(apiUrl: string, projectSlug: string): Pro
   const project = items.find((p) => p.slug === projectSlug);
 
   if (!project) {
-    throw new Error(`Project "${projectSlug}" not found`);
+    throw new Error(`Проект «${projectSlug}» не найден`);
   }
 
   cachedProjectId = project.id;

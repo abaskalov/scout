@@ -31,7 +31,7 @@ export default function Pagination({
         disabled={page <= 1}
         className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        Previous
+        Назад
       </button>
       {pages.map((p, idx) =>
         p === '...' ? (
@@ -57,7 +57,7 @@ export default function Pagination({
         disabled={page >= totalPages}
         className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        Next
+        Вперёд
       </button>
     </div>
   );

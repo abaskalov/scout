@@ -122,19 +122,19 @@ export default function Projects() {
       setShowModal(false);
       await loadProjects();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save');
+      setError(err instanceof Error ? err.message : 'Ошибка сохранения');
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete this project?')) return;
+    if (!confirm('Удалить этот проект?')) return;
     try {
       await api('/api/projects/delete', { id });
       await loadProjects();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Delete failed');
+      alert(err instanceof Error ? err.message : 'Ошибка удаления');
     }
   }
 
@@ -149,19 +149,19 @@ export default function Projects() {
       });
       await loadProjects();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Update failed');
+      alert(err instanceof Error ? err.message : 'Ошибка обновления');
     }
   }
 
   return (
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Projects</h1>
+        <h1 className="text-xl font-bold text-gray-900">Проекты</h1>
         <button
           onClick={openCreate}
           className="rounded-md bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
         >
-          Create Project
+          Создать проект
         </button>
       </div>
 
@@ -169,25 +169,25 @@ export default function Projects() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Slug</th>
-              <th className="px-4 py-3">Origins</th>
-              <th className="px-4 py-3 w-24 text-center">Auto-fix</th>
-              <th className="px-4 py-3 w-24 text-center">Active</th>
-              <th className="px-4 py-3 w-28 text-right">Actions</th>
+              <th className="px-4 py-3">Название</th>
+              <th className="px-4 py-3">Слаг</th>
+              <th className="px-4 py-3">Источники</th>
+              <th className="px-4 py-3 w-24 text-center">Авто-фикс</th>
+              <th className="px-4 py-3 w-24 text-center">Активен</th>
+              <th className="px-4 py-3 w-28 text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  Loading...
+                  Загрузка...
                 </td>
               </tr>
             ) : projects.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  No projects yet
+                  Нет данных
                 </td>
               </tr>
             ) : (
@@ -219,13 +219,13 @@ export default function Projects() {
                       onClick={() => openEdit(p)}
                       className="text-sm text-blue-600 hover:underline"
                     >
-                      Edit
+                      Изменить
                     </button>
                     <button
                       onClick={() => handleDelete(p.id)}
                       className="ml-3 text-sm text-red-600 hover:underline"
                     >
-                      Delete
+                      Удалить
                     </button>
                   </td>
                 </tr>
@@ -249,7 +249,7 @@ export default function Projects() {
             className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-6 shadow-xl"
           >
             <h3 className="mb-4 text-lg font-semibold text-gray-900">
-              {editingId ? 'Edit Project' : 'Create Project'}
+              {editingId ? 'Редактирование проекта' : 'Создание проекта'}
             </h3>
 
             {error && (
@@ -259,7 +259,7 @@ export default function Projects() {
             )}
 
             <label className="block">
-              <span className="text-sm font-medium text-gray-700">Name</span>
+              <span className="text-sm font-medium text-gray-700">Название</span>
               <input
                 type="text"
                 value={form.name}
@@ -271,21 +271,21 @@ export default function Projects() {
 
             {!editingId && (
               <label className="mt-3 block">
-                <span className="text-sm font-medium text-gray-700">Slug</span>
+                <span className="text-sm font-medium text-gray-700">Слаг</span>
                 <input
                   type="text"
                   value={form.slug}
                   onChange={(e) => setForm({ ...form, slug: e.target.value })}
                   required
                   className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
-                  placeholder="my-project"
+                  placeholder="my-project" 
                 />
               </label>
             )}
 
             <label className="mt-3 block">
               <span className="text-sm font-medium text-gray-700">
-                Allowed Origins
+                Разрешённые источники
               </span>
               <input
                 type="text"
@@ -297,7 +297,7 @@ export default function Projects() {
                 placeholder="https://example.com, https://app.example.com"
               />
               <span className="text-xs text-gray-400">
-                Comma-separated URLs
+                URL через запятую
               </span>
             </label>
 
@@ -312,7 +312,7 @@ export default function Projects() {
                     }
                     className="rounded border-gray-300"
                   />
-                  Auto-fix
+                  Авто-фикс
                 </label>
                 <label className="flex items-center gap-2 text-sm text-gray-700">
                   <input
@@ -323,7 +323,7 @@ export default function Projects() {
                     }
                     className="rounded border-gray-300"
                   />
-                  Active
+                  Активен
                 </label>
               </div>
             )}
@@ -334,14 +334,14 @@ export default function Projects() {
                 onClick={() => setShowModal(false)}
                 className="rounded-md border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
-                Cancel
+                Отмена
               </button>
               <button
                 type="submit"
                 disabled={saving}
                 className="rounded-md bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
               >
-                {saving ? 'Saving...' : editingId ? 'Update' : 'Create'}
+                {saving ? 'Сохранение...' : 'Сохранить'}
               </button>
             </div>
           </form>

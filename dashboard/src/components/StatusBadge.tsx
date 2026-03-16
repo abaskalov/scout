@@ -7,11 +7,11 @@ const colorMap: Record<string, string> = {
 };
 
 const labelMap: Record<string, string> = {
-  new: 'New',
-  in_progress: 'In Progress',
-  review: 'Review',
-  done: 'Done',
-  cancelled: 'Cancelled',
+  new: 'Новые',
+  in_progress: 'В работе',
+  review: 'На ревью',
+  done: 'Готово',
+  cancelled: 'Отменено',
 };
 
 export default function StatusBadge({ status }: { status: string }) {

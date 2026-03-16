@@ -6,6 +6,10 @@ export const WIDGET_STYLES = `
     color: #111827;
     line-height: 1.5;
     box-sizing: border-box;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
   }
 
   *, *::before, *::after {
@@ -15,8 +19,8 @@ export const WIDGET_STYLES = `
   /* FAB */
   .scout-fab {
     position: fixed;
-    bottom: 24px;
-    right: 24px;
+    bottom: calc(24px + var(--safe-bottom));
+    right: calc(24px + var(--safe-right));
     width: 56px;
     height: 56px;
     border-radius: 50%;
@@ -33,6 +37,8 @@ export const WIDGET_STYLES = `
     font-size: 0;
     line-height: 0;
     padding: 0;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .scout-fab:hover {
@@ -65,6 +71,7 @@ export const WIDGET_STYLES = `
     z-index: 1000000;
     cursor: crosshair;
     background: rgba(59, 130, 246, 0.05);
+    touch-action: none;
   }
 
   .scout-overlay.hidden {
@@ -147,6 +154,12 @@ export const WIDGET_STYLES = `
     padding: 4px;
     color: #6b7280;
     line-height: 0;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
   }
 
   .scout-panel-close:hover {
@@ -165,6 +178,7 @@ export const WIDGET_STYLES = `
     flex: 1;
     overflow-y: auto;
     padding: 20px;
+    -webkit-overflow-scrolling: touch;
   }
 
   .scout-element-info {
@@ -225,7 +239,7 @@ export const WIDGET_STYLES = `
     padding: 10px 12px;
     border: 1px solid #d1d5db;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 16px;
     font-family: inherit;
     resize: vertical;
     color: #111827;
@@ -258,13 +272,15 @@ export const WIDGET_STYLES = `
     cursor: pointer;
     font-size: 13px;
     color: #374151;
+    min-height: 44px;
   }
 
   .scout-checkbox input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
     accent-color: #3b82f6;
     cursor: pointer;
+    flex-shrink: 0;
   }
 
   .scout-panel-footer {
@@ -287,6 +303,8 @@ export const WIDGET_STYLES = `
     border: none;
     transition: background 0.15s ease, opacity 0.15s ease;
     font-family: inherit;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .scout-btn:disabled {
@@ -339,12 +357,13 @@ export const WIDGET_STYLES = `
     padding: 10px 12px;
     border: 1px solid #d1d5db;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 16px;
     font-family: inherit;
     color: #111827;
     background: #fff;
     outline: none;
     transition: border-color 0.15s ease;
+    min-height: 44px;
   }
 
   .scout-input:focus {
@@ -362,8 +381,8 @@ export const WIDGET_STYLES = `
   /* Toast */
   .scout-toast {
     position: fixed;
-    bottom: 92px;
-    right: 24px;
+    bottom: calc(92px + var(--safe-bottom));
+    right: calc(24px + var(--safe-right));
     background: #22c55e;
     color: #fff;
     padding: 12px 20px;
@@ -401,5 +420,108 @@ export const WIDGET_STYLES = `
 
   @keyframes scout-spin {
     to { transform: rotate(360deg); }
+  }
+
+  /* ===== Mobile (max-width: 640px) ===== */
+  @media (max-width: 640px) {
+    /* FAB: smaller + tighter offset */
+    .scout-fab {
+      width: 48px;
+      height: 48px;
+      bottom: calc(16px + var(--safe-bottom));
+      right: calc(16px + var(--safe-right));
+    }
+
+    .scout-fab svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    /* Panel: full-screen overlay */
+    .scout-panel {
+      width: 100%;
+      height: 100%;
+      max-height: 100%;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .scout-panel-header {
+      padding-top: calc(16px + var(--safe-top));
+      padding-left: calc(20px + var(--safe-left));
+      padding-right: calc(20px + var(--safe-right));
+    }
+
+    .scout-panel-body {
+      padding-left: calc(20px + var(--safe-left));
+      padding-right: calc(20px + var(--safe-right));
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .scout-panel-footer {
+      padding-bottom: calc(16px + var(--safe-bottom));
+      padding-left: calc(20px + var(--safe-left));
+      padding-right: calc(20px + var(--safe-right));
+      flex-direction: column;
+    }
+
+    .scout-panel-footer .scout-btn {
+      width: 100%;
+      min-height: 48px;
+      font-size: 16px;
+    }
+
+    .scout-panel-footer .scout-btn-secondary {
+      flex: none;
+    }
+
+    /* Textarea taller on mobile */
+    .scout-field textarea {
+      min-height: 120px;
+    }
+
+    /* Inputs: prevent iOS zoom (font-size >= 16px already set), ensure touch targets */
+    .scout-input {
+      min-height: 48px;
+      font-size: 16px;
+    }
+
+    /* Login form: use safe area */
+    .scout-login {
+      padding: 20px calc(20px + var(--safe-left)) 20px calc(20px + var(--safe-right));
+    }
+
+    .scout-login .scout-btn {
+      min-height: 48px;
+      font-size: 16px;
+    }
+
+    /* Checkboxes: larger touch targets */
+    .scout-checkbox {
+      min-height: 48px;
+      padding: 4px 0;
+    }
+
+    .scout-checkbox input[type="checkbox"] {
+      width: 24px;
+      height: 24px;
+    }
+
+    /* Element picker: thicker highlight border on mobile */
+    .scout-highlight {
+      border-width: 3px;
+    }
+
+    /* Toast: centered on mobile */
+    .scout-toast {
+      right: calc(16px + var(--safe-right));
+      left: calc(16px + var(--safe-left));
+      bottom: calc(76px + var(--safe-bottom));
+      text-align: center;
+    }
   }
 `;

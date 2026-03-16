@@ -18,6 +18,21 @@ declare global {
   }
 }
 
+function ensureViewportFitCover(): void {
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (meta) {
+    const content = meta.getAttribute('content') || '';
+    if (!content.includes('viewport-fit')) {
+      meta.setAttribute('content', content + ', viewport-fit=cover');
+    }
+  } else {
+    const newMeta = document.createElement('meta');
+    newMeta.name = 'viewport';
+    newMeta.content = 'width=device-width, initial-scale=1.0, viewport-fit=cover';
+    document.head.appendChild(newMeta);
+  }
+}
+
 function init(): void {
   const config = window.__SCOUT_CONFIG__;
   if (!config?.apiUrl || !config?.projectSlug) {
@@ -30,6 +45,9 @@ function init(): void {
   if (config.enabled === false && !urlOverride) {
     return; // Widget disabled by config, no URL override
   }
+
+  // Ensure viewport-fit=cover for safe area insets (CapacitorJS)
+  ensureViewportFitCover();
 
   const { apiUrl, projectSlug } = config;
 

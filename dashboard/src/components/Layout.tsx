@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet } from 'react-router';
+import { NavLink, Outlet, useLocation } from 'react-router';
 import { getUser, isAdmin, logout } from '../lib/auth';
 import { api } from '../lib/api';
 
@@ -7,9 +7,15 @@ export default function Layout() {
   const user = getUser();
   const admin = isAdmin();
   const [newCount, setNewCount] = useState(0);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const location = useLocation();
+
+  // Close user menu on route change
+  useEffect(() => {
+    setShowUserMenu(false);
+  }, [location.pathname]);
 
   useEffect(() => {
-    // Fetch new item counts across all projects
     async function loadCounts() {
       try {
         const projects = await api<{
@@ -44,10 +50,15 @@ export default function Layout() {
         : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
     }`;
 
+  const bottomNavLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `flex flex-col items-center gap-0.5 text-[11px] font-medium transition-colors ${
+      isActive ? 'text-gray-900' : 'text-gray-400'
+    }`;
+
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside className="flex w-60 flex-col border-r border-gray-200 bg-gray-100">
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-60 flex-col border-r border-gray-200 bg-gray-100">
         <div className="flex items-center gap-2 border-b border-gray-200 px-5 py-4">
           <svg
             className="h-6 w-6 text-gray-800"
@@ -111,10 +122,111 @@ export default function Layout() {
         </div>
       </aside>
 
+      {/* Mobile top bar */}
+      <div className="fixed inset-x-0 top-0 z-30 flex md:hidden items-center justify-between border-b border-gray-200 bg-gray-100 px-4"
+        style={{ paddingTop: 'calc(0.5rem + var(--safe-area-top))' , height: 'calc(3rem + var(--safe-area-top))' }}
+      >
+        <div className="flex items-center gap-2">
+          <svg
+            className="h-5 w-5 text-gray-800"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 8v4l3 3" />
+          </svg>
+          <span className="text-base font-bold text-gray-900">Scout</span>
+        </div>
+        <span className="text-xs text-gray-500 truncate max-w-[140px]">{user?.name ?? user?.email ?? ''}</span>
+      </div>
+
+      {/* Mobile user menu overlay (triggered from bottom nav "Профиль") */}
+      {showUserMenu && (
+        <div className="fixed inset-0 z-40 md:hidden" onClick={() => setShowUserMenu(false)}>
+          <div className="absolute inset-0 bg-black/20" />
+          <div
+            className="absolute inset-x-0 bottom-0 rounded-t-xl border-t border-gray-200 bg-white px-5 pt-4"
+            style={{ paddingBottom: 'calc(1rem + var(--safe-area-bottom))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 text-sm font-medium text-gray-800">{user?.name ?? 'User'}</div>
+            <div className="mb-4 text-xs text-gray-500">{user?.email}</div>
+            <button
+              onClick={logout}
+              className="w-full rounded-md border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
+            >
+              Выйти
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
       <main className="flex-1 overflow-auto">
+        {/* Mobile spacing for fixed top bar and bottom nav */}
+        <div
+          className="block md:hidden"
+          style={{ height: 'calc(3rem + var(--safe-area-top))' }}
+        />
         <Outlet />
+        <div
+          className="block md:hidden"
+          style={{ height: 'calc(3.5rem + var(--safe-area-bottom))' }}
+        />
       </main>
+
+      {/* Mobile bottom navigation */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-30 flex md:hidden items-center justify-around border-t border-gray-200 bg-white pt-1.5 pb-1.5"
+        style={{ paddingBottom: 'calc(0.375rem + var(--safe-area-bottom))' }}
+      >
+        <NavLink to="/items" className={bottomNavLinkClass}>
+          <div className="relative">
+            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" />
+              <path d="M2 17l10 5 10-5" />
+              <path d="M2 12l10 5 10-5" />
+            </svg>
+            {newCount > 0 && (
+              <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-yellow-400 px-1 text-[10px] font-bold text-yellow-900">
+                {newCount}
+              </span>
+            )}
+          </div>
+          Задачи
+        </NavLink>
+        {admin && (
+          <>
+            <NavLink to="/projects" className={bottomNavLinkClass}>
+              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
+              </svg>
+              Проекты
+            </NavLink>
+            <NavLink to="/users" className={bottomNavLinkClass}>
+              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              Пользователи
+            </NavLink>
+          </>
+        )}
+        <button
+          onClick={() => setShowUserMenu((v) => !v)}
+          className="flex flex-col items-center gap-0.5 text-[11px] font-medium text-gray-400 transition-colors"
+        >
+          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          Профиль
+        </button>
+      </nav>
     </div>
   );
 }

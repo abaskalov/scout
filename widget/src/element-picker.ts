@@ -11,7 +11,8 @@ export interface PickedElement {
 
 /**
  * Activate the element picker. Shows an overlay with a crosshair cursor.
- * Hovering highlights elements. Clicking captures element info and resolves the promise.
+ * Hovering (or touch-moving) highlights elements. Clicking/tapping captures
+ * element info and resolves the promise.
  * ESC key cancels (resolves with null).
  */
 export function pickElement(
@@ -34,14 +35,21 @@ export function pickElement(
       highlight.classList.remove('hidden');
     }
 
-    function onMouseMove(e: MouseEvent): void {
-      // Get element under cursor from the real DOM (not shadow DOM)
-      // We need to temporarily hide the overlay to get the element beneath
+    function resolveElementAt(x: number, y: number): Element | null {
       overlay.style.pointerEvents = 'none';
-      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const el = document.elementFromPoint(x, y);
       overlay.style.pointerEvents = '';
 
       if (!el || el.id === 'scout-widget-root' || el.closest('#scout-widget-root')) {
+        return null;
+      }
+      return el;
+    }
+
+    function onMouseMove(e: MouseEvent): void {
+      const el = resolveElementAt(e.clientX, e.clientY);
+
+      if (!el) {
         highlight.classList.add('hidden');
         currentTarget = null;
         return;
@@ -51,10 +59,41 @@ export function pickElement(
       updateHighlight(el);
     }
 
-    function onClick(e: MouseEvent): void {
-      e.preventDefault();
-      e.stopPropagation();
+    function onTouchMove(e: TouchEvent): void {
+      e.preventDefault(); // Prevent scrolling while picking
+      const touch = e.touches[0];
+      if (!touch) return;
 
+      const el = resolveElementAt(touch.clientX, touch.clientY);
+
+      if (!el) {
+        highlight.classList.add('hidden');
+        currentTarget = null;
+        return;
+      }
+
+      currentTarget = el;
+      updateHighlight(el);
+    }
+
+    function onTouchStart(e: TouchEvent): void {
+      e.preventDefault(); // Prevent scrolling
+      const touch = e.touches[0];
+      if (!touch) return;
+
+      const el = resolveElementAt(touch.clientX, touch.clientY);
+
+      if (!el) {
+        highlight.classList.add('hidden');
+        currentTarget = null;
+        return;
+      }
+
+      currentTarget = el;
+      updateHighlight(el);
+    }
+
+    function finishPick(): void {
       if (!currentTarget) {
         cleanup();
         resolve(null);
@@ -75,6 +114,18 @@ export function pickElement(
       resolve(result);
     }
 
+    function onClick(e: MouseEvent): void {
+      e.preventDefault();
+      e.stopPropagation();
+      finishPick();
+    }
+
+    function onTouchEnd(e: TouchEvent): void {
+      e.preventDefault();
+      e.stopPropagation();
+      finishPick();
+    }
+
     function onKeyDown(e: KeyboardEvent): void {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -88,11 +139,17 @@ export function pickElement(
       highlight.classList.add('hidden');
       overlay.removeEventListener('mousemove', onMouseMove);
       overlay.removeEventListener('click', onClick);
+      overlay.removeEventListener('touchstart', onTouchStart);
+      overlay.removeEventListener('touchmove', onTouchMove);
+      overlay.removeEventListener('touchend', onTouchEnd);
       document.removeEventListener('keydown', onKeyDown, true);
     }
 
     overlay.addEventListener('mousemove', onMouseMove);
     overlay.addEventListener('click', onClick);
+    overlay.addEventListener('touchstart', onTouchStart, { passive: false });
+    overlay.addEventListener('touchmove', onTouchMove, { passive: false });
+    overlay.addEventListener('touchend', onTouchEnd, { passive: false });
     document.addEventListener('keydown', onKeyDown, true);
   });
 }

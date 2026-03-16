@@ -128,13 +128,13 @@ export default function Items() {
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="p-4 md:p-6">
+      <div className="mb-4 md:mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="text-xl font-bold text-gray-900">Задачи</h1>
         <select
           value={selectedProject ?? ''}
           onChange={handleProjectChange}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+          className="w-full md:w-auto rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
         >
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -144,15 +144,15 @@ export default function Items() {
         </select>
       </div>
 
-      {/* Status filter tabs */}
-      <div className="mb-4 flex gap-1 border-b border-gray-200">
+      {/* Status filter tabs — horizontal scroll on mobile */}
+      <div className="mb-4 flex gap-1 border-b border-gray-200 overflow-x-auto">
         {STATUSES.map((s) => {
           const count = getTabCount(s);
           return (
             <button
               key={s}
               onClick={() => handleStatusChange(s)}
-              className={`relative px-3 py-2 text-sm font-medium transition-colors ${
+              className={`relative shrink-0 px-3 py-2 text-sm font-medium transition-colors ${
                 statusFilter === s
                   ? 'border-b-2 border-gray-900 text-gray-900'
                   : 'text-gray-500 hover:text-gray-700'
@@ -169,8 +169,8 @@ export default function Items() {
         })}
       </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-hidden rounded-lg border border-gray-200 bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -221,6 +221,34 @@ export default function Items() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile card list */}
+      <div className="md:hidden space-y-2">
+        {loading ? (
+          <div className="py-8 text-center text-gray-400">Загрузка...</div>
+        ) : items.length === 0 ? (
+          <div className="py-8 text-center text-gray-400">Нет данных</div>
+        ) : (
+          items.map((item) => (
+            <div
+              key={item.id}
+              onClick={() => navigate(`/items/${item.id}`)}
+              className="cursor-pointer rounded-lg border border-gray-200 bg-white p-3 active:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-gray-800 line-clamp-2">
+                  {item.message}
+                </p>
+                <StatusBadge status={item.status} />
+              </div>
+              <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
+                <span>{item.reporterName ?? '—'}</span>
+                <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       <Pagination

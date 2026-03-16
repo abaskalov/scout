@@ -93,7 +93,8 @@ sqlite.exec(`
 const userCount = sqlite.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number };
 if (userCount.cnt === 0) {
   const { randomUUID } = await import('node:crypto');
-  const bcrypt = await import('bcryptjs');
+  const bcryptModule = await import('bcryptjs');
+  const bcrypt = bcryptModule.default || bcryptModule;
 
   const adminId = randomUUID();
   const agentId = randomUUID();

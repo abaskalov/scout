@@ -1,22 +1,12 @@
-import html2canvas from 'html2canvas';
-
-const SCREENSHOT_TIMEOUT_MS = 8_000;
+import { domToPng } from 'modern-screenshot';
 
 /**
- * Capture a screenshot of the current page using html2canvas.
+ * Capture a full-page screenshot using modern-screenshot (SVG foreignObject).
  * If a CSS selector is provided, highlights the selected element with a red outline.
  *
  * Returns a base64-encoded PNG string (without the data:image/png;base64, prefix).
  */
 export async function captureScreenshot(highlightSelector?: string): Promise<string> {
-  // Hide the widget root so it doesn't appear in the screenshot
-  const widgetRoot = document.getElementById('scout-widget-root');
-  let prevDisplay = '';
-  if (widgetRoot) {
-    prevDisplay = widgetRoot.style.display;
-    widgetRoot.style.display = 'none';
-  }
-
   // Add highlight on selected element using ABSOLUTE positioning
   let highlightOverlay: HTMLDivElement | null = null;
   if (highlightSelector) {
@@ -49,38 +39,42 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
   }
 
   try {
-    const fullWidth = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, window.innerWidth);
-    const fullHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight);
-
-    // html2canvas handles scroll internally via scrollX/scrollY options —
-    // no need to physically scroll the page (avoids smooth-scroll race + Safari hangs).
-    const canvasPromise = html2canvas(document.body, {
-      useCORS: true,
-      allowTaint: true,
-      scale: 1,
-      logging: false,
-      backgroundColor: '#ffffff',
-      scrollX: 0,
-      scrollY: 0,
-      windowWidth: fullWidth,
-      windowHeight: fullHeight,
-    });
-
-    // Timeout guard — html2canvas can hang indefinitely in Safari
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
+    const fullWidth = Math.max(
+      document.documentElement.scrollWidth,
+      document.body.scrollWidth,
+      window.innerWidth,
+    );
+    const fullHeight = Math.max(
+      document.documentElement.scrollHeight,
+      document.body.scrollHeight,
+      window.innerHeight,
     );
 
-    const canvas = await Promise.race([canvasPromise, timeoutPromise]);
+    const dataUrl = await domToPng(document.documentElement, {
+      width: fullWidth,
+      height: fullHeight,
+      scale: 1,
+      backgroundColor: '#ffffff',
+      timeout: 8_000,
+      // Exclude the Scout widget from the screenshot
+      filter: (node: Node) => {
+        if (node instanceof Element && node.id === 'scout-widget-root') return false;
+        return true;
+      },
+      features: {
+        // Render from document top, not from current scroll position
+        restoreScrollPosition: false,
+        // Safari/Firefox SVG decode fix (enabled by default, explicit for clarity)
+        fixSvgXmlDecode: true,
+      },
+      // Safari/Firefox draw-image decode fix
+      drawImageInterval: 100,
+    });
 
-    const dataUrl = canvas.toDataURL('image/png');
     return dataUrl.replace(/^data:image\/png;base64,/, '');
   } finally {
     if (highlightOverlay) {
       highlightOverlay.remove();
-    }
-    if (widgetRoot) {
-      widgetRoot.style.display = prevDisplay;
     }
   }
 }

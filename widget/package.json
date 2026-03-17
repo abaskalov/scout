@@ -9,11 +9,11 @@
     "build:watch": "vite build --watch"
   },
   "dependencies": {
-    "rrweb": "2.0.0-alpha.20",
-    "html2canvas": "^1"
+    "modern-screenshot": "^4.6.8",
+    "rrweb": "2.0.0-alpha.20"
   },
   "devDependencies": {
-    "vite": "^6",
-    "typescript": "^5.7"
+    "typescript": "^5.7",
+    "vite": "^6"
   }
 }

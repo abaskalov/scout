@@ -179,6 +179,7 @@ export function showPanel(
   elements.submitBtn.disabled = false;
   elements.submitBtn.textContent = 'Отправить';
 
+  elements.backdrop.style.display = ''; // Clear inline override from screenshot flow
   elements.backdrop.classList.remove('hidden');
   // Trigger reflow for transition
   void elements.backdrop.offsetHeight;

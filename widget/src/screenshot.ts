@@ -1,5 +1,7 @@
 import html2canvas from 'html2canvas';
 
+const SCREENSHOT_TIMEOUT_MS = 8_000;
+
 /**
  * Capture a screenshot of the current page using html2canvas.
  * If a CSS selector is provided, highlights the selected element with a red outline.
@@ -46,16 +48,13 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
     }
   }
 
-  // Scroll to top so html2canvas captures the full page from the beginning
-  const prevScrollX = window.scrollX;
-  const prevScrollY = window.scrollY;
-  window.scrollTo(0, 0);
-
   try {
     const fullWidth = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, window.innerWidth);
     const fullHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight);
 
-    const canvas = await html2canvas(document.body, {
+    // html2canvas handles scroll internally via scrollX/scrollY options —
+    // no need to physically scroll the page (avoids smooth-scroll race + Safari hangs).
+    const canvasPromise = html2canvas(document.body, {
       useCORS: true,
       allowTaint: true,
       scale: 1,
@@ -67,10 +66,16 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
       windowHeight: fullHeight,
     });
 
+    // Timeout guard — html2canvas can hang indefinitely in Safari
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
+    );
+
+    const canvas = await Promise.race([canvasPromise, timeoutPromise]);
+
     const dataUrl = canvas.toDataURL('image/png');
     return dataUrl.replace(/^data:image\/png;base64,/, '');
   } finally {
-    window.scrollTo(prevScrollX, prevScrollY);
     if (highlightOverlay) {
       highlightOverlay.remove();
     }

@@ -19,8 +19,8 @@ const VALID_TRANSITIONS: Record<ItemStatus, ItemStatus[]> = {
   new: ['in_progress', 'cancelled'],
   in_progress: ['review', 'done', 'cancelled'],
   review: ['in_progress', 'done'],
-  done: [],
-  cancelled: [],
+  done: ['new'],
+  cancelled: ['new'],
 };
 
 function now(): string {
@@ -203,6 +203,37 @@ export function updateItemStatus(
   const fromLabel = STATUS_LABELS[item.status as ItemStatus] || item.status;
   const toLabel = STATUS_LABELS[newStatus] || newStatus;
   addAutoNote(itemId, user.id, `Статус: ${fromLabel} → ${toLabel}`, 'status_change');
+
+  return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
+}
+
+export function updateItem(itemId: string, data: { message?: string; assigneeId?: string | null }) {
+  const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
+  if (!item) throw new NotFoundError('Item');
+
+  const updates: Record<string, unknown> = { updatedAt: now() };
+  if (data.message !== undefined) updates.message = data.message;
+  if (data.assigneeId !== undefined) updates.assigneeId = data.assigneeId;
+
+  db.update(scoutItems).set(updates).where(eq(scoutItems.id, itemId)).run();
+  return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
+}
+
+export function reopenItem(itemId: string, user: User) {
+  const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
+  if (!item) throw new NotFoundError('Item');
+
+  validateTransition(item.status as ItemStatus, 'new');
+
+  db.update(scoutItems).set({
+    status: 'new',
+    assigneeId: null,
+    resolvedById: null,
+    resolvedAt: null,
+    updatedAt: now(),
+  }).where(eq(scoutItems.id, itemId)).run();
+
+  addAutoNote(itemId, user.id, 'Переоткрыт', 'status_change');
 
   return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
 }

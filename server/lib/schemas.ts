@@ -81,6 +81,7 @@ export const listItemsSchema = paginationSchema.extend({
   projectId: uuidSchema,
   status: z.enum(['new', 'in_progress', 'review', 'done', 'cancelled']).optional(),
   assigneeId: uuidSchema.optional(),
+  search: z.string().max(200).optional(),
 });
 
 export const getItemSchema = z.object({ id: uuidSchema });
@@ -108,6 +109,16 @@ export const updateItemStatusSchema = z.object({
   mrUrl: z.string().url().max(500).optional(),
   attemptCount: z.number().int().min(0).optional(),
 });
+
+export const deleteItemSchema = z.object({ id: uuidSchema });
+
+export const updateItemSchema = z.object({
+  id: uuidSchema,
+  message: z.string().min(3).max(5000).optional(),
+  assigneeId: uuidSchema.nullish(),
+});
+
+export const reopenItemSchema = z.object({ id: uuidSchema });
 
 export const addNoteSchema = z.object({
   itemId: uuidSchema,

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { eq, and, desc, count } from 'drizzle-orm';
+import { eq, and, desc, count, like } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { scoutItems, scoutItemNotes, projects, users } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -11,8 +11,9 @@ import {
   createItemSchema, listItemsSchema, getItemSchema,
   countItemsSchema, claimItemSchema, resolveItemSchema,
   cancelItemSchema, updateItemStatusSchema, addNoteSchema,
+  deleteItemSchema, updateItemSchema, reopenItemSchema,
 } from '../lib/schemas.js';
-import { createItem, claimItem, updateItemStatus } from '../services/items.js';
+import { createItem, claimItem, updateItemStatus, deleteItem, updateItem, reopenItem } from '../services/items.js';
 
 /** Resolve user name by id, with simple cache */
 const userNameCache = new Map<string, string>();
@@ -56,11 +57,12 @@ export const itemRoutes = new Hono()
   .post('/list',
     zValidator('json', listItemsSchema),
     async (c) => {
-      const { projectId, status, assigneeId, page, perPage } = c.req.valid('json');
+      const { projectId, status, assigneeId, search, page, perPage } = c.req.valid('json');
 
       const conditions = [eq(scoutItems.projectId, projectId)];
       if (status) conditions.push(eq(scoutItems.status, status));
       if (assigneeId) conditions.push(eq(scoutItems.assigneeId, assigneeId));
+      if (search) conditions.push(like(scoutItems.message, `%${search}%`));
 
       const where = conditions.length === 1 ? conditions[0]! : and(...conditions);
 
@@ -169,6 +171,39 @@ export const itemRoutes = new Hono()
         branchName, mrUrl, attemptCount,
       });
       return c.json({ data: item });
+    })
+
+  // DELETE — admin only
+  .post('/delete',
+    requireRole('admin'),
+    zValidator('json', deleteItemSchema),
+    async (c) => {
+      const { id } = c.req.valid('json');
+      deleteItem(id);
+      return c.json({ data: { ok: true } });
+    })
+
+  // UPDATE — admin only
+  .post('/update',
+    requireRole('admin'),
+    zValidator('json', updateItemSchema),
+    async (c) => {
+      const data = c.req.valid('json');
+      const item = updateItem(data.id, {
+        message: data.message,
+        assigneeId: data.assigneeId,
+      });
+      return c.json({ data: enrichItem(item) });
+    })
+
+  // REOPEN — admin only
+  .post('/reopen',
+    requireRole('admin'),
+    zValidator('json', reopenItemSchema),
+    async (c) => {
+      const { id } = c.req.valid('json');
+      const item = reopenItem(id, c.get('user'));
+      return c.json({ data: enrichItem(item) });
     })
 
   // ADD NOTE — all roles

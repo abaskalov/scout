@@ -53,8 +53,24 @@ function seed() {
     logger.info('Agent already exists, skipping');
   }
 
-  // Pivot: agent → project
+  // Member (tester)
+  const existingMember = db.select().from(users).where(eq(users.email, 'member@scout.local')).get();
+  if (!existingMember) {
+    db.insert(users).values({
+      id: randomUUID(),
+      email: 'member@scout.local',
+      passwordHash: bcrypt.hashSync('member', 10),
+      name: 'Tester',
+      role: 'member',
+    }).run();
+    logger.info('Created user: member@scout.local');
+  } else {
+    logger.info('Member already exists, skipping');
+  }
+
+  // Pivots: agent + member → project
   const agent = db.select().from(users).where(eq(users.email, 'agent@scout.local')).get();
+  const member = db.select().from(users).where(eq(users.email, 'member@scout.local')).get();
   const project = db.select().from(projects).where(eq(projects.slug, 'my-app')).get();
 
   if (agent && project) {
@@ -66,6 +82,18 @@ function seed() {
         projectId: project.id,
       }).run();
       logger.info('Linked AI Agent to My App');
+    }
+  }
+
+  if (member && project) {
+    const existing = db.select().from(pivotUsersProjects)
+      .where(eq(pivotUsersProjects.userId, member.id)).get();
+    if (!existing) {
+      db.insert(pivotUsersProjects).values({
+        userId: member.id,
+        projectId: project.id,
+      }).run();
+      logger.info('Linked Tester to My App');
     }
   }
 

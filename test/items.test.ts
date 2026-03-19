@@ -244,4 +244,192 @@ describe('Items routes', () => {
     expect(types).toContain('assignment');
     expect(types).toContain('status_change');
   });
+
+  // === UPDATE ===
+
+  it('POST /update — admin can update message', async () => {
+    const item = await createTestItem();
+
+    const res = await post('/update', {
+      id: item.id,
+      message: 'Updated bug report message',
+    }, ctx.adminToken);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.data.message).toBe('Updated bug report message');
+  });
+
+  it('POST /update — admin can update priority', async () => {
+    const item = await createTestItem();
+
+    const res = await post('/update', {
+      id: item.id,
+      priority: 'critical',
+    }, ctx.adminToken);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.data.priority).toBe('critical');
+  });
+
+  it('POST /update — admin can update labels', async () => {
+    const item = await createTestItem();
+
+    const res = await post('/update', {
+      id: item.id,
+      labels: ['ui', 'regression'],
+    }, ctx.adminToken);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(JSON.parse(body.data.labels)).toEqual(['ui', 'regression']);
+  });
+
+  it('POST /update — admin can reassign (update assigneeId)', async () => {
+    const item = await createTestItem();
+
+    const res = await post('/update', {
+      id: item.id,
+      assigneeId: ctx.agentId,
+    }, ctx.adminToken);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.data.assigneeId).toBe(ctx.agentId);
+  });
+
+  it('POST /update — non-admin cannot update (403)', async () => {
+    const item = await createTestItem();
+
+    const res = await post('/update', {
+      id: item.id,
+      message: 'Hacked message',
+    }, ctx.memberToken);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('POST /update — non-existent item returns 404', async () => {
+    const res = await post('/update', {
+      id: randomUUID(),
+      message: 'No such item',
+    }, ctx.adminToken);
+
+    expect(res.status).toBe(404);
+  });
+
+  // === DELETE ===
+
+  it('POST /delete — admin can delete item', async () => {
+    const item = await createTestItem();
+
+    const res = await post('/delete', { id: item.id }, ctx.adminToken);
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.data.ok).toBe(true);
+
+    // Verify it's actually gone
+    const getRes = await post('/get', { id: item.id }, ctx.adminToken);
+    expect(getRes.status).toBe(404);
+  });
+
+  it('POST /delete — non-admin cannot delete (403)', async () => {
+    const item = await createTestItem();
+
+    const res = await post('/delete', { id: item.id }, ctx.memberToken);
+    expect(res.status).toBe(403);
+  });
+
+  it('POST /delete — non-existent item returns 404', async () => {
+    const res = await post('/delete', { id: randomUUID() }, ctx.adminToken);
+    expect(res.status).toBe(404);
+  });
+
+  // === REOPEN ===
+
+  it('POST /reopen — admin can reopen done item (→ new)', async () => {
+    const item = await createTestItem();
+    await post('/claim', { id: item.id }, ctx.agentToken);
+    await post('/resolve', { id: item.id }, ctx.agentToken);
+
+    const res = await post('/reopen', { id: item.id }, ctx.adminToken);
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.data.status).toBe('new');
+    expect(body.data.assigneeId).toBeNull();
+  });
+
+  it('POST /reopen — admin can reopen cancelled item (→ new)', async () => {
+    const item = await createTestItem();
+    await post('/cancel', { id: item.id }, ctx.adminToken);
+
+    const res = await post('/reopen', { id: item.id }, ctx.adminToken);
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.data.status).toBe('new');
+  });
+
+  it('POST /reopen — cannot reopen item already in new (400)', async () => {
+    const item = await createTestItem();
+
+    const res = await post('/reopen', { id: item.id }, ctx.adminToken);
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /reopen — cannot reopen item in in_progress (400)', async () => {
+    const item = await createTestItem();
+    await post('/claim', { id: item.id }, ctx.agentToken);
+
+    const res = await post('/reopen', { id: item.id }, ctx.adminToken);
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /reopen — non-admin cannot reopen (403)', async () => {
+    const item = await createTestItem();
+    await post('/claim', { id: item.id }, ctx.agentToken);
+    await post('/resolve', { id: item.id }, ctx.agentToken);
+
+    const res = await post('/reopen', { id: item.id }, ctx.agentToken);
+    expect(res.status).toBe(403);
+  });
+
+  // === UPDATE STATUS (generic) ===
+
+  it('POST /update-status — agent can change in_progress → review', async () => {
+    const item = await createTestItem();
+    await post('/claim', { id: item.id }, ctx.agentToken);
+
+    const res = await post('/update-status', {
+      id: item.id,
+      status: 'review',
+    }, ctx.agentToken);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.data.status).toBe('review');
+  });
+
+  it('POST /update-status — invalid transition returns 400', async () => {
+    const item = await createTestItem();
+
+    // new → review is not a valid transition
+    const res = await post('/update-status', {
+      id: item.id,
+      status: 'review',
+    }, ctx.agentToken);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /update-status — member cannot update status (403)', async () => {
+    const item = await createTestItem();
+
+    const res = await post('/update-status', {
+      id: item.id,
+      status: 'in_progress',
+    }, ctx.memberToken);
+
+    expect(res.status).toBe(403);
+  });
 });

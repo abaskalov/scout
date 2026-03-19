@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Hono } from 'hono';
+import jwt from 'jsonwebtoken';
 import { authRoutes } from '../server/routes/auth.js';
 import { createTestContext, type TestContext } from './helpers.js';
 
@@ -86,5 +87,83 @@ describe('Auth routes', () => {
       headers: { Authorization: 'Bearer invalid-token' },
     });
     expect(res.status).toBe(401);
+  });
+
+  // === VALIDATE ===
+
+  it('POST /api/auth/validate — valid JWT returns { valid: true, user }', async () => {
+    const res = await app.request('/api/auth/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: ctx.adminToken }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.valid).toBe(true);
+    expect(body.user).toBeDefined();
+    expect(body.user.id).toBe(ctx.adminId);
+    expect(body.user.email).toBe('admin@test.local');
+    expect(body.user.passwordHash).toBeUndefined();
+  });
+
+  it('POST /api/auth/validate — invalid JWT returns { valid: false }', async () => {
+    const res = await app.request('/api/auth/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'totally.invalid.jwt' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.valid).toBe(false);
+  });
+
+  it('POST /api/auth/validate — expired JWT returns { valid: false }', async () => {
+    const JWT_SECRET = process.env.SCOUT_JWT_SECRET || 'dev-secret-change-in-production';
+    const expiredToken = jwt.sign(
+      { userId: ctx.adminId, role: 'admin' },
+      JWT_SECRET,
+      { expiresIn: '-1s' },
+    );
+
+    const res = await app.request('/api/auth/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: expiredToken }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.valid).toBe(false);
+  });
+
+  it('POST /api/auth/validate — empty string token returns 400', async () => {
+    const res = await app.request('/api/auth/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: '' }),
+    });
+
+    // Zod validation: token min(1) → 400
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /api/auth/validate — token signed with wrong secret returns { valid: false }', async () => {
+    const wrongToken = jwt.sign(
+      { userId: ctx.adminId, role: 'admin' },
+      'completely-wrong-secret',
+      { expiresIn: '1h' },
+    );
+
+    const res = await app.request('/api/auth/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: wrongToken }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.valid).toBe(false);
   });
 });

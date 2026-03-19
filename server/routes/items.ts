@@ -4,9 +4,9 @@ import { eq, and, desc, count, like } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { scoutItems, scoutItemNotes, projects, users } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { requireRole } from '../middleware/permissions.js';
+import { requireRole, checkProjectAccess } from '../middleware/permissions.js';
 import { randomUUID } from 'node:crypto';
-import { NotFoundError } from '../lib/errors.js';
+import { NotFoundError, ForbiddenError } from '../lib/errors.js';
 import {
   createItemSchema, listItemsSchema, getItemSchema,
   countItemsSchema, claimItemSchema, resolveItemSchema,
@@ -14,6 +14,7 @@ import {
   deleteItemSchema, updateItemSchema, reopenItemSchema,
 } from '../lib/schemas.js';
 import { createItem, claimItem, updateItemStatus, deleteItem, updateItem, reopenItem } from '../services/items.js';
+import { logAudit, getClientIp } from '../services/audit.js';
 
 /** Resolve user name by id, with simple cache */
 const userNameCache = new Map<string, string>();
@@ -49,7 +50,13 @@ export const itemRoutes = new Hono()
       const project = db.select().from(projects).where(eq(projects.id, data.projectId)).get();
       if (!project) throw new NotFoundError('Project');
 
+      // Check project access
+      if (!checkProjectAccess(user.id, user.role, data.projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
+
       const item = createItem({ ...data, reporterId: user.id });
+      logAudit({ userId: user.id, action: 'create_item', entityType: 'item', entityId: item.id, details: { projectId: data.projectId, priority: data.priority }, ipAddress: getClientIp(c) });
       return c.json({ data: item }, 201);
     })
 
@@ -57,10 +64,17 @@ export const itemRoutes = new Hono()
   .post('/list',
     zValidator('json', listItemsSchema),
     async (c) => {
-      const { projectId, status, assigneeId, search, page, perPage } = c.req.valid('json');
+      const { projectId, status, priority, assigneeId, search, page, perPage } = c.req.valid('json');
+      const user = c.get('user');
+
+      // Check project access
+      if (!checkProjectAccess(user.id, user.role, projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
 
       const conditions = [eq(scoutItems.projectId, projectId)];
       if (status) conditions.push(eq(scoutItems.status, status));
+      if (priority) conditions.push(eq(scoutItems.priority, priority));
       if (assigneeId) conditions.push(eq(scoutItems.assigneeId, assigneeId));
       if (search) conditions.push(like(scoutItems.message, `%${search}%`));
 
@@ -96,6 +110,11 @@ export const itemRoutes = new Hono()
       const item = db.select().from(scoutItems).where(eq(scoutItems.id, id)).get();
       if (!item) throw new NotFoundError('Item');
 
+      const user = c.get('user');
+      if (!checkProjectAccess(user.id, user.role, item.projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
+
       const notes = db.select().from(scoutItemNotes)
         .where(eq(scoutItemNotes.itemId, id))
         .orderBy(scoutItemNotes.createdAt)
@@ -114,6 +133,12 @@ export const itemRoutes = new Hono()
     zValidator('json', countItemsSchema),
     async (c) => {
       const { projectId } = c.req.valid('json');
+      const user = c.get('user');
+
+      // Check project access
+      if (!checkProjectAccess(user.id, user.role, projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
       const statuses = ['new', 'in_progress', 'review', 'done', 'cancelled'] as const;
       const counts: Record<string, number> = {};
 
@@ -133,7 +158,17 @@ export const itemRoutes = new Hono()
     zValidator('json', claimItemSchema),
     async (c) => {
       const { id } = c.req.valid('json');
-      const item = claimItem(id, c.get('user'));
+      const user = c.get('user');
+
+      // Check project access via item's projectId
+      const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
+      if (!existing) throw new NotFoundError('Item');
+      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
+
+      const item = claimItem(id, user);
+      logAudit({ userId: user.id, action: 'claim_item', entityType: 'item', entityId: id, ipAddress: getClientIp(c) });
       return c.json({ data: item });
     })
 
@@ -143,11 +178,19 @@ export const itemRoutes = new Hono()
     zValidator('json', resolveItemSchema),
     async (c) => {
       const { id, resolutionNote, branchName, mrUrl } = c.req.valid('json');
-      // resolve transitions to 'done' via in_progress → done
-      // If item is in_progress, this is valid
-      const item = updateItemStatus(id, 'done', c.get('user'), {
+      const user = c.get('user');
+
+      // Check project access via item's projectId
+      const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
+      if (!existing) throw new NotFoundError('Item');
+      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
+
+      const item = updateItemStatus(id, 'done', user, {
         resolutionNote, branchName, mrUrl,
       });
+      logAudit({ userId: user.id, action: 'resolve_item', entityType: 'item', entityId: id, details: { branchName, mrUrl }, ipAddress: getClientIp(c) });
       return c.json({ data: item });
     })
 
@@ -157,7 +200,17 @@ export const itemRoutes = new Hono()
     zValidator('json', cancelItemSchema),
     async (c) => {
       const { id } = c.req.valid('json');
-      const item = updateItemStatus(id, 'cancelled', c.get('user'));
+      const user = c.get('user');
+
+      // Check project access via item's projectId
+      const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
+      if (!existing) throw new NotFoundError('Item');
+      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
+
+      const item = updateItemStatus(id, 'cancelled', user);
+      logAudit({ userId: user.id, action: 'cancel_item', entityType: 'item', entityId: id, ipAddress: getClientIp(c) });
       return c.json({ data: item });
     })
 
@@ -167,9 +220,19 @@ export const itemRoutes = new Hono()
     zValidator('json', updateItemStatusSchema),
     async (c) => {
       const { id, status, branchName, mrUrl, attemptCount } = c.req.valid('json');
-      const item = updateItemStatus(id, status, c.get('user'), {
+      const user = c.get('user');
+
+      // Check project access via item's projectId
+      const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
+      if (!existing) throw new NotFoundError('Item');
+      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
+
+      const item = updateItemStatus(id, status, user, {
         branchName, mrUrl, attemptCount,
       });
+      logAudit({ userId: user.id, action: 'update_status', entityType: 'item', entityId: id, details: { status }, ipAddress: getClientIp(c) });
       return c.json({ data: item });
     })
 
@@ -179,7 +242,17 @@ export const itemRoutes = new Hono()
     zValidator('json', deleteItemSchema),
     async (c) => {
       const { id } = c.req.valid('json');
+      const user = c.get('user');
+
+      // Check project access via item's projectId
+      const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
+      if (!existing) throw new NotFoundError('Item');
+      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
+
       deleteItem(id);
+      logAudit({ userId: user.id, action: 'delete_item', entityType: 'item', entityId: id, ipAddress: getClientIp(c) });
       return c.json({ data: { ok: true } });
     })
 
@@ -189,10 +262,22 @@ export const itemRoutes = new Hono()
     zValidator('json', updateItemSchema),
     async (c) => {
       const data = c.req.valid('json');
+      const user = c.get('user');
+
+      // Check project access via item's projectId
+      const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, data.id)).get();
+      if (!existing) throw new NotFoundError('Item');
+      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
+
       const item = updateItem(data.id, {
         message: data.message,
         assigneeId: data.assigneeId,
+        priority: data.priority,
+        labels: data.labels,
       });
+      logAudit({ userId: user.id, action: 'update_item', entityType: 'item', entityId: data.id, details: { message: data.message, priority: data.priority, labels: data.labels }, ipAddress: getClientIp(c) });
       return c.json({ data: enrichItem(item) });
     })
 
@@ -202,7 +287,17 @@ export const itemRoutes = new Hono()
     zValidator('json', reopenItemSchema),
     async (c) => {
       const { id } = c.req.valid('json');
-      const item = reopenItem(id, c.get('user'));
+      const user = c.get('user');
+
+      // Check project access via item's projectId
+      const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
+      if (!existing) throw new NotFoundError('Item');
+      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
+
+      const item = reopenItem(id, user);
+      logAudit({ userId: user.id, action: 'reopen_item', entityType: 'item', entityId: id, ipAddress: getClientIp(c) });
       return c.json({ data: enrichItem(item) });
     })
 
@@ -216,6 +311,11 @@ export const itemRoutes = new Hono()
       // Verify item exists
       const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
       if (!item) throw new NotFoundError('Item');
+
+      // Check project access via item's projectId
+      if (!checkProjectAccess(user.id, user.role, item.projectId)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
 
       const id = randomUUID();
       db.insert(scoutItemNotes).values({

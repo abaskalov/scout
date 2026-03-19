@@ -1,6 +1,18 @@
 import { sqliteTable, text, integer, index, primaryKey } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
+// === Audit Log ===
+export const auditLog = sqliteTable('audit_log', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+  action: text('action').notNull(), // 'login', 'create_item', 'delete_item', 'update_status', 'create_user', 'delete_user', etc.
+  entityType: text('entity_type'), // 'item', 'user', 'project', 'auth'
+  entityId: text('entity_id'),
+  details: text('details'), // JSON string with action-specific details
+  ipAddress: text('ip_address'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+});
+
 // === Projects ===
 export const projects = sqliteTable('projects', {
   id: text('id').primaryKey(),
@@ -51,6 +63,8 @@ export const scoutItems = sqliteTable('scout_items', {
   viewportHeight: integer('viewport_height'),
   screenshotPath: text('screenshot_path'),
   sessionRecordingPath: text('session_recording_path'),
+  priority: text('priority', { enum: ['critical', 'high', 'medium', 'low'] }).default('medium'),
+  labels: text('labels'), // JSON array of strings
   metadata: text('metadata'),  // JSON string: auto-captured environment data (browser, OS, etc.)
   reporterId: text('reporter_id').references(() => users.id, { onDelete: 'set null' }),
   assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
@@ -90,5 +104,7 @@ export type NewUser = typeof users.$inferInsert;
 export type ScoutItem = typeof scoutItems.$inferSelect;
 export type NewScoutItem = typeof scoutItems.$inferInsert;
 export type ScoutItemNote = typeof scoutItemNotes.$inferSelect;
+export type AuditLogEntry = typeof auditLog.$inferSelect;
 export type ItemStatus = NonNullable<ScoutItem['status']>;
+export type ItemPriority = NonNullable<ScoutItem['priority']>;
 export type UserRole = NonNullable<User['role']>;

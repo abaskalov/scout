@@ -1,9 +1,26 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import type { User } from '../db/schema.js';
+import { logger } from '../lib/logger.js';
 
-const JWT_SECRET = process.env.SCOUT_JWT_SECRET || 'dev-secret-change-in-production';
-const JWT_TTL = '30d';
+// --- JWT secret enforcement ---
+const isProduction = process.env.NODE_ENV === 'production';
+const rawSecret = process.env.SCOUT_JWT_SECRET;
+const DEFAULT_SECRET = 'dev-secret-change-in-production';
+
+if (isProduction && (!rawSecret || rawSecret === DEFAULT_SECRET)) {
+  throw new Error(
+    'FATAL: SCOUT_JWT_SECRET is missing or uses the default value. '
+    + 'Set a strong unique secret in production. Server refused to start.',
+  );
+}
+
+if (!isProduction && (!rawSecret || rawSecret === DEFAULT_SECRET)) {
+  logger.warn('Using default JWT secret. Set SCOUT_JWT_SECRET for production.');
+}
+
+const JWT_SECRET = rawSecret || DEFAULT_SECRET;
+const JWT_TTL = '7d';
 
 export interface JWTPayload {
   userId: string;

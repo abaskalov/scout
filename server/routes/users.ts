@@ -12,6 +12,7 @@ import {
   createUserSchema, updateUserSchema,
   getUserSchema, deleteUserSchema, listUsersSchema,
 } from '../lib/schemas.js';
+import { logAudit, getClientIp } from '../services/audit.js';
 
 function stripPassword(user: typeof users.$inferSelect) {
   const { passwordHash: _, ...rest } = user;
@@ -45,6 +46,9 @@ export const userRoutes = new Hono()
       const user = db.select().from(users).where(eq(users.id, id)).get()!;
       const pivots = db.select().from(pivotUsersProjects)
         .where(eq(pivotUsersProjects.userId, id)).all();
+
+      const currentUser = c.get('user');
+      logAudit({ userId: currentUser.id, action: 'create_user', entityType: 'user', entityId: id, details: { email, role }, ipAddress: getClientIp(c) });
 
       return c.json({
         data: { ...stripPassword(user), projectIds: pivots.map((p) => p.projectId) },
@@ -160,6 +164,9 @@ export const userRoutes = new Hono()
       const pivots = db.select().from(pivotUsersProjects)
         .where(eq(pivotUsersProjects.userId, id)).all();
 
+      const currentUser = c.get('user');
+      logAudit({ userId: currentUser.id, action: 'update_user', entityType: 'user', entityId: id, details: { name, role, isActive }, ipAddress: getClientIp(c) });
+
       return c.json({
         data: { ...stripPassword(user), projectIds: pivots.map((p) => p.projectId) },
       });
@@ -181,5 +188,6 @@ export const userRoutes = new Hono()
       }
 
       db.delete(users).where(eq(users.id, id)).run();
+      logAudit({ userId: currentUser.id, action: 'delete_user', entityType: 'user', entityId: id, details: { email: existing.email }, ipAddress: getClientIp(c) });
       return c.json({ data: { success: true } });
     });

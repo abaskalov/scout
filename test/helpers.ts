@@ -72,6 +72,8 @@ export function createTestContext(): TestContext {
       viewport_height INTEGER,
       screenshot_path TEXT,
       session_recording_path TEXT,
+      priority TEXT DEFAULT 'medium',
+      labels TEXT,
       metadata TEXT,
       reporter_id TEXT REFERENCES users(id) ON DELETE SET NULL,
       assignee_id TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -99,6 +101,20 @@ export function createTestContext(): TestContext {
     );
 
     CREATE INDEX idx_notes_item_created ON scout_item_notes(item_id, created_at);
+
+    CREATE TABLE audit_log (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      action TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id TEXT,
+      details TEXT,
+      ip_address TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX idx_audit_log_created ON audit_log(created_at);
+    CREATE INDEX idx_audit_log_user ON audit_log(user_id);
   `);
 
   const db = drizzle(sqlite, { schema });

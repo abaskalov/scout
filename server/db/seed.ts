@@ -3,9 +3,10 @@ import { projects, users, pivotUsersProjects } from './schema.js';
 import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
+import { logger } from '../lib/logger.js';
 
 function seed() {
-  console.log('Seeding Scout database...');
+  logger.info('Seeding Scout database');
 
   // Demo project
   const existingProject = db.select().from(projects).where(eq(projects.slug, 'my-app')).get();
@@ -17,9 +18,9 @@ function seed() {
       allowedOrigins: JSON.stringify(['http://localhost:3000']),
       autofixEnabled: true,
     }).run();
-    console.log('  Created project: My App');
+    logger.info('Created project: My App');
   } else {
-    console.log('  Project My App already exists, skipping');
+    logger.info('Project My App already exists, skipping');
   }
 
   // Admin
@@ -32,9 +33,9 @@ function seed() {
       name: 'Scout Admin',
       role: 'admin',
     }).run();
-    console.log('  Created user: admin@scout.local / admin');
+    logger.info('Created user: admin@scout.local');
   } else {
-    console.log('  Admin already exists, skipping');
+    logger.info('Admin already exists, skipping');
   }
 
   // Agent
@@ -47,9 +48,9 @@ function seed() {
       name: 'AI Agent',
       role: 'agent',
     }).run();
-    console.log('  Created user: agent@scout.local / agent');
+    logger.info('Created user: agent@scout.local');
   } else {
-    console.log('  Agent already exists, skipping');
+    logger.info('Agent already exists, skipping');
   }
 
   // Pivot: agent → project
@@ -64,11 +65,11 @@ function seed() {
         userId: agent.id,
         projectId: project.id,
       }).run();
-      console.log('  Linked AI Agent → My App');
+      logger.info('Linked AI Agent to My App');
     }
   }
 
-  console.log('Seed complete!');
+  logger.info('Seed complete');
 }
 
 seed();

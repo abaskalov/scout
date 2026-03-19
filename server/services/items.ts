@@ -1,5 +1,5 @@
 import { db } from '../db/client.js';
-import { scoutItems, scoutItemNotes, type User, type ItemStatus } from '../db/schema.js';
+import { scoutItems, scoutItemNotes, type User, type ItemStatus, type ItemPriority } from '../db/schema.js';
 import { eq, and, isNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
@@ -97,6 +97,8 @@ export function createItem(data: {
   projectId: string;
   message: string;
   reporterId: string;
+  priority?: ItemPriority;
+  labels?: string[];
   pageUrl?: string | null;
   pageRoute?: string | null;
   componentFile?: string | null;
@@ -124,6 +126,8 @@ export function createItem(data: {
     id,
     projectId: data.projectId,
     message: data.message,
+    priority: data.priority ?? 'medium',
+    labels: data.labels ? JSON.stringify(data.labels) : null,
     pageUrl: data.pageUrl ?? null,
     pageRoute: data.pageRoute ?? null,
     componentFile: data.componentFile ?? null,
@@ -207,13 +211,20 @@ export function updateItemStatus(
   return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
 }
 
-export function updateItem(itemId: string, data: { message?: string; assigneeId?: string | null }) {
+export function updateItem(itemId: string, data: {
+  message?: string;
+  assigneeId?: string | null;
+  priority?: ItemPriority;
+  labels?: string[];
+}) {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
   if (!item) throw new NotFoundError('Item');
 
   const updates: Record<string, unknown> = { updatedAt: now() };
   if (data.message !== undefined) updates.message = data.message;
   if (data.assigneeId !== undefined) updates.assigneeId = data.assigneeId;
+  if (data.priority !== undefined) updates.priority = data.priority;
+  if (data.labels !== undefined) updates.labels = JSON.stringify(data.labels);
 
   db.update(scoutItems).set(updates).where(eq(scoutItems.id, itemId)).run();
   return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;

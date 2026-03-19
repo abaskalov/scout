@@ -10,6 +10,7 @@ interface PanelElements {
   textDisplay: HTMLDivElement;
   textarea: HTMLTextAreaElement;
   charCount: HTMLSpanElement;
+  prioritySelect: HTMLSelectElement;
   screenshotCheckbox: HTMLInputElement;
   recordingCheckbox: HTMLInputElement;
   submitBtn: HTMLButtonElement;
@@ -198,6 +199,34 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   field.appendChild(textarea);
   field.appendChild(charCount);
 
+  // Priority selector
+  const priorityField = document.createElement('div');
+  priorityField.className = 'scout-field';
+
+  const priorityLabel = document.createElement('label');
+  priorityLabel.textContent = 'Приоритет';
+
+  const prioritySelect = document.createElement('select');
+  prioritySelect.className = 'scout-input';
+  prioritySelect.style.padding = '8px 12px';
+
+  const priorityOptions: [string, string][] = [
+    ['critical', 'Критический'],
+    ['high', 'Высокий'],
+    ['medium', 'Средний'],
+    ['low', 'Низкий'],
+  ];
+  for (const [value, text] of priorityOptions) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = text;
+    if (value === 'medium') opt.selected = true;
+    prioritySelect.appendChild(opt);
+  }
+
+  priorityField.appendChild(priorityLabel);
+  priorityField.appendChild(prioritySelect);
+
   // Checkboxes
   const screenshotLabel = document.createElement('label');
   screenshotLabel.className = 'scout-checkbox';
@@ -225,6 +254,7 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
 
   body.appendChild(elementInfo);
   body.appendChild(field);
+  body.appendChild(priorityField);
   body.appendChild(screenshotLabel);
   body.appendChild(recordingLabel);
   body.appendChild(screenshotPreview);
@@ -267,6 +297,7 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
     textDisplay,
     textarea,
     charCount,
+    prioritySelect,
     screenshotCheckbox,
     recordingCheckbox,
     submitBtn,
@@ -298,6 +329,7 @@ export function showPanel(
   elements.textarea.value = '';
   elements.textarea.classList.remove('error');
   elements.charCount.textContent = '0 / 5000';
+  elements.prioritySelect.value = 'medium';
   elements.screenshotCheckbox.checked = true;
   elements.submitBtn.disabled = false;
   elements.submitBtn.textContent = 'Отправить';
@@ -464,6 +496,7 @@ export function attachPanelEvents(
       const body = {
         projectId,
         message,
+        priority: elements.prioritySelect.value,
         pageUrl: p.pageUrl,
         cssSelector: p.cssSelector,
         elementText: p.elementText,

@@ -37,9 +37,14 @@ export const deleteProjectSchema = z.object({ id: uuidSchema });
 export const listProjectsSchema = paginationSchema;
 
 // === Users ===
+const passwordSchema = z.string().min(8).max(128).regex(
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/,
+  'Пароль должен содержать строчную, заглавную букву и цифру',
+);
+
 export const createUserSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6).max(100),
+  password: passwordSchema,
   name: z.string().min(1).max(100),
   role: z.enum(['admin', 'member', 'agent']),
   projectIds: z.array(uuidSchema).default([]),
@@ -51,7 +56,7 @@ export const updateUserSchema = z.object({
   role: z.enum(['admin', 'member', 'agent']).optional(),
   isActive: z.boolean().optional(),
   projectIds: z.array(uuidSchema).optional(),
-  password: z.string().min(6).max(100).optional(),
+  password: passwordSchema.optional(),
 });
 
 export const getUserSchema = z.object({ id: uuidSchema });
@@ -64,6 +69,8 @@ export const listUsersSchema = paginationSchema.extend({
 export const createItemSchema = z.object({
   projectId: uuidSchema,
   message: z.string().min(3).max(5000),
+  priority: z.enum(['critical', 'high', 'medium', 'low']).default('medium'),
+  labels: z.array(z.string().max(50)).max(10).optional(),
   pageUrl: z.string().max(500).nullish(),
   pageRoute: z.string().max(255).nullish(),
   componentFile: z.string().max(255).nullish(),
@@ -80,6 +87,7 @@ export const createItemSchema = z.object({
 export const listItemsSchema = paginationSchema.extend({
   projectId: uuidSchema,
   status: z.enum(['new', 'in_progress', 'review', 'done', 'cancelled']).optional(),
+  priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
   assigneeId: uuidSchema.optional(),
   search: z.string().max(200).optional(),
 });
@@ -116,6 +124,8 @@ export const updateItemSchema = z.object({
   id: uuidSchema,
   message: z.string().min(3).max(5000).optional(),
   assigneeId: uuidSchema.nullish(),
+  priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
+  labels: z.array(z.string().max(50)).max(10).optional(),
 });
 
 export const reopenItemSchema = z.object({ id: uuidSchema });

@@ -6,6 +6,8 @@ import { api } from '../lib/api';
 import { formatDate } from '../lib/date';
 import { isAdmin } from '../lib/auth';
 import StatusBadge from '../components/StatusBadge';
+import PriorityBadge from '../components/PriorityBadge';
+import Labels, { parseLabels } from '../components/Labels';
 import SessionPlayer from '../components/SessionPlayer';
 
 interface Note {
@@ -28,6 +30,8 @@ interface ItemData {
   projectId: string;
   message: string;
   status: string;
+  priority: string | null;
+  labels: string | null;
   pageUrl: string | null;
   cssSelector: string | null;
   elementText: string | null;
@@ -97,6 +101,8 @@ export default function ItemDetail() {
   // Edit mode state
   const [editing, setEditing] = useState(false);
   const [editMessage, setEditMessage] = useState('');
+  const [editPriority, setEditPriority] = useState('medium');
+  const [editLabels, setEditLabels] = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
   // Assignee state
@@ -208,6 +214,8 @@ export default function ItemDetail() {
   function startEditing() {
     if (!item) return;
     setEditMessage(item.message);
+    setEditPriority(item.priority ?? 'medium');
+    setEditLabels(parseLabels(item.labels).join(', '));
     setEditing(true);
   }
 
@@ -215,7 +223,16 @@ export default function ItemDetail() {
     if (!item || !editMessage.trim()) return;
     setEditSaving(true);
     try {
-      await api('/api/items/update', { id: item.id, message: editMessage.trim() });
+      const labelsArr = editLabels
+        .split(',')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+      await api('/api/items/update', {
+        id: item.id,
+        message: editMessage.trim(),
+        priority: editPriority,
+        labels: labelsArr,
+      });
       setEditing(false);
       await loadItem();
     } catch (err) {
@@ -313,18 +330,49 @@ export default function ItemDetail() {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 md:gap-3 text-sm text-gray-500">
               <StatusBadge status={item.status} />
+              <PriorityBadge priority={item.priority} />
               <span className="font-mono text-xs">#{item.id.slice(0, 8)}</span>
               <span>{formatDate(item.createdAt)}</span>
             </div>
+            {parseLabels(item.labels).length > 0 && (
+              <div className="mt-1.5">
+                <Labels labels={parseLabels(item.labels)} />
+              </div>
+            )}
             {editing ? (
-              <div className="mt-2">
+              <div className="mt-2 space-y-3">
                 <textarea
                   value={editMessage}
                   onChange={(e) => setEditMessage(e.target.value)}
                   rows={4}
                   className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
                 />
-                <div className="mt-2 flex gap-2">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <span className="text-xs font-medium text-gray-500">Приоритет</span>
+                    <select
+                      value={editPriority}
+                      onChange={(e) => setEditPriority(e.target.value)}
+                      className="rounded-md border border-gray-300 px-2 py-1 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                    >
+                      <option value="critical">Критический</option>
+                      <option value="high">Высокий</option>
+                      <option value="medium">Средний</option>
+                      <option value="low">Низкий</option>
+                    </select>
+                  </label>
+                  <label className="flex flex-1 items-center gap-2 text-sm text-gray-700">
+                    <span className="text-xs font-medium text-gray-500 shrink-0">Метки</span>
+                    <input
+                      type="text"
+                      value={editLabels}
+                      onChange={(e) => setEditLabels(e.target.value)}
+                      placeholder="баг, UI, срочно"
+                      className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                    />
+                  </label>
+                </div>
+                <div className="flex gap-2">
                   <button
                     onClick={handleEditSave}
                     disabled={editSaving || !editMessage.trim()}

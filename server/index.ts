@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { HTTPException } from 'hono/http-exception';
@@ -10,26 +9,82 @@ import { projectRoutes } from './routes/projects.js';
 import { userRoutes } from './routes/users.js';
 import { itemRoutes } from './routes/items.js';
 import { sqlite } from './db/client.js';
+import { securityHeaders } from './middleware/security-headers.js';
+import { rateLimit } from './middleware/rate-limit.js';
+import { authMiddleware } from './middleware/auth.js';
+import { logger } from './lib/logger.js';
 
 const app = new Hono();
 
-// Request logging
-app.use('*', logger());
+// Security headers on ALL responses
+app.use('*', securityHeaders);
 
-// Health check (for Docker, monitoring)
-app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+// Structured request logging via pino
+app.use('*', async (c, next) => {
+  const start = Date.now();
+  await next();
+  const duration = Date.now() - start;
+  logger.info({
+    method: c.req.method,
+    path: c.req.path,
+    status: c.res.status,
+    duration,
+  }, 'request');
+});
 
-// CORS — allow widget origins (permissive in dev, validate in production)
+// Deep health check (for Docker, monitoring)
+app.get('/health', (c) => {
+  try {
+    // Check DB connectivity
+    const dbCheck = sqlite.prepare('SELECT 1 as ok').get() as { ok: number } | undefined;
+
+    const mem = process.memoryUsage();
+
+    return c.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: Math.round(process.uptime()),
+      db: dbCheck?.ok === 1 ? 'ok' : 'error',
+      memory: {
+        rss: Math.round(mem.rss / 1024 / 1024),
+        heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, 'Health check failed');
+    return c.json({ status: 'error', error: String(err) }, 503);
+  }
+});
+
+// --- CORS ---
+const isProduction = process.env.NODE_ENV === 'production';
+const corsOrigins = (process.env.SCOUT_CORS_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use('/api/*', cors({
   origin: (origin) => {
+    // Same-origin requests (no Origin header) — always allowed
+    if (!origin) return origin;
     // In dev allow all origins
-    if (process.env.NODE_ENV !== 'production') return origin;
-    // In production: dynamic check against project allowed_origins would go here
-    return origin;
+    if (!isProduction) return origin;
+    // In production: check whitelist
+    if (corsOrigins.includes(origin)) return origin;
+    // Reject — return empty string to deny
+    return '';
   },
   allowMethods: ['POST', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// --- Rate limiting ---
+// Auth routes: 5 req/min per IP (brute-force protection)
+app.use('/api/auth/*', rateLimit(60_000, 5));
+// Item creation: 20 req/min per IP
+app.use('/api/items/create', rateLimit(60_000, 20));
+// All API routes: 100 req/min per IP
+app.use('/api/*', rateLimit(60_000, 100));
 
 // API routes
 app.route('/api/auth', authRoutes);
@@ -37,8 +92,8 @@ app.route('/api/projects', projectRoutes);
 app.route('/api/users', userRoutes);
 app.route('/api/items', itemRoutes);
 
-// Static files: screenshots, recordings
-app.use('/storage/*', serveStatic({ root: './' }));
+// Static files: screenshots, recordings — require authentication
+app.use('/storage/*', authMiddleware, serveStatic({ root: './' }));
 
 // Widget JS (built by Vite)
 app.use('/widget/*', serveStatic({
@@ -65,7 +120,7 @@ app.onError((err, c) => {
   if (err instanceof HTTPException) {
     return c.json({ error: err.message }, err.status);
   }
-  console.error('Unhandled error:', err);
+  logger.error({ err, method: c.req.method, path: c.req.path }, 'Unhandled request error');
   return c.json({ error: 'Internal server error' }, 500);
 });
 
@@ -73,12 +128,12 @@ app.onError((err, c) => {
 const port = Number(process.env.SCOUT_PORT) || 10009;
 
 serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`Scout running on http://localhost:${info.port}`);
+  logger.info({ port: info.port }, 'Scout started');
 });
 
 // Graceful shutdown
 function shutdown() {
-  console.log('Shutting down...');
+  logger.info('Shutting down');
   sqlite.close();
   process.exit(0);
 }

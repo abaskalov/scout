@@ -4,6 +4,8 @@ import { api } from '../lib/api';
 import { formatDate, formatDateShort } from '../lib/date';
 import { isAdmin } from '../lib/auth';
 import StatusBadge from '../components/StatusBadge';
+import PriorityBadge from '../components/PriorityBadge';
+import Labels, { parseLabels } from '../components/Labels';
 import Pagination from '../components/Pagination';
 
 interface Project {
@@ -16,6 +18,8 @@ interface Item {
   id: number;
   message: string;
   status: string;
+  priority: string | null;
+  labels: string | null;
   reporterName: string | null;
   assigneeName: string | null;
   createdAt: string;
@@ -79,6 +83,9 @@ export default function Items() {
   const [searchInput, setSearchInput] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
+  // Priority filter state
+  const [priorityFilter, setPriorityFilter] = useState<string>('');
+
   // Assignee filter state
   const [teamUsers, setTeamUsers] = useState<UserListItem[]>([]);
   const [assigneeFilter, setAssigneeFilter] = useState<string>('');
@@ -122,6 +129,9 @@ export default function Items() {
     if (assigneeFilter) {
       body.assigneeId = assigneeFilter;
     }
+    if (priorityFilter) {
+      body.priority = priorityFilter;
+    }
 
     Promise.all([
       api<{ items: Item[]; pagination: PaginationData }>('/api/items/list', body),
@@ -136,7 +146,7 @@ export default function Items() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [selectedProject, statusFilter, pagination.page, search, assigneeFilter]);
+  }, [selectedProject, statusFilter, pagination.page, search, assigneeFilter, priorityFilter]);
 
   function handleProjectChange(e: React.ChangeEvent<HTMLSelectElement>) {
     setSelectedProject(Number(e.target.value));
@@ -145,6 +155,7 @@ export default function Items() {
     setSearch('');
     setSearchInput('');
     setAssigneeFilter('');
+    setPriorityFilter('');
   }
 
   function handleStatusChange(status: string) {
@@ -166,6 +177,11 @@ export default function Items() {
     setSearch('');
     setPagination((p) => ({ ...p, page: 1 }));
     if (debounceRef.current) clearTimeout(debounceRef.current);
+  }
+
+  function handlePriorityFilter(e: React.ChangeEvent<HTMLSelectElement>) {
+    setPriorityFilter(e.target.value);
+    setPagination((p) => ({ ...p, page: 1 }));
   }
 
   function handleAssigneeFilter(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -221,6 +237,17 @@ export default function Items() {
             </button>
           )}
         </div>
+        <select
+          value={priorityFilter}
+          onChange={handlePriorityFilter}
+          className="w-full md:w-44 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+        >
+          <option value="">Все приоритеты</option>
+          <option value="critical">Критический</option>
+          <option value="high">Высокий</option>
+          <option value="medium">Средний</option>
+          <option value="low">Низкий</option>
+        </select>
         {admin && teamUsers.length > 0 && (
           <select
             value={assigneeFilter}
@@ -267,6 +294,8 @@ export default function Items() {
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
               <th className="px-4 py-3">Сообщение</th>
               <th className="px-4 py-3 w-28">Статус</th>
+              <th className="px-4 py-3 w-28">Приоритет</th>
+              <th className="px-4 py-3 w-36">Метки</th>
               <th className="px-4 py-3 w-36">Автор</th>
               <th className="px-4 py-3 w-36">Исполнитель</th>
               <th className="px-4 py-3 w-40">Создано</th>
@@ -275,13 +304,13 @@ export default function Items() {
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
                   Загрузка...
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
                   {search ? 'Ничего не найдено' : 'Нет данных'}
                 </td>
               </tr>
@@ -297,6 +326,12 @@ export default function Items() {
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={item.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <PriorityBadge priority={item.priority} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <Labels labels={parseLabels(item.labels)} size="xs" />
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {item.reporterName ?? '—'}
@@ -333,8 +368,16 @@ export default function Items() {
                 <p className="text-sm font-medium text-gray-800 line-clamp-2">
                   {item.message}
                 </p>
-                <StatusBadge status={item.status} />
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <PriorityBadge priority={item.priority} />
+                  <StatusBadge status={item.status} />
+                </div>
               </div>
+              {parseLabels(item.labels).length > 0 && (
+                <div className="mt-1.5">
+                  <Labels labels={parseLabels(item.labels)} size="xs" />
+                </div>
+              )}
               <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
                 <span>{item.reporterName ?? '—'}</span>
                 <span>{formatDateShort(item.createdAt)}</span>

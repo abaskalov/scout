@@ -1,16 +1,17 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { eq, count, desc } from 'drizzle-orm';
+import { eq, count, desc, inArray } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { projects, scoutItems } from '../db/schema.js';
+import { projects, scoutItems, pivotUsersProjects } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { requireRole } from '../middleware/permissions.js';
+import { requireRole, checkProjectAccess } from '../middleware/permissions.js';
 import { randomUUID } from 'node:crypto';
-import { NotFoundError, ConflictError, ValidationError } from '../lib/errors.js';
+import { NotFoundError, ConflictError, ValidationError, ForbiddenError } from '../lib/errors.js';
 import {
   createProjectSchema, updateProjectSchema,
   getProjectSchema, deleteProjectSchema, listProjectsSchema,
 } from '../lib/schemas.js';
+import { logAudit, getClientIp } from '../services/audit.js';
 
 export const projectRoutes = new Hono()
   .use('/*', authMiddleware)
@@ -33,6 +34,8 @@ export const projectRoutes = new Hono()
       }).run();
 
       const project = db.select().from(projects).where(eq(projects.id, id)).get()!;
+      const user = c.get('user');
+      logAudit({ userId: user.id, action: 'create_project', entityType: 'project', entityId: id, details: { name, slug }, ipAddress: getClientIp(c) });
       return c.json({ data: project }, 201);
     })
 
@@ -41,6 +44,43 @@ export const projectRoutes = new Hono()
     zValidator('json', listProjectsSchema),
     async (c) => {
       const { page, perPage } = c.req.valid('json');
+      const user = c.get('user');
+
+      // Non-admin users only see projects they're assigned to
+      if (user.role !== 'admin') {
+        const accessibleProjectIds = db.select({ projectId: pivotUsersProjects.projectId })
+          .from(pivotUsersProjects)
+          .where(eq(pivotUsersProjects.userId, user.id))
+          .all()
+          .map((r) => r.projectId);
+
+        if (accessibleProjectIds.length === 0) {
+          return c.json({
+            data: {
+              items: [],
+              pagination: { page, perPage, total: 0, totalPages: 0 },
+            },
+          });
+        }
+
+        const items = db.select().from(projects)
+          .where(inArray(projects.id, accessibleProjectIds))
+          .orderBy(desc(projects.createdAt))
+          .limit(perPage)
+          .offset((page - 1) * perPage)
+          .all();
+
+        const [{ total }] = db.select({ total: count() }).from(projects)
+          .where(inArray(projects.id, accessibleProjectIds))
+          .all();
+
+        return c.json({
+          data: {
+            items,
+            pagination: { page, perPage, total, totalPages: Math.ceil(total / perPage) },
+          },
+        });
+      }
 
       const items = db.select().from(projects)
         .orderBy(desc(projects.createdAt))
@@ -58,14 +98,21 @@ export const projectRoutes = new Hono()
       });
     })
 
-  // GET — admin only
+  // GET — all roles (with project access check)
   .post('/get',
-    requireRole('admin'),
     zValidator('json', getProjectSchema),
     async (c) => {
       const { id } = c.req.valid('json');
+      const user = c.get('user');
+
       const project = db.select().from(projects).where(eq(projects.id, id)).get();
       if (!project) throw new NotFoundError('Project');
+
+      // Check project access
+      if (!checkProjectAccess(user.id, user.role, id)) {
+        throw new ForbiddenError('Нет доступа к этому проекту');
+      }
+
       return c.json({ data: project });
     })
 
@@ -89,6 +136,8 @@ export const projectRoutes = new Hono()
 
       db.update(projects).set(updateData).where(eq(projects.id, id)).run();
       const project = db.select().from(projects).where(eq(projects.id, id)).get()!;
+      const user = c.get('user');
+      logAudit({ userId: user.id, action: 'update_project', entityType: 'project', entityId: id, details: { name, autofixEnabled, isActive }, ipAddress: getClientIp(c) });
       return c.json({ data: project });
     })
 
@@ -110,5 +159,7 @@ export const projectRoutes = new Hono()
       }
 
       db.delete(projects).where(eq(projects.id, id)).run();
+      const user = c.get('user');
+      logAudit({ userId: user.id, action: 'delete_project', entityType: 'project', entityId: id, details: { name: existing.name, slug: existing.slug }, ipAddress: getClientIp(c) });
       return c.json({ data: { success: true } });
     });

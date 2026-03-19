@@ -3,6 +3,8 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema.js';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { randomUUID, randomBytes } from 'node:crypto';
+import { logger } from '../lib/logger.js';
 
 const dbPath = process.env.SCOUT_DB_PATH || 'data/scout.db';
 
@@ -61,6 +63,8 @@ sqlite.exec(`
     viewport_height INTEGER,
     screenshot_path TEXT,
     session_recording_path TEXT,
+    priority TEXT DEFAULT 'medium',
+    labels TEXT,
     metadata TEXT,
     reporter_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     assignee_id TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -88,6 +92,20 @@ sqlite.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_notes_item_created ON scout_item_notes(item_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    action TEXT NOT NULL,
+    entity_type TEXT,
+    entity_id TEXT,
+    details TEXT,
+    ip_address TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+  CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
 `);
 
 // --- Migrations (safe to re-run, uses IF NOT EXISTS / try-catch) ---
@@ -96,31 +114,75 @@ try {
 } catch {
   // Column already exists — OK
 }
+try {
+  sqlite.exec(`ALTER TABLE scout_items ADD COLUMN priority TEXT DEFAULT 'medium'`);
+} catch {
+  // Column already exists — OK
+}
+try {
+  sqlite.exec(`ALTER TABLE scout_items ADD COLUMN labels TEXT`);
+} catch {
+  // Column already exists — OK
+}
 
-// Auto-seed admin if users table is empty
+// --- Auto-seed logic ---
+const isProduction = process.env.NODE_ENV === 'production';
 const userCount = sqlite.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number };
+
 if (userCount.cnt === 0) {
-  const { randomUUID } = await import('node:crypto');
-  const bcryptModule = await import('bcryptjs');
-  const bcrypt = bcryptModule.default || bcryptModule;
+  if (isProduction) {
+    // In production: use env vars or log instructions
+    const adminEmail = process.env.SCOUT_ADMIN_EMAIL;
+    const adminPassword = process.env.SCOUT_ADMIN_PASSWORD;
 
-  const adminId = randomUUID();
-  const agentId = randomUUID();
-  const projectId = randomUUID();
+    if (adminEmail) {
+      const bcryptModule = await import('bcryptjs');
+      const bcrypt = bcryptModule.default || bcryptModule;
 
-  const adminHash = bcrypt.hashSync('admin', 10);
-  const agentHash = bcrypt.hashSync('agent', 10);
+      // If no password provided, generate a secure random one
+      const password = adminPassword || randomBytes(24).toString('base64url');
+      const adminHash = bcrypt.hashSync(password, 10);
+      const adminId = randomUUID();
 
-  sqlite.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)`)
-    .run(adminId, 'admin@scout.local', adminHash, 'Scout Admin', 'admin');
-  sqlite.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)`)
-    .run(agentId, 'agent@scout.local', agentHash, 'AI Agent', 'agent');
-  sqlite.prepare(`INSERT INTO projects (id, name, slug, allowed_origins) VALUES (?, ?, ?, ?)`)
-    .run(projectId, 'My App', 'my-app', '["http://localhost:3000"]');
-  sqlite.prepare(`INSERT INTO pivot_users_projects (user_id, project_id) VALUES (?, ?)`)
-    .run(agentId, projectId);
+      sqlite.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)`)
+        .run(adminId, adminEmail, adminHash, 'Scout Admin', 'admin');
 
-  console.log('Auto-seeded: admin@scout.local/admin, agent@scout.local/agent, project My App');
+      if (!adminPassword) {
+        logger.info({ email: adminEmail }, 'Admin user created');
+        logger.info({ password }, 'Generated password — change immediately after first login');
+      } else {
+        logger.info({ email: adminEmail }, 'Admin user created');
+      }
+    } else {
+      logger.info('No users found. Create an admin user via SCOUT_ADMIN_EMAIL and SCOUT_ADMIN_PASSWORD env vars');
+    }
+  } else {
+    // Development: seed with default credentials
+    const bcryptModule = await import('bcryptjs');
+    const bcrypt = bcryptModule.default || bcryptModule;
+
+    const adminEmail = process.env.SCOUT_ADMIN_EMAIL || 'admin@scout.local';
+    const adminPassword = process.env.SCOUT_ADMIN_PASSWORD || 'admin';
+    const agentPassword = 'agent';
+
+    const adminId = randomUUID();
+    const agentId = randomUUID();
+    const projectId = randomUUID();
+
+    const adminHash = bcrypt.hashSync(adminPassword, 10);
+    const agentHash = bcrypt.hashSync(agentPassword, 10);
+
+    sqlite.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)`)
+      .run(adminId, adminEmail, adminHash, 'Scout Admin', 'admin');
+    sqlite.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)`)
+      .run(agentId, 'agent@scout.local', agentHash, 'AI Agent', 'agent');
+    sqlite.prepare(`INSERT INTO projects (id, name, slug, allowed_origins) VALUES (?, ?, ?, ?)`)
+      .run(projectId, 'My App', 'my-app', '["http://localhost:3000"]');
+    sqlite.prepare(`INSERT INTO pivot_users_projects (user_id, project_id) VALUES (?, ?)`)
+      .run(agentId, projectId);
+
+    logger.info({ adminEmail }, 'Auto-seeded dev users and project');
+  }
 }
 
 export const db = drizzle(sqlite, { schema });

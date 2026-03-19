@@ -27,7 +27,7 @@ COPY drizzle/ drizzle/
 RUN pnpm build
 
 # 5. Prune dev dependencies — keep only production deps
-RUN pnpm prune --prod
+RUN CI=true pnpm prune --prod
 
 # --- Production stage (minimal) ---
 FROM node:20-alpine

@@ -12,8 +12,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY dashboard/package.json dashboard/package.json
 COPY widget/package.json widget/package.json
 
-# 2. Install ALL dependencies (dev + prod — needed for build)
+# 2. Install dependencies + build native addon for better-sqlite3
 RUN pnpm install --frozen-lockfile
+RUN npx --yes node-gyp rebuild --directory node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
 
 # 3. Copy source
 COPY tsconfig.json tsconfig.server.json drizzle.config.ts ./
@@ -26,15 +27,12 @@ COPY drizzle/ drizzle/
 # 4. Build all (server TS → JS, dashboard Vite, widget Vite)
 RUN pnpm build
 
-# 5. Prune dev dependencies — keep only production deps
-RUN CI=true pnpm prune --prod
-
 # --- Production stage (minimal) ---
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Only production node_modules (no devDependencies, no build tools)
+# Copy node_modules with compiled native addon intact
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 
@@ -45,10 +43,8 @@ COPY --from=builder /app/dist/server ./dist/server
 COPY --from=builder /app/dashboard/dist ./dashboard/dist
 COPY --from=builder /app/widget/dist ./widget/dist
 
-# Demo stand
+# Demo stand + DB migrations
 COPY --from=builder /app/demo ./demo
-
-# DB migrations
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/drizzle.config.ts ./
 

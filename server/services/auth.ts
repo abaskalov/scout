@@ -9,9 +9,9 @@ const rawSecret = process.env.SCOUT_JWT_SECRET;
 const DEFAULT_SECRET = 'dev-secret-change-in-production';
 
 if (isProduction && (!rawSecret || rawSecret === DEFAULT_SECRET)) {
-  throw new Error(
-    'FATAL: SCOUT_JWT_SECRET is missing or uses the default value. '
-    + 'Set a strong unique secret in production. Server refused to start.',
+  logger.fatal(
+    'SCOUT_JWT_SECRET is missing or uses the default value. '
+    + 'Set a strong unique secret via environment variable. THIS IS A SECURITY RISK.',
   );
 }
 

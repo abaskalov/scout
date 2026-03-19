@@ -12,6 +12,7 @@ import { itemRoutes } from './routes/items.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { eventRoutes } from './routes/events.js';
+import { docsRoutes } from './routes/docs.js';
 import { sqlite } from './db/client.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { rateLimit } from './middleware/rate-limit.js';
@@ -92,6 +93,9 @@ app.use('/api/*', apiVersionHeader);
 // --- SSE (registered before rate limiter — long-lived connections) ---
 app.route('/api/events', eventRoutes);
 app.route('/api/v1/events', eventRoutes);
+
+// --- API Docs (public, no auth/rate-limit) ---
+app.route('/api/docs', docsRoutes);
 
 // --- Rate limiting ---
 // Auth routes: 5 req/min per IP (brute-force protection)

@@ -1,8 +1,9 @@
 import Database, { type Database as DatabaseType } from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { type BetterSQLite3Database, drizzle } from 'drizzle-orm/better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import * as schema from './schema.js';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { logger } from '../lib/logger.js';
 
@@ -155,6 +156,19 @@ try {
   // Column already exists — OK
 }
 
+// --- Apply pending drizzle-kit migrations (for future schema changes) ---
+export const db: BetterSQLite3Database<typeof schema> = drizzle(sqlite, { schema });
+
+const migrationsFolder = join(process.cwd(), 'drizzle');
+if (existsSync(migrationsFolder)) {
+  try {
+    migrate(db, { migrationsFolder });
+    logger.debug('Drizzle migrations applied');
+  } catch (err) {
+    logger.warn({ err }, 'Drizzle migration failed');
+  }
+}
+
 // --- Auto-seed logic ---
 const isProduction = process.env.NODE_ENV === 'production';
 const userCount = sqlite.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number };
@@ -214,5 +228,3 @@ if (userCount.cnt === 0) {
     logger.info({ adminEmail }, 'Auto-seeded dev users and project');
   }
 }
-
-export const db = drizzle(sqlite, { schema });

@@ -1,0 +1,1599 @@
+import { Hono } from 'hono';
+
+// ─── OpenAPI 3.0.3 Spec ──────────────────────────────────────────────────────
+
+const spec = {
+  openapi: '3.0.3',
+  info: {
+    title: 'Scout Bug Tracking API',
+    version: '1.0.0',
+    description:
+      'Scout — автономная система баг-трекинга с AI-агентом. Все API-эндпоинты используют метод POST с JSON-телом (кроме health, events, docs). Авторизация через Bearer JWT или API Key (`sk_live_...`).',
+    contact: { url: 'https://scout.kafu.kz' },
+  },
+  servers: [
+    { url: '/api/v1', description: 'API v1 (current)' },
+    { url: '/api', description: 'API (backward-compatible alias)' },
+  ],
+  tags: [
+    { name: 'Auth', description: 'Аутентификация и валидация токенов' },
+    { name: 'Items', description: 'Баг-репорты (создание, управление статусами, заметки)' },
+    { name: 'Projects', description: 'Управление проектами' },
+    { name: 'Users', description: 'Управление пользователями (только admin)' },
+    { name: 'Webhooks', description: 'Вебхуки для интеграций (только admin)' },
+    { name: 'API Keys', description: 'API-ключи для программного доступа (только admin)' },
+    { name: 'Events', description: 'Server-Sent Events (SSE) для real-time обновлений' },
+    { name: 'Health', description: 'Проверка состояния сервера' },
+    { name: 'Docs', description: 'Документация API' },
+  ],
+
+  // ─── Components ──────────────────────────────────────────────────────────
+  components: {
+    securitySchemes: {
+      BearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'JWT-токен, полученный через POST /auth/login',
+      },
+      ApiKeyAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'API Key',
+        description: 'API-ключ формата `sk_live_...`, передаётся как Bearer token',
+      },
+    },
+    schemas: {
+      // ── Enums ──
+      ItemStatus: {
+        type: 'string',
+        enum: ['new', 'in_progress', 'review', 'done', 'cancelled'],
+      },
+      ItemPriority: {
+        type: 'string',
+        enum: ['critical', 'high', 'medium', 'low'],
+      },
+      UserRole: {
+        type: 'string',
+        enum: ['admin', 'member', 'agent'],
+      },
+      WebhookEvent: {
+        type: 'string',
+        enum: ['item.created', 'item.status_changed', 'item.assigned', 'item.commented', 'item.deleted'],
+      },
+      NoteType: {
+        type: 'string',
+        enum: ['comment', 'status_change', 'assignment'],
+      },
+
+      // ── Pagination ──
+      Pagination: {
+        type: 'object',
+        properties: {
+          page: { type: 'integer', example: 1 },
+          perPage: { type: 'integer', example: 20 },
+          total: { type: 'integer', example: 42 },
+          totalPages: { type: 'integer', example: 3 },
+        },
+      },
+      PaginationInput: {
+        type: 'object',
+        properties: {
+          page: { type: 'integer', minimum: 1, default: 1 },
+          perPage: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        },
+      },
+
+      // ── Entities ──
+      User: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          email: { type: 'string', format: 'email' },
+          name: { type: 'string' },
+          role: { $ref: '#/components/schemas/UserRole' },
+          isActive: { type: 'boolean' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      UserWithProjects: {
+        allOf: [
+          { $ref: '#/components/schemas/User' },
+          {
+            type: 'object',
+            properties: {
+              projectIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+            },
+          },
+        ],
+      },
+      Project: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          name: { type: 'string' },
+          slug: { type: 'string' },
+          allowedOrigins: { type: 'string', description: 'JSON array of allowed origins' },
+          autofixEnabled: { type: 'boolean' },
+          isActive: { type: 'boolean' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      Item: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          projectId: { type: 'string', format: 'uuid' },
+          message: { type: 'string' },
+          status: { $ref: '#/components/schemas/ItemStatus' },
+          priority: { $ref: '#/components/schemas/ItemPriority' },
+          labels: { type: 'string', nullable: true, description: 'JSON array of label strings' },
+          metadata: { type: 'string', nullable: true, description: 'JSON object with environment data' },
+          pageUrl: { type: 'string', nullable: true },
+          pageRoute: { type: 'string', nullable: true },
+          componentFile: { type: 'string', nullable: true },
+          cssSelector: { type: 'string', nullable: true },
+          elementText: { type: 'string', nullable: true },
+          elementHtml: { type: 'string', nullable: true },
+          viewportWidth: { type: 'integer', nullable: true },
+          viewportHeight: { type: 'integer', nullable: true },
+          screenshotPath: { type: 'string', nullable: true },
+          sessionRecordingPath: { type: 'string', nullable: true },
+          reporterId: { type: 'string', format: 'uuid', nullable: true },
+          reporterName: { type: 'string', nullable: true },
+          assigneeId: { type: 'string', format: 'uuid', nullable: true },
+          assigneeName: { type: 'string', nullable: true },
+          resolvedById: { type: 'string', format: 'uuid', nullable: true },
+          resolutionNote: { type: 'string', nullable: true },
+          branchName: { type: 'string', nullable: true },
+          mrUrl: { type: 'string', nullable: true },
+          attemptCount: { type: 'integer' },
+          resolvedAt: { type: 'string', format: 'date-time', nullable: true },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      ItemNote: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          itemId: { type: 'string', format: 'uuid' },
+          userId: { type: 'string', format: 'uuid', nullable: true },
+          userName: { type: 'string', nullable: true },
+          content: { type: 'string' },
+          type: { $ref: '#/components/schemas/NoteType' },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      Webhook: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          projectId: { type: 'string', format: 'uuid' },
+          url: { type: 'string', format: 'uri' },
+          secret: { type: 'string', nullable: true },
+          events: { type: 'string', description: 'JSON array of webhook event types' },
+          isActive: { type: 'boolean' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      ApiKeyInfo: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          projectId: { type: 'string', format: 'uuid' },
+          userId: { type: 'string', format: 'uuid' },
+          name: { type: 'string' },
+          keyPrefix: { type: 'string', description: 'First 16 characters of the key (e.g. sk_live_a1b2c3d4)' },
+          lastUsedAt: { type: 'string', format: 'date-time', nullable: true },
+          expiresAt: { type: 'string', format: 'date-time', nullable: true },
+          isActive: { type: 'boolean' },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+
+      // ── Error ──
+      Error: {
+        type: 'object',
+        properties: {
+          error: { type: 'string' },
+        },
+        required: ['error'],
+      },
+    },
+  },
+
+  // ─── Paths ───────────────────────────────────────────────────────────────
+  paths: {
+    // ═══════════════════════ Health ═══════════════════════
+    '/health': {
+      get: {
+        tags: ['Health'],
+        summary: 'Health check',
+        description: 'Проверка состояния сервера, БД и памяти. Не требует авторизации. Путь: GET /health (не под /api/).',
+        servers: [{ url: '/' }],
+        responses: {
+          200: {
+            description: 'Сервер работает',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    status: { type: 'string', enum: ['ok'] },
+                    timestamp: { type: 'string', format: 'date-time' },
+                    uptime: { type: 'integer', description: 'Uptime in seconds' },
+                    db: { type: 'string', enum: ['ok', 'error'] },
+                    memory: {
+                      type: 'object',
+                      properties: {
+                        rss: { type: 'integer', description: 'RSS in MB' },
+                        heapUsed: { type: 'integer', description: 'Heap used in MB' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          503: {
+            description: 'Сервер в нерабочем состоянии',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+          },
+        },
+      },
+    },
+
+    // ═══════════════════════ Auth ═══════════════════════
+    '/auth/login': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Вход в систему',
+        description: 'Возвращает JWT-токен и данные пользователя. Rate limit: 5 req/min.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'password'],
+                properties: {
+                  email: { type: 'string', format: 'email' },
+                  password: { type: 'string', minLength: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Успешный вход',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        token: { type: 'string' },
+                        user: { $ref: '#/components/schemas/User' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Неверные email или пароль', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/auth/me': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Текущий пользователь',
+        description: 'Возвращает данные текущего авторизованного пользователя.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        responses: {
+          200: {
+            description: 'Данные пользователя',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        user: { $ref: '#/components/schemas/User' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Не авторизован', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/auth/validate': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Валидация токена',
+        description: 'SSO-эндпоинт — внешние сервисы валидируют JWT или API Key. Не требует авторизации.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['token'],
+                properties: {
+                  token: { type: 'string', minLength: 1, description: 'JWT-токен или API-ключ (sk_live_...)' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Результат валидации',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    valid: { type: 'boolean' },
+                    user: { $ref: '#/components/schemas/User' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+
+    // ═══════════════════════ Items ═══════════════════════
+    '/items/create': {
+      post: {
+        tags: ['Items'],
+        summary: 'Создать баг-репорт',
+        description: 'Создаёт новый item в проекте. Roles: member, admin. Rate limit: 20 req/min.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['projectId', 'message'],
+                properties: {
+                  projectId: { type: 'string', format: 'uuid' },
+                  message: { type: 'string', minLength: 3, maxLength: 5000 },
+                  priority: { $ref: '#/components/schemas/ItemPriority', default: 'medium' },
+                  labels: { type: 'array', items: { type: 'string', maxLength: 50 }, maxItems: 10 },
+                  pageUrl: { type: 'string', maxLength: 500, nullable: true },
+                  pageRoute: { type: 'string', maxLength: 255, nullable: true },
+                  componentFile: { type: 'string', maxLength: 255, nullable: true },
+                  cssSelector: { type: 'string', maxLength: 1000, nullable: true },
+                  elementText: { type: 'string', nullable: true, description: 'Truncated to 500 chars' },
+                  elementHtml: { type: 'string', nullable: true, description: 'Truncated to 2000 chars' },
+                  viewportWidth: { type: 'integer', minimum: 1, nullable: true },
+                  viewportHeight: { type: 'integer', minimum: 1, nullable: true },
+                  screenshot: { type: 'string', maxLength: 7000000, nullable: true, description: 'Base64-encoded image (~5MB max)' },
+                  sessionRecording: { type: 'string', maxLength: 3000000, nullable: true, description: 'Base64-encoded recording (~2MB max)' },
+                  metadata: { type: 'object', additionalProperties: { type: 'string' }, nullable: true, description: 'Auto-captured environment data' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Item создан',
+            content: {
+              'application/json': {
+                schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } },
+              },
+            },
+          },
+          401: { description: 'Не авторизован', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Нет доступа к проекту', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Проект не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/list': {
+      post: {
+        tags: ['Items'],
+        summary: 'Список items',
+        description: 'Пагинированный список items проекта с фильтрацией. Roles: all (admin, member, agent).',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['projectId'],
+                properties: {
+                  projectId: { type: 'string', format: 'uuid' },
+                  status: { $ref: '#/components/schemas/ItemStatus' },
+                  priority: { $ref: '#/components/schemas/ItemPriority' },
+                  assigneeId: { type: 'string', format: 'uuid' },
+                  search: { type: 'string', maxLength: 200, description: 'Поиск по тексту сообщения (LIKE)' },
+                  page: { type: 'integer', minimum: 1, default: 1 },
+                  perPage: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Список items',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        items: { type: 'array', items: { $ref: '#/components/schemas/Item' } },
+                        pagination: { $ref: '#/components/schemas/Pagination' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          403: { description: 'Нет доступа к проекту', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/get': {
+      post: {
+        tags: ['Items'],
+        summary: 'Получить item с заметками',
+        description: 'Возвращает item и все его заметки (notes). Roles: all.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Item с заметками',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      allOf: [
+                        { $ref: '#/components/schemas/Item' },
+                        {
+                          type: 'object',
+                          properties: {
+                            notes: { type: 'array', items: { $ref: '#/components/schemas/ItemNote' } },
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/count': {
+      post: {
+        tags: ['Items'],
+        summary: 'Количество items по статусам',
+        description: 'Возвращает количество items по каждому статусу для проекта. Roles: all.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['projectId'],
+                properties: {
+                  projectId: { type: 'string', format: 'uuid' },
+                  status: { $ref: '#/components/schemas/ItemStatus' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Counts по статусам',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        counts: {
+                          type: 'object',
+                          properties: {
+                            new: { type: 'integer' },
+                            in_progress: { type: 'integer' },
+                            review: { type: 'integer' },
+                            done: { type: 'integer' },
+                            cancelled: { type: 'integer' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/items/claim': {
+      post: {
+        tags: ['Items'],
+        summary: 'Взять item в работу',
+        description: 'Назначает текущего пользователя исполнителем и переводит статус в in_progress. Roles: agent, admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Item обновлён',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
+          },
+          403: { description: 'Нет роли agent/admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/resolve': {
+      post: {
+        tags: ['Items'],
+        summary: 'Закрыть item (resolve)',
+        description: 'Переводит item в статус done с опциональной заметкой о решении. Roles: agent, admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  resolutionNote: { type: 'string', maxLength: 5000 },
+                  branchName: { type: 'string', maxLength: 255 },
+                  mrUrl: { type: 'string', format: 'uri', maxLength: 500 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Item resolved',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
+          },
+          403: { description: 'Нет роли agent/admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/cancel': {
+      post: {
+        tags: ['Items'],
+        summary: 'Отменить item',
+        description: 'Переводит item в статус cancelled. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Item cancelled',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/update-status': {
+      post: {
+        tags: ['Items'],
+        summary: 'Обновить статус item',
+        description: 'Универсальный эндпоинт для смены статуса item. Roles: agent, admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id', 'status'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  status: { $ref: '#/components/schemas/ItemStatus' },
+                  branchName: { type: 'string', maxLength: 255 },
+                  mrUrl: { type: 'string', format: 'uri', maxLength: 500 },
+                  attemptCount: { type: 'integer', minimum: 0 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Статус обновлён',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
+          },
+          403: { description: 'Нет роли agent/admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/reopen': {
+      post: {
+        tags: ['Items'],
+        summary: 'Переоткрыть item',
+        description: 'Возвращает item в статус new (из done или cancelled). Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Item reopened',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/update': {
+      post: {
+        tags: ['Items'],
+        summary: 'Обновить item',
+        description: 'Обновляет поля item (message, priority, labels, assigneeId). Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  message: { type: 'string', minLength: 3, maxLength: 5000 },
+                  assigneeId: { type: 'string', format: 'uuid', nullable: true },
+                  priority: { $ref: '#/components/schemas/ItemPriority' },
+                  labels: { type: 'array', items: { type: 'string', maxLength: 50 }, maxItems: 10 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Item обновлён',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/delete': {
+      post: {
+        tags: ['Items'],
+        summary: 'Удалить item',
+        description: 'Удаляет item и связанные заметки. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Item удалён',
+            content: {
+              'application/json': {
+                schema: { type: 'object', properties: { data: { type: 'object', properties: { ok: { type: 'boolean' } } } } },
+              },
+            },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/add-note': {
+      post: {
+        tags: ['Items'],
+        summary: 'Добавить заметку',
+        description: 'Добавляет комментарий к item. Roles: all (admin, member, agent).',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['itemId', 'content'],
+                properties: {
+                  itemId: { type: 'string', format: 'uuid' },
+                  content: { type: 'string', minLength: 1, maxLength: 5000 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Заметка создана',
+            content: {
+              'application/json': {
+                schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/ItemNote' } } },
+              },
+            },
+          },
+          404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    // ═══════════════════════ Projects ═══════════════════════
+    '/projects/create': {
+      post: {
+        tags: ['Projects'],
+        summary: 'Создать проект',
+        description: 'Создаёт новый проект. Slug должен быть уникальным. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name', 'slug'],
+                properties: {
+                  name: { type: 'string', minLength: 1, maxLength: 100 },
+                  slug: { type: 'string', minLength: 2, maxLength: 50, pattern: '^[a-z0-9-]+$', description: 'Lowercase alphanumeric with hyphens' },
+                  allowedOrigins: { type: 'array', items: { type: 'string', format: 'uri' }, default: [] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Проект создан',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Project' } } } } },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          409: { description: 'Slug уже существует', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/projects/list': {
+      post: {
+        tags: ['Projects'],
+        summary: 'Список проектов',
+        description: 'Пагинированный список проектов. Admin видит все, остальные — только назначенные. Roles: all.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                allOf: [{ $ref: '#/components/schemas/PaginationInput' }],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Список проектов',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        items: { type: 'array', items: { $ref: '#/components/schemas/Project' } },
+                        pagination: { $ref: '#/components/schemas/Pagination' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/projects/get': {
+      post: {
+        tags: ['Projects'],
+        summary: 'Получить проект',
+        description: 'Возвращает данные проекта. Roles: all (с проверкой доступа).',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Данные проекта',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Project' } } } } },
+          },
+          403: { description: 'Нет доступа к проекту', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Проект не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/projects/update': {
+      post: {
+        tags: ['Projects'],
+        summary: 'Обновить проект',
+        description: 'Обновляет поля проекта. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  name: { type: 'string', minLength: 1, maxLength: 100 },
+                  allowedOrigins: { type: 'array', items: { type: 'string', format: 'uri' } },
+                  autofixEnabled: { type: 'boolean' },
+                  isActive: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Проект обновлён',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Project' } } } } },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Проект не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/projects/delete': {
+      post: {
+        tags: ['Projects'],
+        summary: 'Удалить проект',
+        description: 'Удаляет проект (только если нет items). Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Проект удалён',
+            content: {
+              'application/json': {
+                schema: { type: 'object', properties: { data: { type: 'object', properties: { success: { type: 'boolean' } } } } },
+              },
+            },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Проект не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          422: { description: 'Проект содержит items', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    // ═══════════════════════ Users ═══════════════════════
+    '/users/create': {
+      post: {
+        tags: ['Users'],
+        summary: 'Создать пользователя',
+        description: 'Создаёт нового пользователя с назначением на проекты. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'password', 'name', 'role'],
+                properties: {
+                  email: { type: 'string', format: 'email' },
+                  password: { type: 'string', minLength: 8, maxLength: 128, description: 'Must contain lowercase, uppercase letter and digit' },
+                  name: { type: 'string', minLength: 1, maxLength: 100 },
+                  role: { $ref: '#/components/schemas/UserRole' },
+                  projectIds: { type: 'array', items: { type: 'string', format: 'uuid' }, default: [] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Пользователь создан',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/UserWithProjects' } } } } },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          409: { description: 'Email уже существует', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/users/list': {
+      post: {
+        tags: ['Users'],
+        summary: 'Список пользователей',
+        description: 'Пагинированный список пользователей, опционально фильтрация по проекту. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  projectId: { type: 'string', format: 'uuid', description: 'Фильтр по проекту (включает admin-ов)' },
+                  page: { type: 'integer', minimum: 1, default: 1 },
+                  perPage: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Список пользователей',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        items: { type: 'array', items: { $ref: '#/components/schemas/UserWithProjects' } },
+                        pagination: { $ref: '#/components/schemas/Pagination' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/users/get': {
+      post: {
+        tags: ['Users'],
+        summary: 'Получить пользователя',
+        description: 'Возвращает данные пользователя с назначенными проектами. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Данные пользователя',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/UserWithProjects' } } } } },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Пользователь не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/users/update': {
+      post: {
+        tags: ['Users'],
+        summary: 'Обновить пользователя',
+        description: 'Обновляет поля пользователя и/или привязку к проектам. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  name: { type: 'string', minLength: 1, maxLength: 100 },
+                  role: { $ref: '#/components/schemas/UserRole' },
+                  isActive: { type: 'boolean' },
+                  projectIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+                  password: { type: 'string', minLength: 8, maxLength: 128, description: 'Must contain lowercase, uppercase letter and digit' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Пользователь обновлён',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/UserWithProjects' } } } } },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Пользователь не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/users/delete': {
+      post: {
+        tags: ['Users'],
+        summary: 'Удалить пользователя',
+        description: 'Удаляет пользователя (нельзя удалить самого себя). Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Пользователь удалён',
+            content: {
+              'application/json': {
+                schema: { type: 'object', properties: { data: { type: 'object', properties: { success: { type: 'boolean' } } } } },
+              },
+            },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Пользователь не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          409: { description: 'Нельзя удалить самого себя', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    // ═══════════════════════ Webhooks ═══════════════════════
+    '/webhooks/create': {
+      post: {
+        tags: ['Webhooks'],
+        summary: 'Создать вебхук',
+        description: 'Создаёт webhook для проекта. При событии отправляет POST на указанный URL. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['projectId', 'url', 'events'],
+                properties: {
+                  projectId: { type: 'string', format: 'uuid' },
+                  url: { type: 'string', format: 'uri', maxLength: 500 },
+                  secret: { type: 'string', maxLength: 255, description: 'HMAC signing secret' },
+                  events: {
+                    type: 'array',
+                    minItems: 1,
+                    items: { $ref: '#/components/schemas/WebhookEvent' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Webhook создан',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Webhook' } } } } },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Проект не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/webhooks/list': {
+      post: {
+        tags: ['Webhooks'],
+        summary: 'Список вебхуков',
+        description: 'Список вебхуков проекта. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['projectId'],
+                properties: {
+                  projectId: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Список вебхуков',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        items: { type: 'array', items: { $ref: '#/components/schemas/Webhook' } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/webhooks/update': {
+      post: {
+        tags: ['Webhooks'],
+        summary: 'Обновить вебхук',
+        description: 'Обновляет настройки webhook. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  url: { type: 'string', format: 'uri', maxLength: 500 },
+                  secret: { type: 'string', maxLength: 255 },
+                  events: {
+                    type: 'array',
+                    minItems: 1,
+                    items: { $ref: '#/components/schemas/WebhookEvent' },
+                  },
+                  isActive: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Webhook обновлён',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Webhook' } } } } },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Webhook не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/webhooks/delete': {
+      post: {
+        tags: ['Webhooks'],
+        summary: 'Удалить вебхук',
+        description: 'Удаляет webhook. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Webhook удалён',
+            content: {
+              'application/json': {
+                schema: { type: 'object', properties: { data: { type: 'object', properties: { ok: { type: 'boolean' } } } } },
+              },
+            },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Webhook не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/webhooks/test': {
+      post: {
+        tags: ['Webhooks'],
+        summary: 'Тест вебхука',
+        description: 'Отправляет тестовый payload на URL вебхука. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Результат отправки',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        success: { type: 'boolean' },
+                        statusCode: { type: 'integer' },
+                        error: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Webhook не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    // ═══════════════════════ API Keys ═══════════════════════
+    '/api-keys/create': {
+      post: {
+        tags: ['API Keys'],
+        summary: 'Создать API-ключ',
+        description: 'Генерирует новый API-ключ для проекта. Полный ключ возвращается ТОЛЬКО один раз. Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['projectId', 'name'],
+                properties: {
+                  projectId: { type: 'string', format: 'uuid' },
+                  name: { type: 'string', minLength: 1, maxLength: 100, description: 'Human-readable name (e.g. "CI/CD", "Slack Bot")' },
+                  expiresAt: { type: 'string', format: 'date-time', description: 'Optional expiration date. Null = never expires.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'API-ключ создан (полный ключ показывается один раз)',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        key: { type: 'string', description: 'Full API key (sk_live_...). Shown only once!' },
+                        id: { type: 'string', format: 'uuid' },
+                        name: { type: 'string' },
+                        keyPrefix: { type: 'string' },
+                        projectId: { type: 'string', format: 'uuid' },
+                        expiresAt: { type: 'string', format: 'date-time', nullable: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Проект не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/api-keys/list': {
+      post: {
+        tags: ['API Keys'],
+        summary: 'Список API-ключей',
+        description: 'Список API-ключей проекта (без полного ключа, только prefix). Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['projectId'],
+                properties: {
+                  projectId: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Список API-ключей',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        items: { type: 'array', items: { $ref: '#/components/schemas/ApiKeyInfo' } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/api-keys/revoke': {
+      post: {
+        tags: ['API Keys'],
+        summary: 'Отозвать API-ключ',
+        description: 'Деактивирует API-ключ (isActive = false). Roles: admin.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'API-ключ отозван',
+            content: {
+              'application/json': {
+                schema: { type: 'object', properties: { data: { type: 'object', properties: { success: { type: 'boolean' } } } } },
+              },
+            },
+          },
+          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'API-ключ не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    // ═══════════════════════ Events (SSE) ═══════════════════════
+    '/events/stream': {
+      get: {
+        tags: ['Events'],
+        summary: 'Real-time события (SSE)',
+        description:
+          'Server-Sent Events stream. Авторизация через query parameter `token` (EventSource не поддерживает заголовки). Опциональный фильтр по projectId. Путь: GET /api/events/stream (зарегистрирован ДО rate limiter).',
+        parameters: [
+          {
+            name: 'token',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: 'JWT-токен для авторизации',
+          },
+          {
+            name: 'projectId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', format: 'uuid' },
+            description: 'Фильтр по проекту (если не указан — все доступные проекты)',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'SSE stream. События: item.created, item.status_changed, item.assigned, item.commented, item.deleted, item.updated. Heartbeat каждые 30 сек.',
+            content: {
+              'text/event-stream': {
+                schema: { type: 'string' },
+              },
+            },
+          },
+          401: {
+            description: 'Token отсутствует или невалиден',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+          },
+        },
+      },
+    },
+
+    // ═══════════════════════ Docs ═══════════════════════
+    '/docs/openapi.json': {
+      get: {
+        tags: ['Docs'],
+        summary: 'OpenAPI спецификация',
+        description: 'Возвращает OpenAPI 3.0.3 JSON спецификацию API.',
+        servers: [{ url: '/api' }],
+        responses: {
+          200: {
+            description: 'OpenAPI spec',
+            content: { 'application/json': { schema: { type: 'object' } } },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+// ─── Swagger UI HTML ──────────────────────────────────────────────────────────
+
+const swaggerHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scout API Docs</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+  <style>
+    body { margin: 0; background: #fafafa; }
+    .topbar { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: '/api/docs/openapi.json',
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      presets: [
+        SwaggerUIBundle.presets.apis,
+        SwaggerUIBundle.SwaggerUIStandalonePreset,
+      ],
+      layout: 'BaseLayout',
+    });
+  </script>
+</body>
+</html>`;
+
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
+export const docsRoutes = new Hono()
+  .get('/openapi.json', (c) => c.json(spec))
+  .get('/', (c) => c.html(swaggerHtml));

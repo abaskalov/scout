@@ -86,7 +86,12 @@ function init(): void {
 
   function showToast(message: string, isError = false): void {
     if (toastTimer) clearTimeout(toastTimer);
-    toast.textContent = message;
+    // Success toast: checkmark icon (industry standard — Marker.io, Usersnap, Gleap)
+    if (!isError) {
+      toast.innerHTML = `<svg class="scout-toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>${message}`;
+    } else {
+      toast.textContent = message;
+    }
     toast.classList.toggle('error', isError);
     toast.classList.add('visible');
     toastTimer = setTimeout(() => {
@@ -246,6 +251,12 @@ function init(): void {
     onSubmitError: (msg: string) => {
       showToast(msg, true);
     },
+    onLogout: () => {
+      currentPicked = null;
+      resumeRecording();
+      showFab(fab);
+      showToast('Вы вышли из аккаунта');
+    },
   };
 
   attachPanelEvents(
@@ -294,6 +305,17 @@ function init(): void {
     }
   });
   shadow.appendChild(fab);
+
+  // --- Keyboard shortcut: Ctrl+Shift+K to open (like Marker.io) ---
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'K') {
+      e.preventDefault();
+      // Only trigger if FAB is visible (widget is idle)
+      if (!fab.classList.contains('hidden')) {
+        fab.click();
+      }
+    }
+  });
 }
 
 // --- Auto-init ---

@@ -275,6 +275,32 @@ export const WIDGET_STYLES = `
     min-height: 44px;
   }
 
+  .scout-checkbox input[type="checkbox"]:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Screenshot preview (professional pattern: show before sending) */
+  .scout-screenshot-preview {
+    margin-top: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f9fafb;
+  }
+
+  .scout-screenshot-preview.hidden {
+    display: none;
+  }
+
+  .scout-screenshot-img {
+    display: block;
+    width: 100%;
+    max-height: 160px;
+    object-fit: cover;
+    object-position: top left;
+  }
+
   .scout-checkbox input[type="checkbox"] {
     width: 20px;
     height: 20px;
@@ -329,6 +355,86 @@ export const WIDGET_STYLES = `
 
   .scout-btn-secondary:hover:not(:disabled) {
     background: #e5e7eb;
+  }
+
+  /* User info bar (between header and body) */
+  .scout-user-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    flex-shrink: 0;
+  }
+
+  .scout-user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .scout-user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #3b82f6;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+  }
+
+  .scout-user-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #374151;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .scout-logout-btn {
+    background: none;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: #6b7280;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease;
+    touch-action: manipulation;
+  }
+
+  .scout-logout-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+    border-color: #fca5a5;
+  }
+
+  /* "Powered by Scout" badge (industry standard) */
+  .scout-powered-by {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 20px;
+    font-size: 11px;
+    color: #9ca3af;
+    border-top: 1px solid #f3f4f6;
+    flex-shrink: 0;
+    letter-spacing: 0.02em;
+  }
+
+  .scout-powered-by svg {
+    color: #9ca3af;
   }
 
   /* Login form */
@@ -401,6 +507,14 @@ export const WIDGET_STYLES = `
     transform: translateY(0);
   }
 
+  .scout-toast-icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+    vertical-align: -3px;
+    flex-shrink: 0;
+  }
+
   .scout-toast.error {
     background: #ef4444;
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
@@ -416,10 +530,56 @@ export const WIDGET_STYLES = `
     border-radius: 50%;
     animation: scout-spin 0.6s linear infinite;
     margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  .scout-spinner-sm {
+    width: 14px;
+    height: 14px;
+    border-color: rgba(59, 130, 246, 0.2);
+    border-top-color: #3b82f6;
   }
 
   @keyframes scout-spin {
     to { transform: rotate(360deg); }
+  }
+
+  /* Progress status (step-by-step indicator during submission) */
+  .scout-progress-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    margin-top: 12px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #1d4ed8;
+    animation: scout-fade-in 0.2s ease;
+  }
+
+  .scout-progress-status.hidden {
+    display: none;
+  }
+
+  .scout-progress-warn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #f59e0b;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  @keyframes scout-fade-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   /* ===== Mobile (max-width: 640px) ===== */
@@ -452,6 +612,11 @@ export const WIDGET_STYLES = `
 
     .scout-panel-header {
       padding-top: calc(16px + var(--safe-top));
+      padding-left: calc(20px + var(--safe-left));
+      padding-right: calc(20px + var(--safe-right));
+    }
+
+    .scout-user-bar {
       padding-left: calc(20px + var(--safe-left));
       padding-right: calc(20px + var(--safe-right));
     }

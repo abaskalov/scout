@@ -14,6 +14,10 @@ export interface PickedElement {
  * Hovering (or touch-moving) highlights elements. Clicking/tapping captures
  * element info and resolves the promise.
  * ESC key cancels (resolves with null).
+ *
+ * Hardened with try/catch around all DOM operations for cross-browser safety.
+ * If elementFromPoint or getBoundingClientRect fails in any browser,
+ * the picker degrades gracefully instead of crashing.
  */
 export function pickElement(
   shadow: ShadowRoot,
@@ -27,23 +31,49 @@ export function pickElement(
     let currentTarget: Element | null = null;
 
     function updateHighlight(el: Element): void {
-      const rect = el.getBoundingClientRect();
-      highlight.style.top = `${rect.top}px`;
-      highlight.style.left = `${rect.left}px`;
-      highlight.style.width = `${rect.width}px`;
-      highlight.style.height = `${rect.height}px`;
-      highlight.classList.remove('hidden');
+      try {
+        const rect = el.getBoundingClientRect();
+        // Validate rect — some browsers return all-zero for hidden/detached elements
+        if (rect.width === 0 && rect.height === 0) {
+          highlight.classList.add('hidden');
+          return;
+        }
+        highlight.style.top = `${rect.top}px`;
+        highlight.style.left = `${rect.left}px`;
+        highlight.style.width = `${rect.width}px`;
+        highlight.style.height = `${rect.height}px`;
+        highlight.classList.remove('hidden');
+      } catch {
+        // getBoundingClientRect can fail on detached or special elements
+        highlight.classList.add('hidden');
+      }
     }
 
     function resolveElementAt(x: number, y: number): Element | null {
-      overlay.style.pointerEvents = 'none';
-      const el = document.elementFromPoint(x, y);
-      overlay.style.pointerEvents = '';
+      try {
+        // Temporarily disable pointer events on overlay to "see through" it
+        overlay.style.pointerEvents = 'none';
+        const el = document.elementFromPoint(x, y);
+        overlay.style.pointerEvents = '';
 
-      if (!el || el.id === 'scout-widget-root' || el.closest('#scout-widget-root')) {
+        if (!el) return null;
+
+        // Exclude scout widget elements
+        if (el.id === 'scout-widget-root' || el.closest('#scout-widget-root')) {
+          return null;
+        }
+
+        // Skip <html> and <body> — not useful for bug reports
+        if (el === document.documentElement || el === document.body) {
+          return null;
+        }
+
+        return el;
+      } catch {
+        // elementFromPoint can fail in some edge cases (e.g., cross-origin iframes)
+        overlay.style.pointerEvents = '';
         return null;
       }
-      return el;
     }
 
     function onMouseMove(e: MouseEvent): void {
@@ -101,17 +131,31 @@ export function pickElement(
       }
 
       const el = currentTarget;
-      const result: PickedElement = {
-        cssSelector: generateSelector(el),
-        elementText: (el.textContent ?? '').trim().slice(0, 500),
-        elementHtml: el.outerHTML.slice(0, 2000),
-        pageUrl: window.location.href,
-        viewportWidth: window.innerWidth,
-        viewportHeight: window.innerHeight,
-      };
 
-      cleanup();
-      resolve(result);
+      try {
+        const result: PickedElement = {
+          cssSelector: generateSelector(el),
+          elementText: (el.textContent ?? '').trim().slice(0, 500),
+          elementHtml: el.outerHTML.slice(0, 2000),
+          pageUrl: window.location.href,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        };
+
+        cleanup();
+        resolve(result);
+      } catch {
+        // If selector generation or DOM access fails, still return basic info
+        cleanup();
+        resolve({
+          cssSelector: el.tagName?.toLowerCase() ?? 'unknown',
+          elementText: '',
+          elementHtml: '',
+          pageUrl: window.location.href,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        });
+      }
     }
 
     function onClick(e: MouseEvent): void {

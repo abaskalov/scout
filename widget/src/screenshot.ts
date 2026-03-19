@@ -1,14 +1,27 @@
-import { domToPng } from 'modern-screenshot';
+import html2canvas from 'html2canvas';
 
 /**
- * Capture a full-page screenshot using modern-screenshot (SVG foreignObject).
- * If a CSS selector is provided, highlights the selected element with a red outline.
+ * Capture a full-page screenshot using html2canvas.
  *
- * Returns a base64-encoded PNG string (without the data:image/png;base64, prefix).
+ * html2canvas renders the DOM to <canvas> by parsing CSS and drawing directly —
+ * NO SVG foreignObject (unlike modern-screenshot / html-to-image).
+ * This makes it the most cross-browser-compatible DOM screenshot solution.
+ *
+ * Professional improvements applied:
+ * - JPEG format instead of PNG (3-5x smaller payload)
+ * - Timeout via Promise.race (prevents hanging on complex pages)
+ * - useCORS for cross-origin images (best-effort)
+ * - Graceful degradation (returns null on failure)
+ *
+ * Returns base64-encoded JPEG string (without data: prefix), or null on failure.
  */
-export async function captureScreenshot(highlightSelector?: string): Promise<string> {
-  // Add highlight on selected element using ABSOLUTE positioning
+
+const SCREENSHOT_TIMEOUT_MS = 10_000;
+const JPEG_QUALITY = 0.85;
+
+export async function captureScreenshot(highlightSelector?: string): Promise<string | null> {
   let highlightOverlay: HTMLDivElement | null = null;
+
   if (highlightSelector) {
     try {
       const el = document.querySelector(highlightSelector);
@@ -18,6 +31,7 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
         const absLeft = rect.left + window.scrollX;
 
         highlightOverlay = document.createElement('div');
+        highlightOverlay.setAttribute('data-scout-highlight', 'true');
         highlightOverlay.style.cssText = `
           position: absolute;
           top: ${absTop - 3}px;
@@ -50,31 +64,46 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
       window.innerHeight,
     );
 
-    const dataUrl = await domToPng(document.documentElement, {
-      width: fullWidth,
-      height: fullHeight,
-      scale: 1,
-      backgroundColor: '#ffffff',
-      timeout: 8_000,
-      // Exclude the Scout widget from the screenshot
-      filter: (node: Node) => {
-        if (node instanceof Element && node.id === 'scout-widget-root') return false;
-        return true;
-      },
-      features: {
-        // Render from document top, not from current scroll position
-        restoreScrollPosition: false,
-        // Safari/Firefox SVG decode fix (enabled by default, explicit for clarity)
-        fixSvgXmlDecode: true,
-      },
-      // Safari/Firefox draw-image decode fix
-      drawImageInterval: 100,
-    });
+    // Capture with timeout (prevents hanging on complex pages)
+    const canvas = await Promise.race([
+      html2canvas(document.documentElement, {
+        width: fullWidth,
+        height: fullHeight,
+        windowWidth: fullWidth,
+        windowHeight: fullHeight,
+        scrollX: 0,
+        scrollY: 0,
+        x: 0,
+        y: 0,
+        scale: 1,
+        backgroundColor: '#ffffff',
+        ignoreElements: (element: Element) => {
+          return element.id === 'scout-widget-root';
+        },
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
+      ),
+    ]);
 
-    return dataUrl.replace(/^data:image\/png;base64,/, '');
+    // JPEG instead of PNG — 3-5x smaller payload (professional tools pattern)
+    const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+  } catch (err) {
+    console.warn('[Scout] Screenshot capture failed:', err);
+    return null;
   } finally {
     if (highlightOverlay) {
       highlightOverlay.remove();
     }
   }
 }
+
+/**
+ * Get the MIME type used for screenshots.
+ * Used by panel to set correct content type.
+ */
+export const SCREENSHOT_MIME = 'image/jpeg';

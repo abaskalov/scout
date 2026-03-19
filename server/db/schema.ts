@@ -51,6 +51,7 @@ export const scoutItems = sqliteTable('scout_items', {
   viewportHeight: integer('viewport_height'),
   screenshotPath: text('screenshot_path'),
   sessionRecordingPath: text('session_recording_path'),
+  metadata: text('metadata'),  // JSON string: auto-captured environment data (browser, OS, etc.)
   reporterId: text('reporter_id').references(() => users.id, { onDelete: 'set null' }),
   assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
   resolvedById: text('resolved_by_id').references(() => users.id, { onDelete: 'set null' }),

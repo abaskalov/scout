@@ -72,6 +72,7 @@ export function createTestContext(): TestContext {
       viewport_height INTEGER,
       screenshot_path TEXT,
       session_recording_path TEXT,
+      metadata TEXT,
       reporter_id TEXT REFERENCES users(id) ON DELETE SET NULL,
       assignee_id TEXT REFERENCES users(id) ON DELETE SET NULL,
       resolved_by_id TEXT REFERENCES users(id) ON DELETE SET NULL,

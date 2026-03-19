@@ -2,6 +2,7 @@ import { db } from '../db/client.js';
 import { scoutItems, scoutItemNotes, type User, type ItemStatus } from '../db/schema.js';
 import { eq, and, isNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { NotFoundError, ConflictError, ValidationError } from '../lib/errors.js';
@@ -51,6 +52,35 @@ function saveFile(base64: string, dir: string, ext: string): string {
   return `storage/${dir}/${filename}`;
 }
 
+/**
+ * Save session recording — handles both raw JSON and gzip-compressed data.
+ * Widget sends gzip-compressed base64 for smaller transport payload.
+ * We decompress and save as JSON for dashboard compatibility.
+ */
+function saveRecording(base64: string, dir: string): string {
+  const fullDir = join(process.cwd(), 'storage', dir);
+  mkdirSync(fullDir, { recursive: true });
+  const filename = `${randomUUID()}.json`;
+  const filePath = join(fullDir, filename);
+  const buffer = Buffer.from(base64, 'base64');
+
+  // Detect gzip magic bytes (0x1f 0x8b) — decompress if gzip
+  if (buffer.length >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
+    try {
+      const decompressed = gunzipSync(buffer);
+      writeFileSync(filePath, decompressed);
+    } catch {
+      // Fallback: save raw (might be corrupted but better than nothing)
+      writeFileSync(filePath, buffer);
+    }
+  } else {
+    // Raw JSON (legacy or uncompressed)
+    writeFileSync(filePath, buffer);
+  }
+
+  return `storage/${dir}/${filename}`;
+}
+
 function deleteFile(path: string | null): void {
   if (!path) return;
   const fullPath = join(process.cwd(), path);
@@ -77,16 +107,17 @@ export function createItem(data: {
   viewportHeight?: number | null;
   screenshot?: string | null;
   sessionRecording?: string | null;
+  metadata?: Record<string, string> | null;
 }) {
   const id = randomUUID();
   let screenshotPath: string | null = null;
   let sessionRecordingPath: string | null = null;
 
   if (data.screenshot) {
-    screenshotPath = saveFile(data.screenshot, 'screenshots', 'png');
+    screenshotPath = saveFile(data.screenshot, 'screenshots', 'jpg');
   }
   if (data.sessionRecording) {
-    sessionRecordingPath = saveFile(data.sessionRecording, 'recordings', 'json');
+    sessionRecordingPath = saveRecording(data.sessionRecording, 'recordings');
   }
 
   db.insert(scoutItems).values({
@@ -103,6 +134,7 @@ export function createItem(data: {
     viewportHeight: data.viewportHeight ?? null,
     screenshotPath,
     sessionRecordingPath,
+    metadata: data.metadata ? JSON.stringify(data.metadata) : null,
     reporterId: data.reporterId,
   }).run();
 

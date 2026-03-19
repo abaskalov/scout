@@ -9,7 +9,8 @@
     "build:watch": "vite build --watch"
   },
   "dependencies": {
-    "modern-screenshot": "^4.6.8",
+    "fflate": "^0.8.2",
+    "html2canvas": "^1.4.1",
     "rrweb": "2.0.0-alpha.20"
   },
   "devDependencies": {

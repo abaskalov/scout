@@ -61,6 +61,7 @@ sqlite.exec(`
     viewport_height INTEGER,
     screenshot_path TEXT,
     session_recording_path TEXT,
+    metadata TEXT,
     reporter_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     assignee_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     resolved_by_id TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -88,6 +89,13 @@ sqlite.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_notes_item_created ON scout_item_notes(item_id, created_at);
 `);
+
+// --- Migrations (safe to re-run, uses IF NOT EXISTS / try-catch) ---
+try {
+  sqlite.exec(`ALTER TABLE scout_items ADD COLUMN metadata TEXT`);
+} catch {
+  // Column already exists — OK
+}
 
 // Auto-seed admin if users table is empty
 const userCount = sqlite.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number };

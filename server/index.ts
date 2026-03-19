@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -8,6 +9,9 @@ import { authRoutes } from './routes/auth.js';
 import { projectRoutes } from './routes/projects.js';
 import { userRoutes } from './routes/users.js';
 import { itemRoutes } from './routes/items.js';
+import { webhookRoutes } from './routes/webhooks.js';
+import { apiKeyRoutes } from './routes/api-keys.js';
+import { eventRoutes } from './routes/events.js';
 import { sqlite } from './db/client.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { rateLimit } from './middleware/rate-limit.js';
@@ -74,23 +78,45 @@ app.use('/api/*', cors({
     // Reject — return empty string to deny
     return '';
   },
-  allowMethods: ['POST', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// --- API version header ---
+const apiVersionHeader = createMiddleware(async (c, next) => {
+  await next();
+  c.header('X-API-Version', 'v1');
+});
+app.use('/api/*', apiVersionHeader);
+
+// --- SSE (registered before rate limiter — long-lived connections) ---
+app.route('/api/events', eventRoutes);
+app.route('/api/v1/events', eventRoutes);
 
 // --- Rate limiting ---
 // Auth routes: 5 req/min per IP (brute-force protection)
 app.use('/api/auth/*', rateLimit(60_000, 5));
+app.use('/api/v1/auth/*', rateLimit(60_000, 5));
 // Item creation: 20 req/min per IP
 app.use('/api/items/create', rateLimit(60_000, 20));
+app.use('/api/v1/items/create', rateLimit(60_000, 20));
 // All API routes: 100 req/min per IP
 app.use('/api/*', rateLimit(60_000, 100));
 
-// API routes
-app.route('/api/auth', authRoutes);
-app.route('/api/projects', projectRoutes);
-app.route('/api/users', userRoutes);
-app.route('/api/items', itemRoutes);
+// V1 routes (current)
+const v1 = new Hono();
+v1.route('/auth', authRoutes);
+v1.route('/projects', projectRoutes);
+v1.route('/users', userRoutes);
+v1.route('/items', itemRoutes);
+v1.route('/webhooks', webhookRoutes);
+v1.route('/api-keys', apiKeyRoutes);
+
+// Mount v1 under /api/v1/
+app.route('/api/v1', v1);
+
+// Backward compatibility: /api/* → same as /api/v1/*
+app.route('/api', v1);
 
 // Static files: screenshots, recordings — require authentication
 app.use('/storage/*', authMiddleware, serveStatic({ root: './' }));

@@ -96,6 +96,38 @@ export const scoutItemNotes = sqliteTable('scout_item_notes', {
   index('idx_notes_item_created').on(table.itemId, table.createdAt),
 ]);
 
+// === Webhooks ===
+export const webhooks = sqliteTable('webhooks', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  url: text('url').notNull(),
+  secret: text('secret'), // HMAC signing secret
+  events: text('events').notNull().default('["item.created","item.status_changed"]'), // JSON array of event types
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+}, (table) => [
+  index('idx_webhooks_project').on(table.projectId),
+  index('idx_webhooks_project_active').on(table.projectId, table.isActive),
+]);
+
+// === API Keys ===
+export const apiKeys = sqliteTable('api_keys', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(), // "CI/CD", "Slack Bot", etc.
+  keyHash: text('key_hash').notNull(), // bcrypt hash of the key
+  keyPrefix: text('key_prefix').notNull(), // first 16 chars for identification (e.g., "sk_live_a1b2c3d4")
+  lastUsedAt: text('last_used_at'),
+  expiresAt: text('expires_at'), // null = never expires
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+}, (table) => [
+  index('idx_api_keys_prefix').on(table.keyPrefix),
+  index('idx_api_keys_project').on(table.projectId),
+]);
+
 // === Inferred types ===
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
@@ -105,6 +137,17 @@ export type ScoutItem = typeof scoutItems.$inferSelect;
 export type NewScoutItem = typeof scoutItems.$inferInsert;
 export type ScoutItemNote = typeof scoutItemNotes.$inferSelect;
 export type AuditLogEntry = typeof auditLog.$inferSelect;
+export type Webhook = typeof webhooks.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;
 export type ItemStatus = NonNullable<ScoutItem['status']>;
 export type ItemPriority = NonNullable<ScoutItem['priority']>;
 export type UserRole = NonNullable<User['role']>;
+
+export const WEBHOOK_EVENT_TYPES = [
+  'item.created',
+  'item.status_changed',
+  'item.assigned',
+  'item.commented',
+  'item.deleted',
+] as const;
+export type WebhookEventType = typeof WEBHOOK_EVENT_TYPES[number];

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, useCallback, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Fancybox } from '@fancyapps/ui';
 import '@fancyapps/ui/dist/fancybox/fancybox.css';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/date';
 import { isAdmin } from '../lib/auth';
+import { useSSE, type SSEEventType } from '../hooks/useSSE';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import Labels, { parseLabels } from '../components/Labels';
@@ -134,6 +135,26 @@ export default function ItemDetail() {
     loadItem();
     if (admin) loadUsers();
   }, [id]);
+
+  // SSE: real-time updates for this item
+  const handleSSEEvent = useCallback((event: SSEEventType, data: unknown) => {
+    const d = data as Record<string, unknown> | null;
+    if (!d) return;
+
+    // Item deleted → navigate back
+    if (event === 'item.deleted' && d.itemId === id) {
+      navigate('/items');
+      return;
+    }
+
+    // Any change to this item → refetch
+    const itemObj = d.item as Record<string, unknown> | undefined;
+    if (itemObj?.id === id || d.itemId === id) {
+      loadItem();
+    }
+  }, [id, navigate]);
+
+  useSSE({ onEvent: handleSSEEvent });
 
   // Fancybox for screenshot zoom
   useEffect(() => {

@@ -115,6 +115,36 @@ export function createTestContext(): TestContext {
 
     CREATE INDEX idx_audit_log_created ON audit_log(created_at);
     CREATE INDEX idx_audit_log_user ON audit_log(user_id);
+
+    CREATE TABLE webhooks (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      url TEXT NOT NULL,
+      secret TEXT,
+      events TEXT NOT NULL DEFAULT '["item.created","item.status_changed"]',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX idx_webhooks_project ON webhooks(project_id);
+    CREATE INDEX idx_webhooks_project_active ON webhooks(project_id, is_active);
+
+    CREATE TABLE api_keys (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      key_hash TEXT NOT NULL,
+      key_prefix TEXT NOT NULL,
+      last_used_at TEXT,
+      expires_at TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX idx_api_keys_prefix ON api_keys(key_prefix);
+    CREATE INDEX idx_api_keys_project ON api_keys(project_id);
   `);
 
   const db = drizzle(sqlite, { schema });

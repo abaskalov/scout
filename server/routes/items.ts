@@ -15,6 +15,8 @@ import {
 } from '../lib/schemas.js';
 import { createItem, claimItem, updateItemStatus, deleteItem, updateItem, reopenItem } from '../services/items.js';
 import { logAudit, getClientIp } from '../services/audit.js';
+import { dispatchWebhooks } from '../services/webhooks.js';
+import { eventBus } from '../lib/event-bus.js';
 
 /** Resolve user name by id, with simple cache */
 const userNameCache = new Map<string, string>();
@@ -57,6 +59,8 @@ export const itemRoutes = new Hono()
 
       const item = createItem({ ...data, reporterId: user.id });
       logAudit({ userId: user.id, action: 'create_item', entityType: 'item', entityId: item.id, details: { projectId: data.projectId, priority: data.priority }, ipAddress: getClientIp(c) });
+      dispatchWebhooks(data.projectId, 'item.created', { item }).catch(() => {});
+      eventBus.publish({ type: 'item.created', projectId: data.projectId, payload: { item } });
       return c.json({ data: item }, 201);
     })
 
@@ -169,6 +173,8 @@ export const itemRoutes = new Hono()
 
       const item = claimItem(id, user);
       logAudit({ userId: user.id, action: 'claim_item', entityType: 'item', entityId: id, ipAddress: getClientIp(c) });
+      dispatchWebhooks(existing.projectId, 'item.assigned', { item, assignee: { id: user.id, name: user.name, email: user.email } }).catch(() => {});
+      eventBus.publish({ type: 'item.assigned', projectId: existing.projectId, payload: { item } });
       return c.json({ data: item });
     })
 
@@ -187,10 +193,13 @@ export const itemRoutes = new Hono()
         throw new ForbiddenError('Нет доступа к этому проекту');
       }
 
+      const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'new';
       const item = updateItemStatus(id, 'done', user, {
         resolutionNote, branchName, mrUrl,
       });
       logAudit({ userId: user.id, action: 'resolve_item', entityType: 'item', entityId: id, details: { branchName, mrUrl }, ipAddress: getClientIp(c) });
+      dispatchWebhooks(existing.projectId, 'item.status_changed', { item, oldStatus, newStatus: 'done' }).catch(() => {});
+      eventBus.publish({ type: 'item.status_changed', projectId: existing.projectId, payload: { item, oldStatus, newStatus: 'done' } });
       return c.json({ data: item });
     })
 
@@ -209,8 +218,11 @@ export const itemRoutes = new Hono()
         throw new ForbiddenError('Нет доступа к этому проекту');
       }
 
+      const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'new';
       const item = updateItemStatus(id, 'cancelled', user);
       logAudit({ userId: user.id, action: 'cancel_item', entityType: 'item', entityId: id, ipAddress: getClientIp(c) });
+      dispatchWebhooks(existing.projectId, 'item.status_changed', { item, oldStatus, newStatus: 'cancelled' }).catch(() => {});
+      eventBus.publish({ type: 'item.status_changed', projectId: existing.projectId, payload: { item, oldStatus, newStatus: 'cancelled' } });
       return c.json({ data: item });
     })
 
@@ -229,10 +241,13 @@ export const itemRoutes = new Hono()
         throw new ForbiddenError('Нет доступа к этому проекту');
       }
 
+      const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'new';
       const item = updateItemStatus(id, status, user, {
         branchName, mrUrl, attemptCount,
       });
       logAudit({ userId: user.id, action: 'update_status', entityType: 'item', entityId: id, details: { status }, ipAddress: getClientIp(c) });
+      dispatchWebhooks(existing.projectId, 'item.status_changed', { item, oldStatus, newStatus: status }).catch(() => {});
+      eventBus.publish({ type: 'item.status_changed', projectId: existing.projectId, payload: { item, oldStatus, newStatus: status } });
       return c.json({ data: item });
     })
 
@@ -253,6 +268,8 @@ export const itemRoutes = new Hono()
 
       deleteItem(id);
       logAudit({ userId: user.id, action: 'delete_item', entityType: 'item', entityId: id, ipAddress: getClientIp(c) });
+      dispatchWebhooks(existing.projectId, 'item.deleted', { itemId: id }).catch(() => {});
+      eventBus.publish({ type: 'item.deleted', projectId: existing.projectId, payload: { itemId: id } });
       return c.json({ data: { ok: true } });
     })
 
@@ -278,6 +295,7 @@ export const itemRoutes = new Hono()
         labels: data.labels,
       });
       logAudit({ userId: user.id, action: 'update_item', entityType: 'item', entityId: data.id, details: { message: data.message, priority: data.priority, labels: data.labels }, ipAddress: getClientIp(c) });
+      eventBus.publish({ type: 'item.updated', projectId: existing.projectId, payload: { item } });
       return c.json({ data: enrichItem(item) });
     })
 
@@ -296,8 +314,11 @@ export const itemRoutes = new Hono()
         throw new ForbiddenError('Нет доступа к этому проекту');
       }
 
+      const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'done';
       const item = reopenItem(id, user);
       logAudit({ userId: user.id, action: 'reopen_item', entityType: 'item', entityId: id, ipAddress: getClientIp(c) });
+      dispatchWebhooks(existing.projectId, 'item.status_changed', { item, oldStatus, newStatus: 'new' }).catch(() => {});
+      eventBus.publish({ type: 'item.status_changed', projectId: existing.projectId, payload: { item, oldStatus, newStatus: 'new' } });
       return c.json({ data: enrichItem(item) });
     })
 
@@ -323,5 +344,7 @@ export const itemRoutes = new Hono()
       }).run();
 
       const note = db.select().from(scoutItemNotes).where(eq(scoutItemNotes.id, id)).get()!;
+      dispatchWebhooks(item.projectId, 'item.commented', { item, note }).catch(() => {});
+      eventBus.publish({ type: 'item.commented', projectId: item.projectId, payload: { itemId } });
       return c.json({ data: note }, 201);
     });

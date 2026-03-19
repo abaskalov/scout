@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { getUser, isAdmin, logout } from '../lib/auth';
 import { api } from '../lib/api';
+import { useSSE, type SSEEventType } from '../hooks/useSSE';
 
 export default function Layout() {
   const user = getUser();
@@ -15,33 +16,43 @@ export default function Layout() {
     setShowUserMenu(false);
   }, [location.pathname]);
 
-  useEffect(() => {
-    async function loadCounts() {
-      try {
-        const projects = await api<{
-          items: { id: number }[];
-        }>('/api/projects/list', { perPage: 100 });
+  const loadCounts = useCallback(async () => {
+    try {
+      const projects = await api<{
+        items: { id: number }[];
+      }>('/api/projects/list', { perPage: 100 });
 
-        let total = 0;
-        for (const project of projects.items) {
-          try {
-            const result = await api<{
-              counts: Record<string, number>;
-            }>('/api/items/count', { projectId: project.id });
-            total += result.counts.new ?? 0;
-          } catch {
-            // skip projects we can't access
-          }
+      let total = 0;
+      for (const project of projects.items) {
+        try {
+          const result = await api<{
+            counts: Record<string, number>;
+          }>('/api/items/count', { projectId: project.id });
+          total += result.counts.new ?? 0;
+        } catch {
+          // skip projects we can't access
         }
-        setNewCount(total);
-      } catch {
-        // ignore
       }
+      setNewCount(total);
+    } catch {
+      // ignore
     }
+  }, []);
+
+  useEffect(() => {
     loadCounts();
     const interval = setInterval(loadCounts, 30_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [loadCounts]);
+
+  // SSE: refresh badge count on item changes
+  const handleSSEEvent = useCallback((event: SSEEventType) => {
+    if (event === 'item.created' || event === 'item.status_changed' || event === 'item.deleted') {
+      loadCounts();
+    }
+  }, [loadCounts]);
+
+  useSSE({ onEvent: handleSSEEvent });
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -94,6 +105,13 @@ export default function Layout() {
                   <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
                 </svg>
                 Проекты
+              </NavLink>
+              <NavLink to="/webhooks" className={linkClass}>
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+                Вебхуки
               </NavLink>
               <NavLink to="/users" className={linkClass}>
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -204,6 +222,13 @@ export default function Layout() {
                 <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
               </svg>
               Проекты
+            </NavLink>
+            <NavLink to="/webhooks" className={bottomNavLinkClass}>
+              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+              Вебхуки
             </NavLink>
             <NavLink to="/users" className={bottomNavLinkClass}>
               <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

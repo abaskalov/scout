@@ -6,6 +6,7 @@ import Items from './pages/Items';
 import ItemDetail from './pages/ItemDetail';
 import Projects from './pages/Projects';
 import Users from './pages/Users';
+import Webhooks from './pages/Webhooks';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) {
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="items" element={<Items />} />
           <Route path="items/:id" element={<ItemDetail />} />
           <Route path="projects" element={<Projects />} />
+          <Route path="webhooks" element={<Webhooks />} />
           <Route path="users" element={<Users />} />
         </Route>
       </Routes>

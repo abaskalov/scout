@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../lib/api';
 import { formatDate, formatDateShort } from '../lib/date';
 import { isAdmin } from '../lib/auth';
+import { useSSE } from '../hooks/useSSE';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import Labels, { parseLabels } from '../components/Labels';
@@ -110,11 +111,12 @@ export default function Items() {
       .catch(() => {});
   }, []);
 
-  // Load items + counts when project or filter changes
-  useEffect(() => {
+  // Fetch items + counts (showLoading=true on initial/filter load, false on SSE refresh)
+  const fetchData = useCallback((showLoading = true) => {
     if (!selectedProject) return;
 
-    setLoading(true);
+    if (showLoading) setLoading(true);
+
     const body: Record<string, unknown> = {
       projectId: selectedProject,
       page: pagination.page,
@@ -145,8 +147,20 @@ export default function Items() {
         setCounts(countRes.counts);
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => { if (showLoading) setLoading(false); });
   }, [selectedProject, statusFilter, pagination.page, search, assigneeFilter, priorityFilter]);
+
+  // Load items + counts when project or filter changes
+  useEffect(() => {
+    fetchData(true);
+  }, [fetchData]);
+
+  // SSE: refresh list on any item change
+  const handleSSEEvent = useCallback(() => {
+    fetchData(false);
+  }, [fetchData]);
+
+  useSSE({ projectId: selectedProject, onEvent: handleSSEEvent });
 
   function handleProjectChange(e: React.ChangeEvent<HTMLSelectElement>) {
     setSelectedProject(Number(e.target.value));

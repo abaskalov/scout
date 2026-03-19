@@ -36,16 +36,19 @@ export const userRoutes = new Hono()
       const id = randomUUID();
       const passwordHash = await hashPassword(password);
 
-      db.insert(users).values({ id, email, passwordHash, name, role }).run();
+      // Transaction: insert user + pivot entries atomically
+      const { user, pivots } = db.transaction((tx) => {
+        tx.insert(users).values({ id, email, passwordHash, name, role }).run();
 
-      // Create pivot entries
-      for (const projectId of projectIds) {
-        db.insert(pivotUsersProjects).values({ userId: id, projectId }).run();
-      }
+        for (const projectId of projectIds) {
+          tx.insert(pivotUsersProjects).values({ userId: id, projectId }).run();
+        }
 
-      const user = db.select().from(users).where(eq(users.id, id)).get()!;
-      const pivots = db.select().from(pivotUsersProjects)
-        .where(eq(pivotUsersProjects.userId, id)).all();
+        const createdUser = tx.select().from(users).where(eq(users.id, id)).get()!;
+        const createdPivots = tx.select().from(pivotUsersProjects)
+          .where(eq(pivotUsersProjects.userId, id)).all();
+        return { user: createdUser, pivots: createdPivots };
+      });
 
       const currentUser = c.get('user');
       logAudit({ userId: currentUser.id, action: 'create_user', entityType: 'user', entityId: id, details: { email, role }, ipAddress: getClientIp(c) });
@@ -150,19 +153,23 @@ export const userRoutes = new Hono()
       if (isActive !== undefined) updateData.isActive = isActive;
       if (password !== undefined) updateData.passwordHash = await hashPassword(password);
 
-      db.update(users).set(updateData).where(eq(users.id, id)).run();
+      // Transaction: update user + rebuild pivots atomically
+      const { user, pivots } = db.transaction((tx) => {
+        tx.update(users).set(updateData).where(eq(users.id, id)).run();
 
-      // Rebuild pivot if projectIds provided
-      if (projectIds !== undefined) {
-        db.delete(pivotUsersProjects).where(eq(pivotUsersProjects.userId, id)).run();
-        for (const projectId of projectIds) {
-          db.insert(pivotUsersProjects).values({ userId: id, projectId }).run();
+        // Rebuild pivot if projectIds provided
+        if (projectIds !== undefined) {
+          tx.delete(pivotUsersProjects).where(eq(pivotUsersProjects.userId, id)).run();
+          for (const projectId of projectIds) {
+            tx.insert(pivotUsersProjects).values({ userId: id, projectId }).run();
+          }
         }
-      }
 
-      const user = db.select().from(users).where(eq(users.id, id)).get()!;
-      const pivots = db.select().from(pivotUsersProjects)
-        .where(eq(pivotUsersProjects.userId, id)).all();
+        const updatedUser = tx.select().from(users).where(eq(users.id, id)).get()!;
+        const updatedPivots = tx.select().from(pivotUsersProjects)
+          .where(eq(pivotUsersProjects.userId, id)).all();
+        return { user: updatedUser, pivots: updatedPivots };
+      });
 
       const currentUser = c.get('user');
       logAudit({ userId: currentUser.id, action: 'update_user', entityType: 'user', entityId: id, details: { name, role, isActive }, ipAddress: getClientIp(c) });

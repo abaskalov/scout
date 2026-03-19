@@ -7,6 +7,14 @@ import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { NotFoundError, ConflictError, ValidationError } from '../lib/errors.js';
 
+// Both db and tx share these methods — use minimal interface
+interface DbOrTx {
+  insert: typeof db.insert;
+  select: typeof db.select;
+  update: typeof db.update;
+  delete: typeof db.delete;
+}
+
 const STATUS_LABELS: Record<ItemStatus, string> = {
   new: 'новые',
   in_progress: 'в работе',
@@ -28,12 +36,13 @@ function now(): string {
 }
 
 function addAutoNote(
+  tx: DbOrTx,
   itemId: string,
   userId: string,
   content: string,
   type: 'status_change' | 'assignment',
 ): void {
-  db.insert(scoutItemNotes).values({
+  tx.insert(scoutItemNotes).values({
     id: randomUUID(),
     itemId,
     userId,
@@ -111,7 +120,7 @@ export function createItem(data: {
   sessionRecording?: string | null;
   metadata?: Record<string, string> | null;
 }) {
-  const id = randomUUID();
+  // Save files before the transaction (file I/O outside DB transaction)
   let screenshotPath: string | null = null;
   let sessionRecordingPath: string | null = null;
 
@@ -122,54 +131,67 @@ export function createItem(data: {
     sessionRecordingPath = saveRecording(data.sessionRecording, 'recordings');
   }
 
-  db.insert(scoutItems).values({
-    id,
-    projectId: data.projectId,
-    message: data.message,
-    priority: data.priority ?? 'medium',
-    labels: data.labels ? JSON.stringify(data.labels) : null,
-    pageUrl: data.pageUrl ?? null,
-    pageRoute: data.pageRoute ?? null,
-    componentFile: data.componentFile ?? null,
-    cssSelector: data.cssSelector ?? null,
-    elementText: data.elementText ?? null,
-    elementHtml: data.elementHtml ?? null,
-    viewportWidth: data.viewportWidth ?? null,
-    viewportHeight: data.viewportHeight ?? null,
-    screenshotPath,
-    sessionRecordingPath,
-    metadata: data.metadata ? JSON.stringify(data.metadata) : null,
-    reporterId: data.reporterId,
-  }).run();
+  const id = randomUUID();
 
-  return db.select().from(scoutItems).where(eq(scoutItems.id, id)).get()!;
+  try {
+    return db.transaction((tx) => {
+      tx.insert(scoutItems).values({
+        id,
+        projectId: data.projectId,
+        message: data.message,
+        priority: data.priority ?? 'medium',
+        labels: data.labels ? JSON.stringify(data.labels) : null,
+        pageUrl: data.pageUrl ?? null,
+        pageRoute: data.pageRoute ?? null,
+        componentFile: data.componentFile ?? null,
+        cssSelector: data.cssSelector ?? null,
+        elementText: data.elementText ?? null,
+        elementHtml: data.elementHtml ?? null,
+        viewportWidth: data.viewportWidth ?? null,
+        viewportHeight: data.viewportHeight ?? null,
+        screenshotPath,
+        sessionRecordingPath,
+        metadata: data.metadata ? JSON.stringify(data.metadata) : null,
+        reporterId: data.reporterId,
+      }).run();
+
+      return tx.select().from(scoutItems).where(eq(scoutItems.id, id)).get()!;
+    });
+  } catch (err) {
+    // If insert fails, clean up orphaned files
+    deleteFile(screenshotPath);
+    deleteFile(sessionRecordingPath);
+    throw err;
+  }
 }
 
 export function claimItem(itemId: string, user: User) {
-  // Atomic: only claim if status=new AND unassigned
-  const result = db.update(scoutItems)
-    .set({
-      status: 'in_progress',
-      assigneeId: user.id,
-      updatedAt: now(),
-    })
-    .where(and(
-      eq(scoutItems.id, itemId),
-      eq(scoutItems.status, 'new'),
-      isNull(scoutItems.assigneeId),
-    ))
-    .run();
+  return db.transaction((tx) => {
+    // Atomic: only claim if status=new AND unassigned
+    const result = tx.update(scoutItems)
+      .set({
+        status: 'in_progress',
+        assigneeId: user.id,
+        updatedAt: now(),
+      })
+      .where(and(
+        eq(scoutItems.id, itemId),
+        eq(scoutItems.status, 'new'),
+        isNull(scoutItems.assigneeId),
+      ))
+      .run();
 
-  if (result.changes === 0) {
-    const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
-    if (!item) throw new NotFoundError('Item');
-    throw new ConflictError('Item already claimed or not in "new" status');
-  }
+    if (result.changes === 0) {
+      const item = tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
+      if (!item) throw new NotFoundError('Item');
+      throw new ConflictError('Item already claimed or not in "new" status');
+    }
 
-  addAutoNote(itemId, user.id, `Назначено: ${user.name}`, 'assignment');
-  addAutoNote(itemId, user.id, 'Статус: новые → в работе', 'status_change');
+    addAutoNote(tx, itemId, user.id, `Назначено: ${user.name}`, 'assignment');
+    addAutoNote(tx, itemId, user.id, 'Статус: новые → в работе', 'status_change');
 
-  return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
+    return tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
+  });
 }
 
 export function updateItemStatus(
@@ -188,27 +210,29 @@ export function updateItemStatus(
 
   validateTransition(item.status as ItemStatus, newStatus);
 
-  const updateData: Record<string, unknown> = {
-    status: newStatus,
-    updatedAt: now(),
-  };
+  return db.transaction((tx) => {
+    const updateData: Record<string, unknown> = {
+      status: newStatus,
+      updatedAt: now(),
+    };
 
-  if (extra?.branchName !== undefined) updateData.branchName = extra.branchName;
-  if (extra?.mrUrl !== undefined) updateData.mrUrl = extra.mrUrl;
-  if (extra?.attemptCount !== undefined) updateData.attemptCount = extra.attemptCount;
-  if (extra?.resolutionNote !== undefined) updateData.resolutionNote = extra.resolutionNote;
+    if (extra?.branchName !== undefined) updateData.branchName = extra.branchName;
+    if (extra?.mrUrl !== undefined) updateData.mrUrl = extra.mrUrl;
+    if (extra?.attemptCount !== undefined) updateData.attemptCount = extra.attemptCount;
+    if (extra?.resolutionNote !== undefined) updateData.resolutionNote = extra.resolutionNote;
 
-  if (newStatus === 'done') {
-    updateData.resolvedById = user.id;
-    updateData.resolvedAt = now();
-  }
+    if (newStatus === 'done') {
+      updateData.resolvedById = user.id;
+      updateData.resolvedAt = now();
+    }
 
-  db.update(scoutItems).set(updateData).where(eq(scoutItems.id, itemId)).run();
-  const fromLabel = STATUS_LABELS[item.status as ItemStatus] || item.status;
-  const toLabel = STATUS_LABELS[newStatus] || newStatus;
-  addAutoNote(itemId, user.id, `Статус: ${fromLabel} → ${toLabel}`, 'status_change');
+    tx.update(scoutItems).set(updateData).where(eq(scoutItems.id, itemId)).run();
+    const fromLabel = STATUS_LABELS[item.status as ItemStatus] || item.status;
+    const toLabel = STATUS_LABELS[newStatus] || newStatus;
+    addAutoNote(tx, itemId, user.id, `Статус: ${fromLabel} → ${toLabel}`, 'status_change');
 
-  return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
+    return tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
+  });
 }
 
 export function updateItem(itemId: string, data: {
@@ -236,26 +260,29 @@ export function reopenItem(itemId: string, user: User) {
 
   validateTransition(item.status as ItemStatus, 'new');
 
-  db.update(scoutItems).set({
-    status: 'new',
-    assigneeId: null,
-    resolvedById: null,
-    resolvedAt: null,
-    updatedAt: now(),
-  }).where(eq(scoutItems.id, itemId)).run();
+  return db.transaction((tx) => {
+    tx.update(scoutItems).set({
+      status: 'new',
+      assigneeId: null,
+      resolvedById: null,
+      resolvedAt: null,
+      updatedAt: now(),
+    }).where(eq(scoutItems.id, itemId)).run();
 
-  addAutoNote(itemId, user.id, 'Переоткрыт', 'status_change');
+    addAutoNote(tx, itemId, user.id, 'Переоткрыт', 'status_change');
 
-  return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
+    return tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
+  });
 }
 
 export function deleteItem(itemId: string): void {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
   if (!item) throw new NotFoundError('Item');
 
-  // Clean up files
+  // Delete from DB first — if this fails, files remain (can be cleaned up later)
+  db.delete(scoutItems).where(eq(scoutItems.id, itemId)).run();
+
+  // Clean up files after successful DB delete
   deleteFile(item.screenshotPath);
   deleteFile(item.sessionRecordingPath);
-
-  db.delete(scoutItems).where(eq(scoutItems.id, itemId)).run();
 }

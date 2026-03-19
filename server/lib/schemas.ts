@@ -134,3 +134,51 @@ export const addNoteSchema = z.object({
   itemId: uuidSchema,
   content: z.string().min(1).max(5000),
 });
+
+// === API Keys ===
+export const createApiKeySchema = z.object({
+  projectId: uuidSchema,
+  name: z.string().min(1).max(100),
+  expiresAt: z.string().datetime().optional(),
+});
+
+export const listApiKeysSchema = z.object({
+  projectId: uuidSchema,
+});
+
+export const revokeApiKeySchema = z.object({
+  id: uuidSchema,
+});
+
+// === Auth Validation ===
+export const validateTokenSchema = z.object({
+  token: z.string().min(1),
+});
+
+// === Webhooks ===
+const webhookEventEnum = z.enum([
+  'item.created',
+  'item.status_changed',
+  'item.assigned',
+  'item.commented',
+  'item.deleted',
+]);
+
+export const createWebhookSchema = z.object({
+  projectId: uuidSchema,
+  url: z.string().url().max(500),
+  secret: z.string().max(255).optional(),
+  events: z.array(webhookEventEnum).min(1),
+});
+
+export const updateWebhookSchema = z.object({
+  id: uuidSchema,
+  url: z.string().url().max(500).optional(),
+  secret: z.string().max(255).optional(),
+  events: z.array(webhookEventEnum).min(1).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const deleteWebhookSchema = z.object({ id: uuidSchema });
+export const listWebhooksSchema = z.object({ projectId: uuidSchema });
+export const testWebhookSchema = z.object({ id: uuidSchema });

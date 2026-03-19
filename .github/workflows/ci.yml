@@ -6,30 +6,33 @@ on:
   pull_request:
     branches: [main]
 
-jobs:
-  check:
-    name: Typecheck + Tests + Build
-    runs-on: ubuntu-latest
+# Cancel in-progress runs on new push (saves runner minutes)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
+  # Typecheck and tests run in parallel (independent, both fast)
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
+        with: { version: 9 }
       - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
+        with: { node-version: 20, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
 
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Tests
-        run: pnpm test
-
-      - name: Build (server + dashboard + widget)
-        run: pnpm build
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test

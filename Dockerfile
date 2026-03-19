@@ -1,47 +1,58 @@
+# --- Build stage ---
 FROM node:20-alpine AS builder
 
-# Build tools for native addons (better-sqlite3)
+# Native addons (better-sqlite3)
 RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy workspace config and lockfile
+# 1. Copy only dependency manifests (maximizes Docker layer cache)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY dashboard/package.json dashboard/package.json
 COPY widget/package.json widget/package.json
 
-# Install dependencies, approve native builds
+# 2. Install ALL dependencies (dev + prod — needed for build)
 RUN pnpm install --frozen-lockfile
-RUN npx --yes node-gyp rebuild --directory node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
 
-# Copy source
+# 3. Copy source
 COPY tsconfig.json tsconfig.server.json drizzle.config.ts ./
 COPY server/ server/
 COPY dashboard/ dashboard/
 COPY widget/ widget/
 COPY demo/ demo/
+COPY drizzle/ drizzle/
 
-# Build all
+# 4. Build all (server TS → JS, dashboard Vite, widget Vite)
 RUN pnpm build
 
-# --- Production stage ---
+# 5. Prune dev dependencies — keep only production deps
+RUN pnpm prune --prod
+
+# --- Production stage (minimal) ---
 FROM node:20-alpine
 
 WORKDIR /app
 
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/pnpm-lock.yaml ./
-COPY --from=builder /app/pnpm-workspace.yaml ./
-COPY --from=builder /app/.npmrc ./
+# Only production node_modules (no devDependencies, no build tools)
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+
+# Compiled server
 COPY --from=builder /app/dist/server ./dist/server
+
+# Built frontend assets
 COPY --from=builder /app/dashboard/dist ./dashboard/dist
 COPY --from=builder /app/widget/dist ./widget/dist
-COPY --from=builder /app/demo ./demo
-COPY --from=builder /app/drizzle.config.ts ./
-COPY --from=builder /app/server/db/seed.ts ./server/db/seed.ts
 
+# Demo stand
+COPY --from=builder /app/demo ./demo
+
+# DB migrations
+COPY --from=builder /app/drizzle ./drizzle
+COPY --from=builder /app/drizzle.config.ts ./
+
+# Directories for data and uploads
 RUN mkdir -p data storage/screenshots storage/recordings
 
 VOLUME /app/data

@@ -307,6 +307,45 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   };
 }
 
+// --- iOS keyboard workaround: adjust panel when virtual keyboard opens ---
+let viewportCleanup: (() => void) | null = null;
+
+function setupViewportHandler(panel: HTMLDivElement): void {
+  if (viewportCleanup) return;
+  const vv = window.visualViewport;
+  if (!vv) return; // Not supported (non-iOS or old browsers)
+
+  function onResize() {
+    if (!vv) return;
+    // When keyboard opens, visualViewport.height shrinks
+    // Adjust the panel max-height so it doesn't overflow behind the keyboard
+    const offsetTop = vv.offsetTop;
+    const height = vv.height;
+    panel.style.height = `${height}px`;
+    panel.style.top = `${offsetTop}px`;
+  }
+
+  function onScroll() {
+    if (!vv) return;
+    panel.style.top = `${vv.offsetTop}px`;
+  }
+
+  vv.addEventListener('resize', onResize);
+  vv.addEventListener('scroll', onScroll);
+
+  viewportCleanup = () => {
+    vv.removeEventListener('resize', onResize);
+    vv.removeEventListener('scroll', onScroll);
+    panel.style.height = '';
+    panel.style.top = '';
+    viewportCleanup = null;
+  };
+}
+
+function teardownViewportHandler(): void {
+  if (viewportCleanup) viewportCleanup();
+}
+
 /**
  * Show the panel with the picked element info.
  */
@@ -352,6 +391,9 @@ export function showPanel(
   elements.backdrop.classList.add('visible');
   elements.panel.classList.add('visible');
 
+  // iOS keyboard fix: adjust panel when virtual keyboard opens
+  setupViewportHandler(elements.panel);
+
   setTimeout(() => elements.textarea.focus(), 300);
 }
 
@@ -359,6 +401,7 @@ export function showPanel(
  * Hide the panel.
  */
 export function hidePanel(elements: PanelElements): void {
+  teardownViewportHandler();
   elements.panel.classList.remove('visible');
   elements.backdrop.classList.remove('visible');
   setTimeout(() => {

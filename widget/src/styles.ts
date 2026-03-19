@@ -179,6 +179,7 @@ export const WIDGET_STYLES = `
     overflow-y: auto;
     padding: 20px;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   .scout-element-info {
@@ -443,6 +444,7 @@ export const WIDGET_STYLES = `
     display: flex;
     flex-direction: column;
     gap: 12px;
+    overscroll-behavior: contain;
   }
 
   .scout-login h3 {
@@ -625,6 +627,7 @@ export const WIDGET_STYLES = `
       padding-left: calc(20px + var(--safe-left));
       padding-right: calc(20px + var(--safe-right));
       -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
     }
 
     .scout-panel-footer {

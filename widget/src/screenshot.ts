@@ -16,8 +16,20 @@ import html2canvas from 'html2canvas';
  * Returns base64-encoded JPEG string (without data: prefix), or null on failure.
  */
 
-const SCREENSHOT_TIMEOUT_MS = 10_000;
+const SCREENSHOT_TIMEOUT_DESKTOP_MS = 10_000;
+const SCREENSHOT_TIMEOUT_IOS_MS = 5_000;
 const JPEG_QUALITY = 0.85;
+
+/** Detect iOS Safari (iPhone, iPad, iPod — including iPad with desktop UA) */
+function isIOSSafari(): boolean {
+  const ua = navigator?.userAgent ?? '';
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  // iPad with desktop UA (iPadOS 13+)
+  if (/Macintosh/i.test(ua) && navigator?.maxTouchPoints > 1) return true;
+  return false;
+}
+
+const SCREENSHOT_TIMEOUT_MS = isIOSSafari() ? SCREENSHOT_TIMEOUT_IOS_MS : SCREENSHOT_TIMEOUT_DESKTOP_MS;
 
 export async function captureScreenshot(highlightSelector?: string): Promise<string | null> {
   let highlightOverlay: HTMLDivElement | null = null;

@@ -34,7 +34,7 @@ interface PaginationData {
 const emptyForm = {
   name: '',
   slug: '',
-  allowedOrigins: '',
+  allowedOrigins: [''] as string[],
   autofixEnabled: false,
   isActive: true,
 };
@@ -86,7 +86,7 @@ export default function Projects() {
     setForm({
       name: p.name,
       slug: p.slug,
-      allowedOrigins: p.allowedOrigins.join(', '),
+      allowedOrigins: p.allowedOrigins.length > 0 ? [...p.allowedOrigins] : [''],
       autofixEnabled: p.autofixEnabled,
       isActive: p.isActive,
     });
@@ -100,7 +100,6 @@ export default function Projects() {
     setError('');
     try {
       const origins = form.allowedOrigins
-        .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
 
@@ -351,23 +350,61 @@ export default function Projects() {
               </label>
             )}
 
-            <label className="mt-3 block">
+            <div className="mt-3">
               <span className="text-sm font-medium text-gray-700">
                 Разрешённые источники
               </span>
-              <input
-                type="text"
-                value={form.allowedOrigins}
-                onChange={(e) =>
-                  setForm({ ...form, allowedOrigins: e.target.value })
+              <div className="mt-1 space-y-2">
+                {form.allowedOrigins.map((origin, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="url"
+                      value={origin}
+                      onChange={(e) => {
+                        const updated = [...form.allowedOrigins];
+                        updated[idx] = e.target.value;
+                        setForm({ ...form, allowedOrigins: updated });
+                      }}
+                      className={`block w-full rounded-md border px-3 py-2 text-sm ${
+                        origin && !origin.match(/^https?:\/\//)
+                          ? 'border-red-300 bg-red-50'
+                          : 'border-gray-300'
+                      }`}
+                      placeholder="https://example.com"
+                    />
+                    {form.allowedOrigins.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = form.allowedOrigins.filter((_, i) => i !== idx);
+                          setForm({ ...form, allowedOrigins: updated });
+                        }}
+                        className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                        title="Удалить"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                          <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm({ ...form, allowedOrigins: [...form.allowedOrigins, ''] })
                 }
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                placeholder="https://example.com, https://app.example.com"
-              />
-              <span className="text-xs text-gray-400">
-                URL через запятую
-              </span>
-            </label>
+                className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700"
+              >
+                + Добавить источник
+              </button>
+              {form.allowedOrigins.some((o) => o && !o.match(/^https?:\/\//)) && (
+                <p className="mt-1 text-xs text-red-500">
+                  Источник должен начинаться с http:// или https://
+                </p>
+              )}
+            </div>
 
             {editingId && (
               <div className="mt-3 flex items-center gap-4">

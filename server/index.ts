@@ -13,7 +13,9 @@ import { webhookRoutes } from './routes/webhooks.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { eventRoutes } from './routes/events.js';
 import { docsRoutes } from './routes/docs.js';
-import { sqlite } from './db/client.js';
+import { db, sqlite } from './db/client.js';
+import { projects } from './db/schema.js';
+import { eq } from 'drizzle-orm';
 import { securityHeaders } from './middleware/security-headers.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import { authMiddleware } from './middleware/auth.js';
@@ -68,19 +70,53 @@ const corsOrigins = (process.env.SCOUT_CORS_ORIGINS || '')
   .map((s) => s.trim())
   .filter(Boolean);
 
+// Cache of all allowed origins: env var + project allowedOrigins from DB (refreshed every 60s)
+let cachedOrigins: Set<string> = new Set();
+let cacheExpiry = 0;
+
+function getAllowedOrigins(): Set<string> {
+  const now = Date.now();
+  if (now < cacheExpiry) return cachedOrigins;
+
+  const origins = new Set<string>();
+  // Add env var origins
+  for (const o of corsOrigins) origins.add(o);
+  // Add project origins from DB
+  try {
+    const allProjects = db.select({ allowedOrigins: projects.allowedOrigins })
+      .from(projects)
+      .where(eq(projects.isActive, true))
+      .all();
+    for (const p of allProjects) {
+      try {
+        const arr: string[] = JSON.parse(p.allowedOrigins);
+        for (const o of arr) origins.add(o);
+      } catch { /* skip malformed JSON */ }
+    }
+  } catch (err) {
+    logger.warn({ err }, 'Failed to load project origins for CORS');
+  }
+
+  cachedOrigins = origins;
+  cacheExpiry = now + 60_000; // Cache for 60s
+  return origins;
+}
+
 app.use('/api/*', cors({
   origin: (origin) => {
     // Same-origin requests (no Origin header) — always allowed
     if (!origin) return origin;
     // In dev allow all origins
     if (!isProduction) return origin;
-    // In production: check whitelist
-    if (corsOrigins.includes(origin)) return origin;
+    // In production: check env whitelist + project DB origins
+    const allowed = getAllowedOrigins();
+    if (allowed.has(origin)) return origin;
     // Reject — return empty string to deny
     return '';
   },
   allowMethods: ['GET', 'POST', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }));
 
 // --- API version header ---

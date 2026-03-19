@@ -8,3 +8,7 @@ storage/
 *.db-shm
 .DS_Store
 CLAUDE.md
+
+# Test artifacts
+test-results/
+*.png

@@ -1,17 +1,11 @@
 import html2canvas from 'html2canvas';
 
 /**
- * Capture a full-page screenshot using html2canvas.
+ * Capture a screenshot using html2canvas with oklch/modern CSS safety patches.
  *
- * html2canvas renders the DOM to <canvas> by parsing CSS and drawing directly —
- * NO SVG foreignObject (unlike modern-screenshot / html-to-image).
- * This makes it the most cross-browser-compatible DOM screenshot solution.
- *
- * Professional improvements applied:
- * - JPEG format instead of PNG (3-5x smaller payload)
- * - Timeout via Promise.race (prevents hanging on complex pages)
- * - useCORS for cross-origin images (best-effort)
- * - Graceful degradation (returns null on failure)
+ * html2canvas v1.4 crashes on oklch/oklab/color-mix CSS functions (Tailwind 4).
+ * We patch its internal color parser to return transparent instead of throwing.
+ * The onclone hook then resolves real colors via getComputedStyle.
  *
  * Returns base64-encoded JPEG string (without data: prefix), or null on failure.
  */
@@ -19,6 +13,58 @@ import html2canvas from 'html2canvas';
 const SCREENSHOT_TIMEOUT_DESKTOP_MS = 10_000;
 const SCREENSHOT_TIMEOUT_IOS_MS = 8_000;
 const JPEG_QUALITY = 0.85;
+
+/**
+ * Wrap getComputedStyle to intercept oklch/oklab values before html2canvas sees them.
+ * html2canvas calls getComputedStyle internally — we proxy it to replace unsupported
+ * color functions with browser-resolved rgb() equivalents.
+ */
+let gcsOriginal: typeof window.getComputedStyle | null = null;
+let gcsResolveCache: Map<string, string> | null = null;
+
+/** Install getComputedStyle proxy that converts oklch→rgb before html2canvas sees them */
+function installComputedStyleProxy(): void {
+  if (gcsOriginal) return; // already installed
+  gcsOriginal = window.getComputedStyle;
+  gcsResolveCache = new Map();
+  const original = gcsOriginal;
+  const cache = gcsResolveCache;
+
+  window.getComputedStyle = function (el: Element, pseudo?: string | null): CSSStyleDeclaration {
+    const cs = original.call(window, el, pseudo);
+    return new Proxy(cs, {
+      get(target, prop) {
+        if (prop === 'getPropertyValue') {
+          return function (name: string): string {
+            const val = target.getPropertyValue(name);
+            if (val && hasUnsupportedColor(val)) {
+              const key = name + ':' + val;
+              let resolved = cache.get(key);
+              if (!resolved) { resolved = resolveColor(val, name); cache.set(key, resolved); }
+              return resolved;
+            }
+            return val;
+          };
+        }
+        const value = Reflect.get(target, prop);
+        if (typeof value === 'function') return value.bind(target);
+        if (typeof prop === 'string' && typeof value === 'string' && hasUnsupportedColor(value)) {
+          return resolveColor(value, prop);
+        }
+        return value;
+      },
+    });
+  } as typeof window.getComputedStyle;
+}
+
+/** Restore original getComputedStyle */
+function uninstallComputedStyleProxy(): void {
+  if (gcsOriginal) {
+    window.getComputedStyle = gcsOriginal;
+    gcsOriginal = null;
+    gcsResolveCache = null;
+  }
+}
 
 /** Detect iOS Safari (iPhone, iPad, iPod — including iPad with desktop UA) */
 function isIOSSafari(): boolean {
@@ -187,6 +233,10 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
   }
 
   try {
+    // Proxy getComputedStyle to convert oklch→rgb before html2canvas parser sees them.
+    // html2canvas reads computed styles internally and crashes on oklch().
+    installComputedStyleProxy();
+
     const ios = isIOSSafari();
 
     // iOS Safari: capture viewport only (full-page creates huge canvas that crashes)
@@ -253,9 +303,9 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
     console.warn('[Scout] Screenshot capture failed:', err);
     return null;
   } finally {
-    if (highlightOverlay) {
-      highlightOverlay.remove();
-    }
+    uninstallComputedStyleProxy();
+    if (resolveEl) { resolveEl.remove(); resolveEl = null; }
+    if (highlightOverlay) highlightOverlay.remove();
   }
 }
 

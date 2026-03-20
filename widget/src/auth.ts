@@ -25,6 +25,7 @@ let cachedUser: ScoutUser | null = null;
 
 // --- SSO iframe bridge ---
 let ssoIframe: HTMLIFrameElement | null = null;
+let ssoWindow: Window | null = null; // Cached contentWindow to avoid repeated cross-origin access
 let ssoReady = false;
 let ssoOrigin = '';
 let msgId = 0;
@@ -115,14 +116,14 @@ function onSSOMessage(e: MessageEvent): void {
 
 function sendSSOMessage(cmd: string, payload?: Record<string, string>): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
-    if (!ssoIframe?.contentWindow) { reject(new Error('No iframe')); return; }
+    if (!ssoWindow) { reject(new Error('No iframe')); return; }
     const id = ++msgId;
     const timer = setTimeout(() => {
       pendingMessages.delete(id);
       reject(new Error('SSO timeout'));
     }, SSO_MSG_TIMEOUT_MS);
     pendingMessages.set(id, (data) => { clearTimeout(timer); resolve(data); });
-    ssoIframe.contentWindow.postMessage({ ns: 'scout-sso', id, cmd, ...payload }, ssoOrigin);
+    ssoWindow.postMessage({ ns: 'scout-sso', id, cmd, ...payload }, ssoOrigin);
   });
 }
 
@@ -136,6 +137,10 @@ function startIframeSSO(apiUrl: string): void {
   ssoIframe.src = `${apiUrl}/auth/sso`;
   ssoIframe.style.cssText = 'display:none;width:0;height:0;border:none;position:absolute';
   ssoIframe.setAttribute('aria-hidden', 'true');
+  // Cache contentWindow once on load to avoid repeated cross-origin access warnings in Safari
+  ssoIframe.addEventListener('load', () => {
+    try { ssoWindow = ssoIframe?.contentWindow ?? null; } catch { ssoWindow = null; }
+  }, { once: true });
   document.body.appendChild(ssoIframe);
 
   // Non-blocking: try to ping iframe, mark ready if it responds

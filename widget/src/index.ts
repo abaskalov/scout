@@ -336,7 +336,11 @@ async function init(): Promise<void> {
   }
 
   // --- Create FAB ---
+  let fabBusy = false; // Prevent double-click opening multiple popups
+
   const fab = createFab(async () => {
+    if (fabBusy) return;
+
     const token = getToken();
     if (token) {
       startScoutMode();
@@ -344,8 +348,11 @@ async function init(): Promise<void> {
     }
 
     // No token — try popup SSO first (cross-domain, all browsers)
+    fabBusy = true;
     hideFab(fab);
     const ssoOk = await tryPopupSSO(apiUrl);
+    fabBusy = false;
+
     if (ssoOk) {
       startScoutMode();
       return;

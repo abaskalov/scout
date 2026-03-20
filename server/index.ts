@@ -163,33 +163,31 @@ app.use('/storage/*', authMiddleware, serveStatic({ root: './' }));
 
 // SSO bridge — lightweight HTML page for cross-domain token storage via postMessage
 app.get('/auth/sso', (c) => {
-  // Allow framing from any origin (this page is specifically designed to be iframed)
   c.header('X-Frame-Options', '');
-  c.header('Content-Security-Policy', "frame-ancestors *; default-src 'self' 'unsafe-inline'");
+
+  // Build allowedOrigins JSON for inline script
+  const origins = getAllowedOrigins();
+  const originsJson = JSON.stringify([...origins]);
 
   return c.html(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Scout SSO Bridge</title></head>
+<html><head><meta charset="utf-8"><title>Scout SSO</title></head>
 <body><script>
 (function(){
   var TK='__scout_token__',UK='__scout_user__';
+  var ALLOWED=${originsJson};
+  function allowed(o){if(!ALLOWED.length)return true;for(var i=0;i<ALLOWED.length;i++){if(ALLOWED[i]===o)return true}return false}
   function g(k){try{return localStorage.getItem(k)}catch(e){return null}}
   function s(k,v){try{localStorage.setItem(k,v)}catch(e){}}
   function r(k){try{localStorage.removeItem(k)}catch(e){}}
   window.addEventListener('message',function(e){
+    if(!allowed(e.origin))return;
     var d=e.data;
     if(!d||d.ns!=='scout-sso')return;
     var resp={ns:'scout-sso',id:d.id};
-    if(d.cmd==='getToken'){
-      resp.token=g(TK);resp.user=g(UK);
-    }else if(d.cmd==='setToken'){
-      if(d.token)s(TK,d.token);
-      if(d.user)s(UK,d.user);
-      resp.ok=true;
-    }else if(d.cmd==='clearToken'){
-      r(TK);r(UK);resp.ok=true;
-    }else if(d.cmd==='ping'){
-      resp.ok=true;
-    }
+    if(d.cmd==='getToken'){resp.token=g(TK);resp.user=g(UK)}
+    else if(d.cmd==='setToken'){if(d.token)s(TK,d.token);if(d.user)s(UK,d.user);resp.ok=true}
+    else if(d.cmd==='clearToken'){r(TK);r(UK);resp.ok=true}
+    else if(d.cmd==='ping'){resp.ok=true}
     e.source.postMessage(resp,e.origin);
   });
 })();
@@ -197,12 +195,18 @@ app.get('/auth/sso', (c) => {
 });
 
 // SSO popup — login page opened as popup for cross-domain auth
-// Token stored as first-party cookie on scout.kafu.kz, shared via postMessage
 app.get('/auth/sso/popup', (c) => {
-  // Allow popup to be opened from any site
   c.header('X-Frame-Options', 'DENY');
 
-  const apiOrigin = `${c.req.header('x-forwarded-proto') || 'https'}://${c.req.header('host') || 'scout.kafu.kz'}`;
+  // Validate opener origin against allowedOrigins
+  const openerOrigin = c.req.query('origin') || '';
+  const allowed = getAllowedOrigins();
+  const validOrigin = (!isProduction || allowed.has(openerOrigin)) ? openerOrigin : '';
+
+  // Use request host for same-origin API calls (avoids host header injection)
+  const proto = isProduction ? 'https' : (c.req.header('x-forwarded-proto') || 'http');
+  const host = c.req.header('host') || 'localhost';
+  const apiOrigin = `${proto}://${host}`;
 
   return c.html(`<!DOCTYPE html>
 <html><head>
@@ -218,17 +222,18 @@ h2{font-size:20px;font-weight:600;margin-bottom:4px}
 label{display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px}
 input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:16px;font-family:inherit;outline:none;transition:border-color .15s;margin-bottom:16px}
 input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,0.1)}
-button{width:100%;padding:12px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s}
-button:hover{background:#2563eb}
-button:disabled{opacity:.6;cursor:not-allowed}
+.btn{width:100%;padding:12px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s}
+.btn:hover{background:#2563eb}
+.btn:disabled{opacity:.6;cursor:not-allowed}
 .err{color:#ef4444;font-size:13px;min-height:18px;margin-bottom:12px}
-.loading{text-align:center;color:#6b7280;font-size:14px;padding:40px 0}
 .spinner{width:32px;height:32px;border:3px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 16px}
+.done{text-align:center;padding:40px 0;color:#22c55e;font-size:15px;font-weight:500}
+.done svg{display:block;margin:0 auto 12px;width:48px;height:48px}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head><body>
 <div class="card">
-<div id="loading"><div class="spinner"></div>Проверка сессии...</div>
+<div id="loading"><div class="spinner"></div><p style="text-align:center;color:#6b7280;font-size:14px">Проверка сессии...</p></div>
 <div id="form" style="display:none">
 <h2>Scout</h2>
 <p class="sub">Войдите, чтобы сообщать о багах</p>
@@ -237,32 +242,44 @@ button:disabled{opacity:.6;cursor:not-allowed}
 <label for="p">Пароль</label>
 <input id="p" type="password" autocomplete="current-password">
 <p class="err" id="err"></p>
-<button id="btn" type="button">Войти</button>
+<button class="btn" id="btn" type="button">Войти</button>
+</div>
+<div id="done" style="display:none" class="done">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+Вы вошли! Вернитесь на сайт.
 </div>
 </div>
 <script>
 (function(){
 var API='${apiOrigin}';
+var TARGET='${validOrigin}';
 var CK='scout_session';
 function getCk(){var m=document.cookie.match(new RegExp('(^| )'+CK+'=([^;]+)'));return m?m[2]:null}
 function setCk(t){document.cookie=CK+'='+t+'; path=/; max-age=604800; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'')}
 function delCk(){document.cookie=CK+'=; path=/; max-age=0'}
 function send(token,user){
-  if(window.opener){window.opener.postMessage({ns:'scout-sso-popup',token:token,user:JSON.stringify(user)},'*')}
-  window.close();
+  if(window.opener&&TARGET){
+    window.opener.postMessage({ns:'scout-sso-popup',token:token,user:JSON.stringify(user)},TARGET);
+    try{window.close()}catch(e){}
+    setTimeout(function(){if(!window.closed){
+      document.getElementById('loading').style.display='none';
+      document.getElementById('form').style.display='none';
+      document.getElementById('done').style.display='';
+    }},300);
+  }else{
+    document.getElementById('loading').style.display='none';
+    document.getElementById('form').style.display='none';
+    document.getElementById('done').style.display='';
+  }
 }
 function showForm(){document.getElementById('loading').style.display='none';document.getElementById('form').style.display='';document.getElementById('e').focus()}
-// Check existing session
 var tk=getCk();
 if(tk){
   fetch(API+'/api/auth/me',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tk}})
   .then(function(r){return r.json()})
-  .then(function(d){
-    if(d.data&&d.data.user){send(tk,d.data.user)}
-    else{delCk();showForm()}
-  }).catch(function(){delCk();showForm()});
+  .then(function(d){if(d.data&&d.data.user){send(tk,d.data.user)}else{delCk();showForm()}})
+  .catch(function(){delCk();showForm()});
 }else{showForm()}
-// Login handler
 document.getElementById('btn').addEventListener('click',function(){
   var email=document.getElementById('e').value.trim();
   var pass=document.getElementById('p').value;
@@ -274,11 +291,8 @@ document.getElementById('btn').addEventListener('click',function(){
   .then(function(r){return r.json().then(function(b){return{ok:r.ok,body:b}})})
   .then(function(r){
     if(!r.ok){throw new Error(r.body.error||r.body.message||'Ошибка входа')}
-    var tk=r.body.data.token,u=r.body.data.user;
-    setCk(tk);send(tk,u);
-  }).catch(function(e){
-    err.textContent=e.message;btn.disabled=false;btn.textContent='Войти';
-  });
+    setCk(r.body.data.token);send(r.body.data.token,r.body.data.user);
+  }).catch(function(e){err.textContent=e.message;btn.disabled=false;btn.textContent='Войти'});
 });
 document.getElementById('p').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('btn').click()});
 })();

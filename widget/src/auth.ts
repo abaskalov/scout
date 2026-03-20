@@ -21,48 +21,40 @@ interface LoginResponse {
 let cachedToken: string | null = null;
 let cachedUser: ScoutUser | null = null;
 
-// --- SSO iframe bridge (cross-domain, works in Chrome) ---
+// --- SSO iframe bridge ---
 let ssoIframe: HTMLIFrameElement | null = null;
 let ssoReady = false;
 let ssoOrigin = '';
 let msgId = 0;
 const pendingMessages = new Map<number, (data: Record<string, unknown>) => void>();
 
-const SSO_INIT_TIMEOUT_MS = 3_000;
-const SSO_MSG_TIMEOUT_MS = 2_000;
+const SSO_IFRAME_TIMEOUT_MS = 2_000;
+const SSO_MSG_TIMEOUT_MS = 1_500;
+const POPUP_POLL_INTERVAL_MS = 300;
+
+/** Validate JWT format: 3 base64url segments separated by dots */
+function isValidJWT(token: string): boolean {
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
+}
 
 // ============================================================
 // Cookie-based SSO for subdomains (works in ALL browsers)
-// stg.avtozor.uz and stgadmin.avtozor.uz share .avtozor.uz cookies
 // ============================================================
 
-/**
- * Extract parent domain for cookie sharing between subdomains.
- * stg.avtozor.uz → .avtozor.uz
- * stgadmin.avtozor.uz → .avtozor.uz
- * Returns null for localhost / IP addresses / bare domains.
- */
 function getParentDomain(): string | null {
   const hostname = window.location.hostname;
-  // Skip localhost and IP addresses
   if (hostname === 'localhost' || /^\d+(\.\d+){3}$/.test(hostname)) return null;
-
   const parts = hostname.split('.');
-  // Need at least 3 parts (sub.domain.tld) to set parent domain cookie
   if (parts.length < 3) return null;
-
-  // Use last 2 parts as parent domain
-  // Browser will silently reject if it's a public suffix (e.g. .co.uk)
+  // Browser silently rejects public suffixes (.co.uk, etc.)
   return '.' + parts.slice(-2).join('.');
 }
 
 function saveToCookie(token: string, user: ScoutUser): void {
   const domain = getParentDomain();
   if (!domain) return;
-
   const secure = window.location.protocol === 'https:' ? '; Secure' : '';
   const base = `path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax${secure}; domain=${domain}`;
-
   try {
     document.cookie = `${COOKIE_TOKEN}=${token}; ${base}`;
     document.cookie = `${COOKIE_USER}=${encodeURIComponent(JSON.stringify(user))}; ${base}`;
@@ -74,23 +66,19 @@ function loadFromCookie(): boolean {
     const cookies = document.cookie.split(';');
     let token: string | null = null;
     let user: ScoutUser | null = null;
-
     for (const c of cookies) {
       const trimmed = c.trim();
       if (trimmed.startsWith(COOKIE_TOKEN + '=')) {
-        token = trimmed.slice(COOKIE_TOKEN.length + 1);
+        const val = trimmed.slice(COOKIE_TOKEN.length + 1);
+        if (isValidJWT(val)) token = val;
       }
       if (trimmed.startsWith(COOKIE_USER + '=')) {
-        try {
-          user = JSON.parse(decodeURIComponent(trimmed.slice(COOKIE_USER.length + 1)));
-        } catch { /* malformed user cookie */ }
+        try { user = JSON.parse(decodeURIComponent(trimmed.slice(COOKIE_USER.length + 1))); } catch { /* skip */ }
       }
     }
-
     if (token) {
       cachedToken = token;
       cachedUser = user;
-      // Sync to localStorage as backup
       saveToLocalStorage(token, user);
       return true;
     }
@@ -101,7 +89,6 @@ function loadFromCookie(): boolean {
 function clearCookie(): void {
   const domain = getParentDomain();
   if (!domain) return;
-
   try {
     document.cookie = `${COOKIE_TOKEN}=; path=/; max-age=0; domain=${domain}`;
     document.cookie = `${COOKIE_USER}=; path=/; max-age=0; domain=${domain}`;
@@ -112,58 +99,11 @@ function clearCookie(): void {
 // SSO iframe bridge (cross-domain, Chrome + Firefox)
 // ============================================================
 
-/**
- * Initialize SSO. Token resolution priority:
- * 1. Cookie (subdomain sharing — works in ALL browsers including Safari)
- * 2. SSO iframe (cross-domain — works in Chrome, blocked by Safari ITP)
- * 3. Host localStorage (single-origin fallback)
- */
-export async function initSSO(apiUrl: string): Promise<void> {
-  ssoOrigin = new URL(apiUrl).origin;
-
-  // 1. Try cookie first (subdomain SSO — most reliable)
-  if (loadFromCookie()) return;
-
-  // 2. If same origin, just use localStorage
-  if (window.location.origin === ssoOrigin) {
-    loadFromLocalStorage();
-    return;
-  }
-
-  // 3. Try iframe SSO (cross-domain)
-  try {
-    window.addEventListener('message', onSSOMessage);
-
-    ssoIframe = document.createElement('iframe');
-    ssoIframe.src = `${apiUrl}/auth/sso`;
-    ssoIframe.style.cssText = 'display:none;width:0;height:0;border:none;position:absolute';
-    ssoIframe.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(ssoIframe);
-
-    await waitForIframe();
-    ssoReady = true;
-
-    const data = await sendSSOMessage('getToken');
-    if (data.token && typeof data.token === 'string') {
-      cachedToken = data.token;
-      if (data.user && typeof data.user === 'string') {
-        try { cachedUser = JSON.parse(data.user); } catch { /* ignore */ }
-      }
-      saveToLocalStorage(cachedToken, cachedUser);
-      return;
-    }
-  } catch {
-    ssoReady = false;
-  }
-
-  // 4. Fallback to host localStorage
-  loadFromLocalStorage();
-}
-
 function onSSOMessage(e: MessageEvent): void {
+  // SECURITY: only accept messages from the SSO origin
+  if (e.origin !== ssoOrigin) return;
   const data = e.data;
   if (!data || data.ns !== 'scout-sso' || typeof data.id !== 'number') return;
-
   const resolve = pendingMessages.get(data.id);
   if (resolve) {
     pendingMessages.delete(data.id);
@@ -173,63 +113,135 @@ function onSSOMessage(e: MessageEvent): void {
 
 function sendSSOMessage(cmd: string, payload?: Record<string, string>): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
-    if (!ssoIframe?.contentWindow) {
-      reject(new Error('SSO iframe not available'));
-      return;
-    }
-
+    if (!ssoIframe?.contentWindow) { reject(new Error('No iframe')); return; }
     const id = ++msgId;
     const timer = setTimeout(() => {
       pendingMessages.delete(id);
-      reject(new Error('SSO message timeout'));
+      reject(new Error('SSO timeout'));
     }, SSO_MSG_TIMEOUT_MS);
-
-    pendingMessages.set(id, (data) => {
-      clearTimeout(timer);
-      resolve(data);
-    });
-
-    ssoIframe.contentWindow.postMessage(
-      { ns: 'scout-sso', id, cmd, ...payload },
-      ssoOrigin,
-    );
+    pendingMessages.set(id, (data) => { clearTimeout(timer); resolve(data); });
+    ssoIframe.contentWindow.postMessage({ ns: 'scout-sso', id, cmd, ...payload }, ssoOrigin);
   });
 }
 
-function waitForIframe(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!ssoIframe) { reject(new Error('No iframe')); return; }
+/** Start iframe SSO in background (non-blocking) */
+function startIframeSSO(apiUrl: string): void {
+  if (window.location.origin === ssoOrigin) return;
 
-    let attempts = 0;
-    const maxAttempts = Math.ceil(SSO_INIT_TIMEOUT_MS / 200);
+  window.addEventListener('message', onSSOMessage);
 
-    function tryPing(): void {
-      attempts++;
-      sendSSOMessage('ping')
-        .then(() => resolve())
-        .catch(() => {
-          if (attempts >= maxAttempts) {
-            reject(new Error('SSO iframe timeout'));
-          } else {
-            setTimeout(tryPing, 200);
-          }
-        });
+  ssoIframe = document.createElement('iframe');
+  ssoIframe.src = `${apiUrl}/auth/sso`;
+  ssoIframe.style.cssText = 'display:none;width:0;height:0;border:none;position:absolute';
+  ssoIframe.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(ssoIframe);
+
+  // Non-blocking: try to ping iframe, mark ready if it responds
+  let attempts = 0;
+  const maxAttempts = Math.ceil(SSO_IFRAME_TIMEOUT_MS / 200);
+
+  function tryPing(): void {
+    attempts++;
+    sendSSOMessage('ping')
+      .then(() => {
+        ssoReady = true;
+        // If no token yet, try iframe
+        if (!cachedToken) {
+          sendSSOMessage('getToken').then((data) => {
+            if (data.token && typeof data.token === 'string' && isValidJWT(data.token)) {
+              cachedToken = data.token;
+              if (data.user && typeof data.user === 'string') {
+                try { cachedUser = JSON.parse(data.user); } catch { /* skip */ }
+              }
+              saveToLocalStorage(cachedToken, cachedUser);
+            }
+          }).catch(() => { /* ignore */ });
+        }
+      })
+      .catch(() => {
+        if (attempts < maxAttempts) setTimeout(tryPing, 200);
+      });
+  }
+
+  ssoIframe.addEventListener('load', () => setTimeout(tryPing, 50), { once: true });
+  setTimeout(() => { if (attempts === 0) tryPing(); }, 500);
+}
+
+// ============================================================
+// Popup-based SSO (cross-domain, works in ALL browsers)
+// ============================================================
+
+/**
+ * Try to authenticate via popup SSO.
+ * Returns true if authenticated, false if popup was blocked/closed.
+ */
+export function tryPopupSSO(apiUrl: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let resolved = false;
+
+    function done(result: boolean): void {
+      if (resolved) return;
+      resolved = true;
+      window.removeEventListener('message', onMessage);
+      clearInterval(pollTimer);
+      resolve(result);
     }
 
-    ssoIframe.addEventListener('load', () => setTimeout(tryPing, 50), { once: true });
-    setTimeout(() => { if (attempts === 0) tryPing(); }, 500);
+    const w = 420;
+    const h = 540;
+    const left = Math.round((screen.width - w) / 2);
+    const top = Math.round((screen.height - h) / 2);
+
+    // Pass opener origin for server-side validation
+    const popupUrl = `${apiUrl}/auth/sso/popup?origin=${encodeURIComponent(window.location.origin)}`;
+    const popup = window.open(
+      popupUrl,
+      'scout-sso',
+      `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=no`,
+    );
+
+    if (!popup) { done(false); return; }
+
+    function onMessage(e: MessageEvent): void {
+      // SECURITY: only accept messages from the SSO origin
+      if (e.origin !== ssoOrigin) return;
+      const data = e.data;
+      if (!data || data.ns !== 'scout-sso-popup') return;
+
+      if (data.token && typeof data.token === 'string' && isValidJWT(data.token)) {
+        cachedToken = data.token;
+        try { cachedUser = data.user ? JSON.parse(data.user) : null; } catch { cachedUser = null; }
+        saveToCookie(cachedToken, cachedUser);
+        saveToLocalStorage(cachedToken, cachedUser);
+        if (ssoReady) {
+          sendSSOMessage('setToken', { token: cachedToken, user: data.user ?? '' }).catch(() => { /* skip */ });
+        }
+        done(true);
+      } else {
+        done(false);
+      }
+    }
+
+    window.addEventListener('message', onMessage);
+
+    const pollTimer = setInterval(() => {
+      try {
+        if (popup.closed) done(false);
+      } catch { /* cross-origin — still open */ }
+    }, POPUP_POLL_INTERVAL_MS);
   });
 }
 
 // ============================================================
-// localStorage fallback (single-origin)
+// localStorage fallback
 // ============================================================
 
 function loadFromLocalStorage(): void {
   try {
-    cachedToken = localStorage.getItem(TOKEN_KEY);
-    const raw = localStorage.getItem(USER_KEY);
-    cachedUser = raw ? JSON.parse(raw) : null;
+    const raw = localStorage.getItem(TOKEN_KEY);
+    cachedToken = (raw && isValidJWT(raw)) ? raw : null;
+    const userRaw = localStorage.getItem(USER_KEY);
+    cachedUser = userRaw ? JSON.parse(userRaw) : null;
   } catch {
     cachedToken = null;
     cachedUser = null;
@@ -238,92 +250,41 @@ function loadFromLocalStorage(): void {
 
 function saveToLocalStorage(token: string | null, user: ScoutUser | null): void {
   try {
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token);
-    } else {
-      localStorage.removeItem(TOKEN_KEY);
-    }
-    if (user) {
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(USER_KEY);
-    }
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+    else localStorage.removeItem(USER_KEY);
   } catch { /* localStorage may be blocked */ }
 }
 
 // ============================================================
-// Popup-based SSO (cross-domain, works in ALL browsers)
-// Opens scout.kafu.kz/auth/sso/popup in a popup window.
-// The popup reads its first-party cookie and sends token via postMessage.
+// Initialization
 // ============================================================
 
-const POPUP_POLL_INTERVAL_MS = 300;
-
 /**
- * Try to authenticate via popup SSO.
- * Opens a popup to the Scout API origin where the session cookie is first-party.
- * Returns true if authenticated, false if popup was blocked or user closed it.
+ * Initialize SSO. Non-blocking — cookie + localStorage are checked synchronously,
+ * iframe SSO starts in background.
  */
-export function tryPopupSSO(apiUrl: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const w = 420;
-    const h = 540;
-    const left = Math.round((screen.width - w) / 2);
-    const top = Math.round((screen.height - h) / 2);
+export async function initSSO(apiUrl: string): Promise<void> {
+  ssoOrigin = new URL(apiUrl).origin;
 
-    const popup = window.open(
-      `${apiUrl}/auth/sso/popup`,
-      'scout-sso',
-      `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=no`,
-    );
+  // 1. Cookie (subdomain SSO — instant, works everywhere)
+  if (loadFromCookie()) {
+    startIframeSSO(apiUrl); // background sync
+    return;
+  }
 
-    if (!popup) {
-      // Popup blocked by browser
-      resolve(false);
-      return;
-    }
+  // 2. Same origin — just use localStorage
+  if (window.location.origin === ssoOrigin) {
+    loadFromLocalStorage();
+    return;
+  }
 
-    function onMessage(e: MessageEvent): void {
-      const data = e.data;
-      if (!data || data.ns !== 'scout-sso-popup') return;
+  // 3. localStorage fallback
+  loadFromLocalStorage();
 
-      window.removeEventListener('message', onMessage);
-      clearInterval(pollTimer);
-
-      if (data.token && typeof data.token === 'string') {
-        cachedToken = data.token;
-        try { cachedUser = data.user ? JSON.parse(data.user) : null; } catch { cachedUser = null; }
-
-        // Save to all storage layers
-        saveToCookie(cachedToken, cachedUser);
-        saveToLocalStorage(cachedToken, cachedUser);
-        if (ssoReady) {
-          sendSSOMessage('setToken', {
-            token: cachedToken,
-            user: data.user ?? '',
-          }).catch(() => { /* ignore */ });
-        }
-
-        resolve(true);
-      } else {
-        resolve(false);
-      }
-    }
-
-    window.addEventListener('message', onMessage);
-
-    // Poll for popup close (user closed without completing auth)
-    const pollTimer = setInterval(() => {
-      try {
-        if (popup.closed) {
-          clearInterval(pollTimer);
-          window.removeEventListener('message', onMessage);
-          // Small delay to allow pending postMessage to arrive
-          setTimeout(() => resolve(false), 100);
-        }
-      } catch { /* cross-origin access error — popup still open */ }
-    }, POPUP_POLL_INTERVAL_MS);
-  });
+  // 4. Start iframe SSO in background (may find token later)
+  startIframeSSO(apiUrl);
 }
 
 // ============================================================
@@ -341,31 +302,20 @@ export function getUser(): ScoutUser | null {
 export function saveAuth(token: string, user: ScoutUser): void {
   cachedToken = token;
   cachedUser = user;
-
-  // 1. Cookie (subdomain SSO — works everywhere)
   saveToCookie(token, user);
-
-  // 2. localStorage (host fallback)
   saveToLocalStorage(token, user);
-
-  // 3. SSO iframe (cross-domain)
   if (ssoReady) {
-    sendSSOMessage('setToken', {
-      token,
-      user: JSON.stringify(user),
-    }).catch(() => { /* SSO save failed — cookie + localStorage are fallbacks */ });
+    sendSSOMessage('setToken', { token, user: JSON.stringify(user) }).catch(() => { /* skip */ });
   }
 }
 
 export function clearAuth(): void {
   cachedToken = null;
   cachedUser = null;
-
   clearCookie();
   saveToLocalStorage(null, null);
-
   if (ssoReady) {
-    sendSSOMessage('clearToken').catch(() => { /* ignore */ });
+    sendSSOMessage('clearToken').catch(() => { /* skip */ });
   }
 }
 
@@ -375,12 +325,10 @@ export async function login(apiUrl: string, email: string, password: string): Pr
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new Error(body?.error ?? body?.message ?? `Ошибка входа (${res.status})`);
   }
-
   const json: LoginResponse = await res.json();
   const { token, user } = json.data;
   saveAuth(token, user);
@@ -391,35 +339,21 @@ let cachedProjectId: string | null = null;
 
 export async function resolveProjectId(apiUrl: string, projectSlug: string): Promise<string> {
   if (cachedProjectId !== null) return cachedProjectId;
-
   const token = getToken();
   if (!token) throw new Error('Вы не авторизованы');
-
   const res = await fetch(`${apiUrl}/api/projects/list`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({}),
   });
-
   if (!res.ok) {
-    if (res.status === 401) {
-      clearAuth();
-      throw new Error('Сессия истекла. Войдите снова.');
-    }
+    if (res.status === 401) { clearAuth(); throw new Error('Сессия истекла. Войдите снова.'); }
     throw new Error(`Не удалось загрузить проекты (${res.status})`);
   }
-
   const json = await res.json();
   const items: Array<{ id: string; slug: string }> = json.data?.items ?? [];
   const project = items.find((p) => p.slug === projectSlug);
-
-  if (!project) {
-    throw new Error(`Проект «${projectSlug}» не найден`);
-  }
-
+  if (!project) throw new Error(`Проект «${projectSlug}» не найден`);
   cachedProjectId = project.id;
   return project.id;
 }

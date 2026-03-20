@@ -31,6 +31,42 @@ function isIOSSafari(): boolean {
 
 const SCREENSHOT_TIMEOUT_MS = isIOSSafari() ? SCREENSHOT_TIMEOUT_IOS_MS : SCREENSHOT_TIMEOUT_DESKTOP_MS;
 
+/** Pattern matching CSS color functions unsupported by html2canvas v1 */
+const UNSUPPORTED_COLOR_RE = /oklch\([^)]*\)|oklab\([^)]*\)|lab\([^)]*\)|lch\([^)]*\)/gi;
+
+/**
+ * Walk the cloned DOM and replace unsupported CSS color functions (oklch, oklab, etc.)
+ * with transparent. html2canvas v1.4 can't parse these modern color functions and throws.
+ */
+function sanitizeUnsupportedColors(root: HTMLElement): void {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  let node: Node | null = walker.currentNode;
+
+  while (node) {
+    if (node instanceof HTMLElement) {
+      const style = node.style;
+      for (let i = 0; i < style.length; i++) {
+        const prop = style[i]!;
+        const val = style.getPropertyValue(prop);
+        if (UNSUPPORTED_COLOR_RE.test(val)) {
+          style.setProperty(prop, val.replace(UNSUPPORTED_COLOR_RE, 'transparent'));
+        }
+      }
+    }
+    node = walker.nextNode();
+  }
+
+  // Also sanitize <style> and inline stylesheets in the cloned document
+  const doc = root.ownerDocument;
+  if (doc) {
+    doc.querySelectorAll('style').forEach((styleEl) => {
+      if (UNSUPPORTED_COLOR_RE.test(styleEl.textContent ?? '')) {
+        styleEl.textContent = (styleEl.textContent ?? '').replace(UNSUPPORTED_COLOR_RE, 'transparent');
+      }
+    });
+  }
+}
+
 export async function captureScreenshot(highlightSelector?: string): Promise<string | null> {
   let highlightOverlay: HTMLDivElement | null = null;
 
@@ -93,6 +129,11 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
       backgroundColor: '#ffffff',
       ignoreElements: (element: Element) => element.id === 'scout-widget-root',
       logging: false,
+      // html2canvas v1 doesn't support oklch/oklab/lab/lch color functions.
+      // Replace them with fallback colors in the cloned DOM before rendering.
+      onclone: (_doc: Document, clone: HTMLElement) => {
+        sanitizeUnsupportedColors(clone);
+      },
     };
 
     const timeout = new Promise<never>((_, reject) =>

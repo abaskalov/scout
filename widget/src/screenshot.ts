@@ -41,48 +41,68 @@ async function captureNative(): Promise<string | null> {
     const track = stream.getVideoTracks()[0];
     if (!track) return null;
 
-    // Capture frame from video track
+    // Grab a single frame from the video track
+    let rawCanvas: HTMLCanvasElement;
+
     // @ts-expect-error — ImageCapture is available in Chrome 59+
     if (typeof ImageCapture !== 'undefined') {
       // @ts-expect-error
       const capture = new ImageCapture(track);
       const bitmap = await capture.grabFrame();
-
-      const canvas = document.createElement('canvas');
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      const ctx = canvas.getContext('2d');
+      rawCanvas = document.createElement('canvas');
+      rawCanvas.width = bitmap.width;
+      rawCanvas.height = bitmap.height;
+      const ctx = rawCanvas.getContext('2d');
       if (!ctx) return null;
-
       ctx.drawImage(bitmap, 0, 0);
       bitmap.close();
+    } else {
+      // Fallback: use video element
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.muted = true;
+      await new Promise<void>((resolve) => {
+        video.onloadedmetadata = () => { video.play(); resolve(); };
+      });
+      await new Promise((r) => requestAnimationFrame(r));
+      rawCanvas = document.createElement('canvas');
+      rawCanvas.width = video.videoWidth;
+      rawCanvas.height = video.videoHeight;
+      const ctx = rawCanvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(video, 0, 0);
+      video.pause();
+      video.srcObject = null;
+    }
 
-      const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    // If user shared entire screen instead of tab, crop to viewport area.
+    // The device pixel ratio scales the capture — account for it.
+    const dpr = window.devicePixelRatio || 1;
+    const vpW = Math.round(window.innerWidth * dpr);
+    const vpH = Math.round(window.innerHeight * dpr);
+    const isFullScreen = rawCanvas.width > vpW * 1.2 || rawCanvas.height > vpH * 1.2;
+
+    if (isFullScreen) {
+      // Crop: use screenX/screenY + browser chrome offset to estimate content area.
+      // For most browsers the content starts at the top of the captured tab surface.
+      // We crop to viewport dimensions from center-ish of the captured image.
+      const cropW = Math.min(vpW, rawCanvas.width);
+      const cropH = Math.min(vpH, rawCanvas.height);
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = cropW;
+      cropCanvas.height = cropH;
+      const ctx = cropCanvas.getContext('2d');
+      if (!ctx) return null;
+      // Estimate content offset — take from bottom-center of the capture
+      // (browser chrome is at top, dock at bottom)
+      const sx = Math.max(0, Math.round((rawCanvas.width - cropW) / 2));
+      const sy = Math.max(0, rawCanvas.height - cropH);
+      ctx.drawImage(rawCanvas, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+      const dataUrl = cropCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
       return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
     }
 
-    // Fallback: use video element to grab frame
-    const video = document.createElement('video');
-    video.srcObject = stream;
-    video.muted = true;
-
-    await new Promise<void>((resolve) => {
-      video.onloadedmetadata = () => { video.play(); resolve(); };
-    });
-    // Wait one frame for the video to render
-    await new Promise((r) => requestAnimationFrame(r));
-
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    ctx.drawImage(video, 0, 0);
-    video.pause();
-    video.srcObject = null;
-
-    const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    const dataUrl = rawCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
     return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
   } catch {
     // User denied permission or API not available

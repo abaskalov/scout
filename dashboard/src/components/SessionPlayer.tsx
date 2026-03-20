@@ -82,7 +82,12 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
     const w = parseInt(iframe.width) || 1440;
     const h = parseInt(iframe.height) || 900;
     const containerW = container.clientWidth;
-    const scale = Math.min(containerW / w, 0.999);
+    const scale = Math.min(containerW / w, 1);
+
+    // Keep original aspect ratio, ensure minimum visible height
+    const scaledH = Math.round(h * scale);
+    const minH = 400;
+    const finalH = Math.max(scaledH, minH);
 
     replayer.wrapper.style.transformOrigin = 'top left';
     replayer.wrapper.style.transform = `scale(${scale})`;
@@ -90,12 +95,7 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
     replayer.wrapper.style.width = `${w}px`;
     replayer.wrapper.style.height = `${h}px`;
 
-    // CSS handles positioning via REPLAYER_CSS injected above:
-    // iframe: position absolute z-index 1
-    // .replayer-mouse: position absolute z-index 100
-    // .replayer-mouse-tail: position absolute z-index 99
-
-    frameRef.current.style.height = `${Math.round(h * scale)}px`;
+    frameRef.current.style.height = `${finalH}px`;
   }, []);
 
   const startTimer = useCallback(() => {

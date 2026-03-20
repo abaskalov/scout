@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Autonomous bug tracking with AI agent</strong><br/>
-  Embeddable widget captures context, AI fixes bugs, dashboard manages workflow
+  Embeddable widget &middot; AI-powered fixes &middot; Multi-language dashboard
 </p>
 
 <p align="center">
@@ -18,15 +18,17 @@
 <p align="center">
   <a href="#quickstart">Quickstart</a> &middot;
   <a href="#widget">Widget</a> &middot;
+  <a href="#dashboard">Dashboard</a> &middot;
   <a href="#ai-orchestrator">AI Orchestrator</a> &middot;
-  <a href="#deployment">Deployment</a>
+  <a href="#deployment">Deployment</a> &middot;
+  <a href="#api">API</a>
 </p>
 
 ---
 
 ## What is Scout?
 
-Self-hosted bug tracker for AI-first teams. Testers report bugs via embeddable widget that captures element context, screenshots, and session recordings. AI agent picks up bugs, creates fixes, opens PRs. Admin reviews in dashboard.
+Self-hosted bug tracker for AI-first teams. Testers report bugs via an embeddable widget that captures element context, screenshots, and session recordings. AI agent picks up bugs, creates fixes, opens PRs.
 
 ```
 Tester clicks element  →  Widget captures context + screenshot + recording
@@ -40,14 +42,14 @@ Tester clicks element  →  Widget captures context + screenshot + recording
 
 ## Features
 
-- **Widget** — Shadow DOM isolation, element picker, screenshot with element highlight, rrweb recording (30s buffer). Works on any site
-- **Dashboard** — Responsive React SPA. Items with rrweb player, Projects/Users management
-- **AI Orchestrator** — Claims bugs, runs opencode, validates, creates PRs
-- **Status workflow** — `new` → `in_progress` → `review` → `done` with validated transitions
-- **Roles** — admin, member (report bugs), agent (fix bugs)
-- **Single process** — API + dashboard + widget on one port
-- **Mobile** — Bottom nav, card layouts, CapacitorJS safe areas
-- **Auto-deploy** — Push to main → CI → Docker → deploy to production
+| Area | Details |
+|------|---------|
+| **Widget** | Shadow DOM isolation, element picker with instruction banner, html2canvas screenshot with element highlight, rrweb session recording (60s buffer), cross-domain SSO |
+| **Dashboard** | React SPA, rrweb session player, items/projects/users/webhooks management, locale switcher |
+| **i18n** | Russian, English, Uzbek (Latin). Dashboard + widget. Server error codes translated on client |
+| **AI Orchestrator** | Claims bugs, runs opencode, validates, creates PRs, updates status |
+| **Auth** | JWT + API keys (`sk_live_*`), role-based access (admin/member/agent), cross-domain SSO (cookie + iframe + popup) |
+| **Infra** | Single process (API + SPA + widget on one port), SQLite, Docker, auto-deploy on push to main |
 
 ## Quickstart
 
@@ -65,33 +67,52 @@ docker run -d \
 
 Open http://localhost:10009 — login `admin@scout.local` / `admin`.
 
-On first start, Scout auto-creates admin, AI agent, and a demo project. **Change passwords after first login.**
+Auto-creates admin, AI agent, and demo project on first start. **Change passwords immediately.**
 
 ### From source
 
 ```bash
 git clone https://github.com/abaskalov/scout.git && cd scout
-pnpm install && pnpm dev:all
+pnpm install
+pnpm db:seed     # create DB with test data
+pnpm dev:all     # API + dashboard + widget (hot reload)
 ```
 
 ## Widget
 
-Add to any site:
-
 ```html
 <script>
   window.__SCOUT_CONFIG__ = {
-    apiUrl: 'https://your-scout-instance.com',
-    projectSlug: 'your-project',
-    // enabled: false,   // hide widget; ?scout=1 in URL overrides
+    apiUrl: 'https://your-scout.com',
+    projectSlug: 'my-project',
   };
 </script>
-<script src="https://your-scout-instance.com/widget/scout-widget.js" async></script>
+<script src="https://your-scout.com/widget/scout-widget.js" async></script>
 ```
 
-**Captures:** CSS selector, element text/HTML, page URL, viewport, screenshot (with element highlight), session recording (last 30 seconds).
+**What it captures:** CSS selector, element text/HTML, page URL, viewport size, browser/OS metadata, screenshot (with element highlight), session recording (last 60 seconds).
 
-**Visibility:** `enabled: false` in config hides widget. `?scout=1` in URL forces it to show. Or don't load the script at all.
+**SSO:** Users log in once — session shared across all sites via cookie (subdomains) or popup (cross-domain).
+
+**Language:** Auto-detected from `navigator.language`. Supports `ru`, `en`, `uz`.
+
+**Config options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `apiUrl` | — | Scout server URL (required) |
+| `projectSlug` | — | Project slug (required) |
+| `enabled` | `true` | Set `false` to hide. `?scout=1` in URL overrides |
+
+## Dashboard
+
+Responsive React SPA served from the same port as the API.
+
+- **Items** — List with status/priority filters, search, pagination. Detail view with screenshot lightbox, rrweb session player, notes timeline, resolve modal
+- **Projects** — CRUD with allowed origins for CORS/SSO, auto-fix toggle
+- **Users** — CRUD with role assignment, project access control
+- **Webhooks** — Per-project event notifications (Slack-compatible)
+- **Language** — Switcher in sidebar (RU / EN / UZ)
 
 ## AI Orchestrator
 
@@ -99,13 +120,33 @@ Add to any site:
 pnpm orchestrator
 ```
 
-Claims new bugs → parses recording → creates branch → runs `opencode` → validates (typecheck + lint, up to 3 retries) → commits → opens PR → updates status to review.
+Claims `new` bugs → parses recording → creates branch → runs `opencode` → validates (typecheck + lint, up to 3 retries) → commits → opens PR → sets status to `review`.
 
 Configure project-to-repo mapping in `orchestrator/config.ts`. Requires `opencode` and `gh` CLI.
 
+## API
+
+All endpoints are `POST` with JSON body. Auth via `Authorization: Bearer <jwt|api-key>`.
+
+Base path: `/api/v1/` (or `/api/` for backward compatibility).
+
+Interactive docs: `https://your-scout.com/api/docs`
+
+**Key endpoints:**
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/auth/login` | Get JWT token |
+| `/api/items/create` | Create bug report |
+| `/api/items/list` | List items (filtered) |
+| `/api/items/get` | Get item with notes |
+| `/api/items/claim` | Assign to self |
+| `/api/items/resolve` | Mark as done |
+| `/api/auth/validate` | Validate token/API key |
+
 ## Deployment
 
-### With HTTPS (Caddy)
+### Docker Compose with HTTPS
 
 ```yaml
 services:
@@ -137,17 +178,25 @@ scout.example.com {
 }
 ```
 
-### Environment
+### Environment Variables
 
-| Variable | Default | Required |
-|----------|---------|----------|
-| `SCOUT_JWT_SECRET` | dev secret | **Yes** in production |
-| `SCOUT_PORT` | `10009` | No |
-| `SCOUT_DB_PATH` | `data/scout.db` | No |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SCOUT_JWT_SECRET` | dev secret | **Required in production** |
+| `SCOUT_PORT` | `10009` | Server port |
+| `SCOUT_DB_PATH` | `data/scout.db` | SQLite database path |
+| `SCOUT_CORS_ORIGINS` | — | Comma-separated allowed origins |
+| `SMTP_HOST` | — | SMTP server for email notifications |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` | — | SMTP username |
+| `SMTP_PASS` | — | SMTP password |
+| `SMTP_FROM` | — | Sender email address |
+| `SENTRY_DSN` | — | Sentry error tracking |
+| `LOG_LEVEL` | `info` | Pino log level |
 
 ### CI/CD
 
-Push to `main` → typecheck + tests + build → Docker image → deploy to production. Fully automatic.
+Push to `main` → typecheck + tests → Docker build → deploy. Fully automatic.
 
 ### Backup
 
@@ -158,12 +207,26 @@ docker cp scout:/app/data/scout.db ./backup/scout-$(date +%Y%m%d).db
 ## Development
 
 ```bash
-pnpm dev          # API only
-pnpm dev:all      # API + dashboard + widget
-pnpm test         # run tests
+pnpm dev          # API server (port 10009)
+pnpm dev:all      # API + dashboard + widget (hot reload)
+pnpm test         # unit tests (Vitest)
+pnpm test:e2e     # E2E tests (Playwright — chromium/firefox/webkit)
 pnpm typecheck    # TypeScript check
 pnpm build        # production build
+pnpm db:seed      # seed database with test data
+pnpm db:generate  # generate DB migration after schema change
 ```
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| API | Hono, Drizzle ORM, better-sqlite3, Zod |
+| Dashboard | React 19, Tailwind CSS 4, Vite 6 |
+| Widget | Vanilla TS, html2canvas, rrweb, fflate |
+| Auth | JWT, bcrypt, API keys |
+| Tests | Vitest (unit), Playwright (E2E) |
+| Deploy | Docker, GitHub Actions, Caddy |
 
 ## License
 

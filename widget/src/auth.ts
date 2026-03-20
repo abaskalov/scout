@@ -1,5 +1,8 @@
 const TOKEN_KEY = '__scout_token__';
 const USER_KEY = '__scout_user__';
+const COOKIE_TOKEN = 'scout_t';
+const COOKIE_USER = 'scout_u';
+const COOKIE_MAX_AGE = 604_800; // 7 days (matches JWT TTL)
 
 interface ScoutUser {
   id: string;
@@ -14,11 +17,11 @@ interface LoginResponse {
   };
 }
 
-// --- In-memory cache (populated from SSO iframe or localStorage fallback) ---
+// --- In-memory cache ---
 let cachedToken: string | null = null;
 let cachedUser: ScoutUser | null = null;
 
-// --- SSO iframe bridge ---
+// --- SSO iframe bridge (cross-domain, works in Chrome) ---
 let ssoIframe: HTMLIFrameElement | null = null;
 let ssoReady = false;
 let ssoOrigin = '';
@@ -28,55 +31,133 @@ const pendingMessages = new Map<number, (data: Record<string, unknown>) => void>
 const SSO_INIT_TIMEOUT_MS = 3_000;
 const SSO_MSG_TIMEOUT_MS = 2_000;
 
+// ============================================================
+// Cookie-based SSO for subdomains (works in ALL browsers)
+// stg.avtozor.uz and stgadmin.avtozor.uz share .avtozor.uz cookies
+// ============================================================
+
 /**
- * Initialize SSO by creating a hidden iframe to the Scout API origin.
- * The iframe stores auth tokens in its own localStorage (scout.kafu.kz),
- * making them accessible from any site where the widget is embedded.
- *
- * Falls back to host localStorage if iframe fails (Safari ITP, etc.)
+ * Extract parent domain for cookie sharing between subdomains.
+ * stg.avtozor.uz → .avtozor.uz
+ * stgadmin.avtozor.uz → .avtozor.uz
+ * Returns null for localhost / IP addresses / bare domains.
+ */
+function getParentDomain(): string | null {
+  const hostname = window.location.hostname;
+  // Skip localhost and IP addresses
+  if (hostname === 'localhost' || /^\d+(\.\d+){3}$/.test(hostname)) return null;
+
+  const parts = hostname.split('.');
+  // Need at least 3 parts (sub.domain.tld) to set parent domain cookie
+  if (parts.length < 3) return null;
+
+  // Use last 2 parts as parent domain
+  // Browser will silently reject if it's a public suffix (e.g. .co.uk)
+  return '.' + parts.slice(-2).join('.');
+}
+
+function saveToCookie(token: string, user: ScoutUser): void {
+  const domain = getParentDomain();
+  if (!domain) return;
+
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  const base = `path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax${secure}; domain=${domain}`;
+
+  try {
+    document.cookie = `${COOKIE_TOKEN}=${token}; ${base}`;
+    document.cookie = `${COOKIE_USER}=${encodeURIComponent(JSON.stringify(user))}; ${base}`;
+  } catch { /* cookie API blocked */ }
+}
+
+function loadFromCookie(): boolean {
+  try {
+    const cookies = document.cookie.split(';');
+    let token: string | null = null;
+    let user: ScoutUser | null = null;
+
+    for (const c of cookies) {
+      const trimmed = c.trim();
+      if (trimmed.startsWith(COOKIE_TOKEN + '=')) {
+        token = trimmed.slice(COOKIE_TOKEN.length + 1);
+      }
+      if (trimmed.startsWith(COOKIE_USER + '=')) {
+        try {
+          user = JSON.parse(decodeURIComponent(trimmed.slice(COOKIE_USER.length + 1)));
+        } catch { /* malformed user cookie */ }
+      }
+    }
+
+    if (token) {
+      cachedToken = token;
+      cachedUser = user;
+      // Sync to localStorage as backup
+      saveToLocalStorage(token, user);
+      return true;
+    }
+  } catch { /* cookie API blocked */ }
+  return false;
+}
+
+function clearCookie(): void {
+  const domain = getParentDomain();
+  if (!domain) return;
+
+  try {
+    document.cookie = `${COOKIE_TOKEN}=; path=/; max-age=0; domain=${domain}`;
+    document.cookie = `${COOKIE_USER}=; path=/; max-age=0; domain=${domain}`;
+  } catch { /* ignore */ }
+}
+
+// ============================================================
+// SSO iframe bridge (cross-domain, Chrome + Firefox)
+// ============================================================
+
+/**
+ * Initialize SSO. Token resolution priority:
+ * 1. Cookie (subdomain sharing — works in ALL browsers including Safari)
+ * 2. SSO iframe (cross-domain — works in Chrome, blocked by Safari ITP)
+ * 3. Host localStorage (single-origin fallback)
  */
 export async function initSSO(apiUrl: string): Promise<void> {
   ssoOrigin = new URL(apiUrl).origin;
 
-  // If widget is on the same origin as the API, no need for iframe
+  // 1. Try cookie first (subdomain SSO — most reliable)
+  if (loadFromCookie()) return;
+
+  // 2. If same origin, just use localStorage
   if (window.location.origin === ssoOrigin) {
     loadFromLocalStorage();
     return;
   }
 
+  // 3. Try iframe SSO (cross-domain)
   try {
-    // Listen for messages from SSO iframe
     window.addEventListener('message', onSSOMessage);
 
-    // Create hidden iframe
     ssoIframe = document.createElement('iframe');
     ssoIframe.src = `${apiUrl}/auth/sso`;
     ssoIframe.style.cssText = 'display:none;width:0;height:0;border:none;position:absolute';
     ssoIframe.setAttribute('aria-hidden', 'true');
     document.body.appendChild(ssoIframe);
 
-    // Wait for iframe to load and respond to ping
     await waitForIframe();
     ssoReady = true;
 
-    // Try to get existing token from SSO iframe
     const data = await sendSSOMessage('getToken');
     if (data.token && typeof data.token === 'string') {
       cachedToken = data.token;
       if (data.user && typeof data.user === 'string') {
         try { cachedUser = JSON.parse(data.user); } catch { /* ignore */ }
       }
-      // Sync to local localStorage as backup
       saveToLocalStorage(cachedToken, cachedUser);
-    } else {
-      // No SSO token — try local localStorage
-      loadFromLocalStorage();
+      return;
     }
   } catch {
-    // SSO iframe failed (Safari ITP, network error, etc.) — fallback to localStorage
     ssoReady = false;
-    loadFromLocalStorage();
   }
+
+  // 4. Fallback to host localStorage
+  loadFromLocalStorage();
 }
 
 function onSSOMessage(e: MessageEvent): void {
@@ -135,17 +216,15 @@ function waitForIframe(): Promise<void> {
         });
     }
 
-    // Wait for iframe to load first
     ssoIframe.addEventListener('load', () => setTimeout(tryPing, 50), { once: true });
-
-    // Fallback if load event doesn't fire
-    setTimeout(() => {
-      if (attempts === 0) tryPing();
-    }, 500);
+    setTimeout(() => { if (attempts === 0) tryPing(); }, 500);
   });
 }
 
-// --- localStorage fallback ---
+// ============================================================
+// localStorage fallback (single-origin)
+// ============================================================
+
 function loadFromLocalStorage(): void {
   try {
     cachedToken = localStorage.getItem(TOKEN_KEY);
@@ -172,7 +251,9 @@ function saveToLocalStorage(token: string | null, user: ScoutUser | null): void 
   } catch { /* localStorage may be blocked */ }
 }
 
-// --- Public API (same interface as before) ---
+// ============================================================
+// Public API
+// ============================================================
 
 export function getToken(): string | null {
   return cachedToken;
@@ -186,15 +267,18 @@ export function saveAuth(token: string, user: ScoutUser): void {
   cachedToken = token;
   cachedUser = user;
 
-  // Save to local localStorage (always)
+  // 1. Cookie (subdomain SSO — works everywhere)
+  saveToCookie(token, user);
+
+  // 2. localStorage (host fallback)
   saveToLocalStorage(token, user);
 
-  // Save to SSO iframe (cross-domain persistence)
+  // 3. SSO iframe (cross-domain)
   if (ssoReady) {
     sendSSOMessage('setToken', {
       token,
       user: JSON.stringify(user),
-    }).catch(() => { /* SSO save failed — local storage is fallback */ });
+    }).catch(() => { /* SSO save failed — cookie + localStorage are fallbacks */ });
   }
 }
 
@@ -202,10 +286,9 @@ export function clearAuth(): void {
   cachedToken = null;
   cachedUser = null;
 
-  // Clear local localStorage
+  clearCookie();
   saveToLocalStorage(null, null);
 
-  // Clear SSO iframe
   if (ssoReady) {
     sendSSOMessage('clearToken').catch(() => { /* ignore */ });
   }

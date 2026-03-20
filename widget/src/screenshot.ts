@@ -31,12 +31,54 @@ function isIOSSafari(): boolean {
 
 const SCREENSHOT_TIMEOUT_MS = isIOSSafari() ? SCREENSHOT_TIMEOUT_IOS_MS : SCREENSHOT_TIMEOUT_DESKTOP_MS;
 
-/** Pattern matching CSS color functions unsupported by html2canvas v1 */
-const UNSUPPORTED_COLOR_RE = /oklch\([^)]*\)|oklab\([^)]*\)|lab\([^)]*\)|lch\([^)]*\)/gi;
+/**
+ * Match balanced parentheses for a CSS function call.
+ * Handles nested parens: oklch(0.5 0.2 calc(180 + 30))
+ */
+function replaceColorFn(css: string, fnName: string, replacement: string): string {
+  let result = '';
+  let i = 0;
+  const lower = css.toLowerCase();
+  while (i < css.length) {
+    const idx = lower.indexOf(fnName + '(', i);
+    if (idx === -1) { result += css.slice(i); break; }
+    result += css.slice(i, idx);
+    // Find matching closing paren
+    let depth = 0;
+    let j = idx + fnName.length;
+    for (; j < css.length; j++) {
+      if (css[j] === '(') depth++;
+      else if (css[j] === ')') { depth--; if (depth === 0) { j++; break; } }
+    }
+    result += replacement;
+    i = j;
+  }
+  return result;
+}
+
+/** CSS color functions unsupported by html2canvas v1.4 */
+const UNSUPPORTED_FNS = ['oklch', 'oklab', 'lab', 'lch', 'color-mix', 'light-dark'];
+
+/** Property-aware fallback: text→black, background→transparent, border→gray */
+function fallbackForProp(prop: string): string {
+  if (/^color$|^-webkit-text/.test(prop)) return '#000';
+  if (/border|outline/.test(prop)) return '#ccc';
+  if (/shadow/.test(prop)) return 'none';
+  return 'transparent';
+}
+
+function replaceUnsupportedColors(css: string, fallback: string): string {
+  let result = css;
+  for (const fn of UNSUPPORTED_FNS) {
+    result = replaceColorFn(result, fn, fallback);
+  }
+  return result;
+}
 
 /**
- * Walk the cloned DOM and replace unsupported CSS color functions (oklch, oklab, etc.)
- * with transparent. html2canvas v1.4 can't parse these modern color functions and throws.
+ * Sanitize unsupported CSS color functions in the cloned DOM.
+ * html2canvas v1.4 crashes on oklch/oklab/color-mix used by Tailwind 4.
+ * CSS custom properties (--var) store literal oklch() values that survive getComputedStyle.
  */
 function sanitizeUnsupportedColors(root: HTMLElement): void {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
@@ -48,20 +90,23 @@ function sanitizeUnsupportedColors(root: HTMLElement): void {
       for (let i = 0; i < style.length; i++) {
         const prop = style[i]!;
         const val = style.getPropertyValue(prop);
-        if (UNSUPPORTED_COLOR_RE.test(val)) {
-          style.setProperty(prop, val.replace(UNSUPPORTED_COLOR_RE, 'transparent'));
+        const replaced = replaceUnsupportedColors(val, fallbackForProp(prop));
+        if (replaced !== val) {
+          style.setProperty(prop, replaced);
         }
       }
     }
     node = walker.nextNode();
   }
 
-  // Also sanitize <style> and inline stylesheets in the cloned document
+  // Sanitize <style> tags in the cloned document
   const doc = root.ownerDocument;
   if (doc) {
     doc.querySelectorAll('style').forEach((styleEl) => {
-      if (UNSUPPORTED_COLOR_RE.test(styleEl.textContent ?? '')) {
-        styleEl.textContent = (styleEl.textContent ?? '').replace(UNSUPPORTED_COLOR_RE, 'transparent');
+      const text = styleEl.textContent ?? '';
+      const replaced = replaceUnsupportedColors(text, 'transparent');
+      if (replaced !== text) {
+        styleEl.textContent = replaced;
       }
     });
   }

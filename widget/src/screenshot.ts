@@ -80,34 +80,45 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
     const scrollX = ios ? window.scrollX : 0;
     const scrollY = ios ? window.scrollY : 0;
 
-    // Capture with timeout (prevents hanging on complex pages)
-    const canvas = await Promise.race([
-      html2canvas(document.documentElement, {
-        width: captureWidth,
-        height: captureHeight,
-        windowWidth: captureWidth,
-        windowHeight: captureHeight,
-        scrollX: ios ? -scrollX : 0,
-        scrollY: ios ? -scrollY : 0,
-        x: ios ? scrollX : 0,
-        y: ios ? scrollY : 0,
-        scale: 1,
-        backgroundColor: '#ffffff',
-        ignoreElements: (element: Element) => {
-          return element.id === 'scout-widget-root';
-        },
-        useCORS: true,
-        allowTaint: false,
-        logging: false,
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
-      ),
-    ]);
+    const baseOpts = {
+      width: captureWidth,
+      height: captureHeight,
+      windowWidth: captureWidth,
+      windowHeight: captureHeight,
+      scrollX: ios ? -scrollX : 0,
+      scrollY: ios ? -scrollY : 0,
+      x: ios ? scrollX : 0,
+      y: ios ? scrollY : 0,
+      scale: 1,
+      backgroundColor: '#ffffff',
+      ignoreElements: (element: Element) => element.id === 'scout-widget-root',
+      logging: false,
+    };
 
-    // JPEG instead of PNG — 3-5x smaller payload (professional tools pattern)
-    const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-    return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
+    );
+
+    // Strategy 1: useCORS (clean canvas, exportable)
+    // Strategy 2: allowTaint (renders all images but canvas may be tainted)
+    for (const strategy of [
+      { useCORS: true, allowTaint: false },
+      { useCORS: false, allowTaint: true },
+    ]) {
+      try {
+        const canvas = await Promise.race([
+          html2canvas(document.documentElement, { ...baseOpts, ...strategy }),
+          timeout,
+        ]);
+        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+        return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+      } catch {
+        // Strategy failed — try next
+      }
+    }
+
+    console.warn('[Scout] All screenshot strategies failed');
+    return null;
   } catch (err) {
     console.warn('[Scout] Screenshot capture failed:', err);
     return null;

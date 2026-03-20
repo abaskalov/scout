@@ -56,6 +56,7 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const replayerRef = useRef<any>(null);
+  const observerRef = useRef<MutationObserver | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,37 +153,61 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
           frameRef.current.removeChild(frameRef.current.firstChild);
         }
 
+        // Set up MutationObserver BEFORE Replayer init to intercept cross-origin
+        // <link> stylesheets as they're inserted into the replay iframe.
+        // rrweb inlines CSS during recording (inlineStylesheet:true), so external
+        // links are redundant — removing them prevents CORS errors.
+        const hostname = window.location.hostname;
+        function removeCrossOriginLinks(root: Node): void {
+          (root as Element).querySelectorAll?.('link[rel="stylesheet"]')?.forEach((link: Element) => {
+            const href = link.getAttribute('href') || '';
+            if (href.startsWith('http') && !href.includes(hostname)) {
+              link.setAttribute('href', ''); // Prevent fetch before removal
+              link.remove();
+            }
+          });
+        }
+
+        try {
+          observerRef.current = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+              for (const node of m.addedNodes) {
+                if (node instanceof HTMLLinkElement && node.rel === 'stylesheet') {
+                  const href = node.getAttribute('href') || '';
+                  if (href.startsWith('http') && !href.includes(hostname)) {
+                    node.setAttribute('href', '');
+                    node.remove();
+                  }
+                }
+                if (node instanceof HTMLElement) {
+                  removeCrossOriginLinks(node);
+                }
+              }
+            }
+          });
+        } catch { /* MutationObserver not available */ }
+
         const replayer = new Replayer(events as any, {
           root: frameRef.current,
           triggerFocus: false,
           UNSAFE_replayCanvas: true,
           skipInactive: true,
           mouseTail: { strokeStyle: '#3b82f6', lineWidth: 2 },
-          // Prevent cross-origin CSS loading errors in replay iframe
           loadTimeout: 0,
-          insertStyleRules: [
-            '* { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important; }',
-          ],
         });
 
-        replayerRef.current = replayer;
-        replayer.pause(0);
-
-        // Remove external <link> stylesheets from replay iframe to avoid CORS errors.
-        // rrweb inlines CSS during recording (inlineStylesheet:true), so the computed
-        // styles are already in the snapshot — external links are redundant.
+        // Observe the replay iframe for cross-origin link insertions
         try {
           const iframe = replayer.wrapper?.querySelector('iframe');
           const iframeDoc = iframe?.contentDocument;
-          if (iframeDoc) {
-            iframeDoc.querySelectorAll('link[rel="stylesheet"]').forEach((link: Element) => {
-              const href = link.getAttribute('href') || '';
-              if (href.startsWith('http') && !href.includes(window.location.hostname)) {
-                link.remove();
-              }
-            });
+          if (iframeDoc && observerRef.current) {
+            removeCrossOriginLinks(iframeDoc);
+            observerRef.current.observe(iframeDoc, { childList: true, subtree: true });
           }
-        } catch { /* cross-origin iframe access blocked — ignore */ }
+        } catch { /* cross-origin iframe — ignore */ }
+
+        replayerRef.current = replayer;
+        replayer.pause(0);
 
         // Inject cursor/mouse styles into player container
         const styleEl = document.createElement('style');
@@ -213,6 +238,7 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
       cancelled = true;
       stopTimer();
       window.removeEventListener('resize', rescale);
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
       replayerRef.current = null;
       if (frameRef.current) {
         while (frameRef.current.firstChild) {

@@ -266,7 +266,20 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
       y: ios ? scrollY : 0,
       scale: 1,
       backgroundColor: '#ffffff',
-      ignoreElements: (element: Element) => element.id === 'scout-widget-root',
+      ignoreElements: (element: Element) => {
+        // Exclude scout widget + any cross-origin iframes (cause SecurityError in Safari)
+        if (element.id === 'scout-widget-root') return true;
+        if (element instanceof HTMLIFrameElement) {
+          try {
+            // If we can't access contentDocument, it's cross-origin — skip it
+            const doc = element.contentDocument;
+            return !doc;
+          } catch {
+            return true;
+          }
+        }
+        return false;
+      },
       logging: false,
       // html2canvas v1 doesn't support oklch/oklab/lab/lch color functions.
       // Replace them with fallback colors in the cloned DOM before rendering.

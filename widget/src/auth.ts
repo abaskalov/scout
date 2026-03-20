@@ -252,6 +252,81 @@ function saveToLocalStorage(token: string | null, user: ScoutUser | null): void 
 }
 
 // ============================================================
+// Popup-based SSO (cross-domain, works in ALL browsers)
+// Opens scout.kafu.kz/auth/sso/popup in a popup window.
+// The popup reads its first-party cookie and sends token via postMessage.
+// ============================================================
+
+const POPUP_POLL_INTERVAL_MS = 300;
+
+/**
+ * Try to authenticate via popup SSO.
+ * Opens a popup to the Scout API origin where the session cookie is first-party.
+ * Returns true if authenticated, false if popup was blocked or user closed it.
+ */
+export function tryPopupSSO(apiUrl: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const w = 420;
+    const h = 540;
+    const left = Math.round((screen.width - w) / 2);
+    const top = Math.round((screen.height - h) / 2);
+
+    const popup = window.open(
+      `${apiUrl}/auth/sso/popup`,
+      'scout-sso',
+      `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=no`,
+    );
+
+    if (!popup) {
+      // Popup blocked by browser
+      resolve(false);
+      return;
+    }
+
+    function onMessage(e: MessageEvent): void {
+      const data = e.data;
+      if (!data || data.ns !== 'scout-sso-popup') return;
+
+      window.removeEventListener('message', onMessage);
+      clearInterval(pollTimer);
+
+      if (data.token && typeof data.token === 'string') {
+        cachedToken = data.token;
+        try { cachedUser = data.user ? JSON.parse(data.user) : null; } catch { cachedUser = null; }
+
+        // Save to all storage layers
+        saveToCookie(cachedToken, cachedUser);
+        saveToLocalStorage(cachedToken, cachedUser);
+        if (ssoReady) {
+          sendSSOMessage('setToken', {
+            token: cachedToken,
+            user: data.user ?? '',
+          }).catch(() => { /* ignore */ });
+        }
+
+        resolve(true);
+      } else {
+        resolve(false);
+      }
+    }
+
+    window.addEventListener('message', onMessage);
+
+    // Poll for popup close (user closed without completing auth)
+    const pollTimer = setInterval(() => {
+      try {
+        if (popup.closed) {
+          clearInterval(pollTimer);
+          window.removeEventListener('message', onMessage);
+          // Small delay to allow pending postMessage to arrive
+          setTimeout(() => resolve(false), 100);
+        }
+      } catch { /* cross-origin access error — popup still open */ }
+    }, POPUP_POLL_INTERVAL_MS);
+  });
+}
+
+// ============================================================
 // Public API
 // ============================================================
 

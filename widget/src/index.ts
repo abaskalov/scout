@@ -1,5 +1,5 @@
 import { WIDGET_STYLES } from './styles';
-import { getToken, login, clearAuth, initSSO } from './auth';
+import { getToken, login, clearAuth, initSSO, tryPopupSSO } from './auth';
 import { createFab, showFab, hideFab } from './fab';
 import { pickElement, type PickedElement } from './element-picker';
 import { createPanel, showPanel, hidePanel, attachPanelEvents, type PanelCallbacks } from './panel';
@@ -338,12 +338,21 @@ async function init(): Promise<void> {
   // --- Create FAB ---
   const fab = createFab(async () => {
     const token = getToken();
-    if (!token) {
-      hideFab(fab);
-      showLoginForm();
-    } else {
+    if (token) {
       startScoutMode();
+      return;
     }
+
+    // No token — try popup SSO first (cross-domain, all browsers)
+    hideFab(fab);
+    const ssoOk = await tryPopupSSO(apiUrl);
+    if (ssoOk) {
+      startScoutMode();
+      return;
+    }
+
+    // Popup blocked or user closed — fall back to inline login
+    showLoginForm();
   });
   shadow.appendChild(fab);
 

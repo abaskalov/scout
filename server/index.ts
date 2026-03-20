@@ -196,6 +196,96 @@ app.get('/auth/sso', (c) => {
 </script></body></html>`);
 });
 
+// SSO popup — login page opened as popup for cross-domain auth
+// Token stored as first-party cookie on scout.kafu.kz, shared via postMessage
+app.get('/auth/sso/popup', (c) => {
+  // Allow popup to be opened from any site
+  c.header('X-Frame-Options', 'DENY');
+
+  const apiOrigin = `${c.req.header('x-forwarded-proto') || 'https'}://${c.req.header('host') || 'scout.kafu.kz'}`;
+
+  return c.html(`<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Scout — Вход</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f9fafb;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;color:#111827}
+.card{background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);padding:32px;width:100%;max-width:380px}
+h2{font-size:20px;font-weight:600;margin-bottom:4px}
+.sub{color:#6b7280;font-size:14px;margin-bottom:24px}
+label{display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px}
+input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:16px;font-family:inherit;outline:none;transition:border-color .15s;margin-bottom:16px}
+input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,0.1)}
+button{width:100%;padding:12px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s}
+button:hover{background:#2563eb}
+button:disabled{opacity:.6;cursor:not-allowed}
+.err{color:#ef4444;font-size:13px;min-height:18px;margin-bottom:12px}
+.loading{text-align:center;color:#6b7280;font-size:14px;padding:40px 0}
+.spinner{width:32px;height:32px;border:3px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head><body>
+<div class="card">
+<div id="loading"><div class="spinner"></div>Проверка сессии...</div>
+<div id="form" style="display:none">
+<h2>Scout</h2>
+<p class="sub">Войдите, чтобы сообщать о багах</p>
+<label for="e">Эл. почта</label>
+<input id="e" type="email" autocomplete="email">
+<label for="p">Пароль</label>
+<input id="p" type="password" autocomplete="current-password">
+<p class="err" id="err"></p>
+<button id="btn" type="button">Войти</button>
+</div>
+</div>
+<script>
+(function(){
+var API='${apiOrigin}';
+var CK='scout_session';
+function getCk(){var m=document.cookie.match(new RegExp('(^| )'+CK+'=([^;]+)'));return m?m[2]:null}
+function setCk(t){document.cookie=CK+'='+t+'; path=/; max-age=604800; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'')}
+function delCk(){document.cookie=CK+'=; path=/; max-age=0'}
+function send(token,user){
+  if(window.opener){window.opener.postMessage({ns:'scout-sso-popup',token:token,user:JSON.stringify(user)},'*')}
+  window.close();
+}
+function showForm(){document.getElementById('loading').style.display='none';document.getElementById('form').style.display='';document.getElementById('e').focus()}
+// Check existing session
+var tk=getCk();
+if(tk){
+  fetch(API+'/api/auth/me',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tk}})
+  .then(function(r){return r.json()})
+  .then(function(d){
+    if(d.data&&d.data.user){send(tk,d.data.user)}
+    else{delCk();showForm()}
+  }).catch(function(){delCk();showForm()});
+}else{showForm()}
+// Login handler
+document.getElementById('btn').addEventListener('click',function(){
+  var email=document.getElementById('e').value.trim();
+  var pass=document.getElementById('p').value;
+  var err=document.getElementById('err');
+  var btn=document.getElementById('btn');
+  if(!email||!pass){err.textContent='Введите почту и пароль';return}
+  btn.disabled=true;btn.textContent='Вход...';err.textContent='';
+  fetch(API+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pass})})
+  .then(function(r){return r.json().then(function(b){return{ok:r.ok,body:b}})})
+  .then(function(r){
+    if(!r.ok){throw new Error(r.body.error||r.body.message||'Ошибка входа')}
+    var tk=r.body.data.token,u=r.body.data.user;
+    setCk(tk);send(tk,u);
+  }).catch(function(e){
+    err.textContent=e.message;btn.disabled=false;btn.textContent='Войти';
+  });
+});
+document.getElementById('p').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('btn').click()});
+})();
+</script>
+</body></html>`);
+});
+
 // Widget JS (built by Vite)
 app.use('/widget/*', serveStatic({
   root: './',

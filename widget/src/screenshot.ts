@@ -10,8 +10,7 @@ import html2canvas from 'html2canvas';
  * Returns base64-encoded JPEG string (without data: prefix), or null on failure.
  */
 
-const SCREENSHOT_TIMEOUT_DESKTOP_MS = 10_000;
-const SCREENSHOT_TIMEOUT_IOS_MS = 8_000;
+const SCREENSHOT_TIMEOUT_MS = 8_000; // Single timeout for all platforms
 const JPEG_QUALITY = 0.85;
 
 /**
@@ -75,7 +74,11 @@ function isIOSSafari(): boolean {
   return false;
 }
 
-const SCREENSHOT_TIMEOUT_MS = isIOSSafari() ? SCREENSHOT_TIMEOUT_IOS_MS : SCREENSHOT_TIMEOUT_DESKTOP_MS;
+/** Detect any Safari (iOS + macOS) */
+function isSafari(): boolean {
+  const ua = navigator?.userAgent ?? '';
+  return /Safari/i.test(ua) && !/Chrome/i.test(ua) && !/Chromium/i.test(ua);
+}
 
 /**
  * Match balanced parentheses for a CSS function call.
@@ -272,14 +275,13 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
       },
     };
 
-    // Strategy 1: useCORS (clean canvas, exportable)
-    // Strategy 2: allowTaint (renders all images but canvas may be tainted)
-    for (const strategy of [
-      { useCORS: true, allowTaint: false },
-      { useCORS: false, allowTaint: true },
-    ]) {
+    // Safari: allowTaint always throws SecurityError on toDataURL — skip it
+    const strategies = isSafari()
+      ? [{ useCORS: true, allowTaint: false }]
+      : [{ useCORS: true, allowTaint: false }, { useCORS: false, allowTaint: true }];
+
+    for (const strategy of strategies) {
       try {
-        // Fresh timeout per strategy — so second attempt gets full time budget
         const timeout = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
         );
@@ -290,8 +292,8 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
         const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
         if (resolveEl) { resolveEl.remove(); resolveEl = null; }
         return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-      } catch (err) {
-        console.warn('[Scout] Strategy failed:', strategy, err);
+      } catch {
+        // Strategy failed — try next (if any)
       }
     }
 

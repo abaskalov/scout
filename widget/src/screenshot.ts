@@ -112,7 +112,8 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
         ]);
         const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
         return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-      } catch {
+      } catch (err) {
+        console.warn('[Scout] Screenshot strategy failed:', strategy, err);
         // Strategy failed — try next
       }
     }

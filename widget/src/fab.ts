@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 /**
  * Create the floating action button element.
  * Uses an SVG bug icon.
@@ -5,8 +7,8 @@
 export function createFab(onClick: () => void): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.className = 'scout-fab';
-  btn.setAttribute('aria-label', 'Сообщить о баге');
-  btn.title = 'Сообщить о баге';
+  btn.setAttribute('aria-label', t('fab.label'));
+  btn.title = t('fab.label');
 
   // Bug/report icon (simplified)
   btn.innerHTML = `

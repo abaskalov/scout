@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 const TOKEN_KEY = '__scout_token__';
 const USER_KEY = '__scout_user__';
 const COOKIE_TOKEN = 'scout_t';
@@ -327,7 +329,7 @@ export async function login(apiUrl: string, email: string, password: string): Pr
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error ?? body?.message ?? `Ошибка входа (${res.status})`);
+    throw new Error(body?.error ?? body?.message ?? t('error.loginFailed', { status: String(res.status) }));
   }
   const json: LoginResponse = await res.json();
   const { token, user } = json.data;
@@ -340,20 +342,20 @@ let cachedProjectId: string | null = null;
 export async function resolveProjectId(apiUrl: string, projectSlug: string): Promise<string> {
   if (cachedProjectId !== null) return cachedProjectId;
   const token = getToken();
-  if (!token) throw new Error('Вы не авторизованы');
+  if (!token) throw new Error(t('error.unauthorized'));
   const res = await fetch(`${apiUrl}/api/projects/list`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({}),
   });
   if (!res.ok) {
-    if (res.status === 401) { clearAuth(); throw new Error('Сессия истекла. Войдите снова.'); }
-    throw new Error(`Не удалось загрузить проекты (${res.status})`);
+    if (res.status === 401) { clearAuth(); throw new Error(t('error.sessionExpired')); }
+    throw new Error(t('error.projectLoad', { status: String(res.status) }));
   }
   const json = await res.json();
   const items: Array<{ id: string; slug: string }> = json.data?.items ?? [];
   const project = items.find((p) => p.slug === projectSlug);
-  if (!project) throw new Error(`Проект «${projectSlug}» не найден`);
+  if (!project) throw new Error(t('error.projectNotFound', { slug: projectSlug }));
   cachedProjectId = project.id;
   return project.id;
 }

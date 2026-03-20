@@ -5,6 +5,7 @@ import { pickElement, type PickedElement } from './element-picker';
 import { createPanel, showPanel, hidePanel, attachPanelEvents, type PanelCallbacks } from './panel';
 import { captureScreenshot } from './screenshot';
 import { startRecording, pauseRecording, resumeRecording } from './recorder';
+import { t } from './i18n';
 
 interface ScoutConfig {
   apiUrl: string;
@@ -110,7 +111,7 @@ async function init(): Promise<void> {
   const loginHeader = document.createElement('div');
   loginHeader.className = 'scout-panel-header';
   const loginTitle = document.createElement('h2');
-  loginTitle.textContent = 'Scout — Вход';
+  loginTitle.textContent = t('login.title');
   const loginCloseBtn = document.createElement('button');
   loginCloseBtn.className = 'scout-panel-close';
   loginCloseBtn.setAttribute('aria-label', 'Close');
@@ -122,21 +123,21 @@ async function init(): Promise<void> {
   loginBody.className = 'scout-login';
 
   const loginSubtitle = document.createElement('h3');
-  loginSubtitle.textContent = 'Войдите, чтобы сообщать о багах';
+  loginSubtitle.textContent = t('login.subtitle');
 
   const loginDesc = document.createElement('p');
-  loginDesc.textContent = 'Используйте учётные данные Scout.';
+  loginDesc.textContent = t('login.description');
 
   const emailInput = document.createElement('input');
   emailInput.className = 'scout-input';
   emailInput.type = 'email';
-  emailInput.placeholder = 'Эл. почта';
+  emailInput.placeholder = t('login.email');
   emailInput.autocomplete = 'email';
 
   const passwordInput = document.createElement('input');
   passwordInput.className = 'scout-input';
   passwordInput.type = 'password';
-  passwordInput.placeholder = 'Пароль';
+  passwordInput.placeholder = t('login.password');
   passwordInput.autocomplete = 'current-password';
 
   const loginError = document.createElement('p');
@@ -144,7 +145,7 @@ async function init(): Promise<void> {
 
   const loginBtn = document.createElement('button');
   loginBtn.className = 'scout-btn scout-btn-primary';
-  loginBtn.textContent = 'Log In';
+  loginBtn.textContent = t('login.button');
 
   loginBody.appendChild(loginSubtitle);
   loginBody.appendChild(loginDesc);
@@ -163,7 +164,7 @@ async function init(): Promise<void> {
     passwordInput.value = '';
     loginError.textContent = '';
     loginBtn.disabled = false;
-    loginBtn.textContent = 'Войти';
+    loginBtn.textContent = t('login.button');
     loginContainer.classList.remove('hidden');
     void loginContainer.offsetHeight;
     loginContainer.classList.add('visible');
@@ -182,12 +183,16 @@ async function init(): Promise<void> {
     const password = passwordInput.value;
 
     if (!email || !password) {
-      loginError.textContent = 'Введите эл. почту и пароль.';
+      loginError.textContent = t('login.required');
       return false;
     }
 
     loginBtn.disabled = true;
-    loginBtn.innerHTML = '<span class="scout-spinner"></span>Вход...';
+    loginBtn.textContent = '';
+    const spinner = document.createElement('span');
+    spinner.className = 'scout-spinner';
+    loginBtn.appendChild(spinner);
+    loginBtn.appendChild(document.createTextNode(t('login.loading')));
     loginError.textContent = '';
 
     try {
@@ -195,10 +200,10 @@ async function init(): Promise<void> {
       hideLoginForm();
       return true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Ошибка входа';
+      const msg = err instanceof Error ? err.message : t('login.error');
       loginError.textContent = msg;
       loginBtn.disabled = false;
-  loginBtn.textContent = 'Войти';
+  loginBtn.textContent = t('login.button');
       return false;
     }
   }
@@ -246,7 +251,7 @@ async function init(): Promise<void> {
 
   const loadingText = document.createElement('div');
   loadingText.className = 'scout-loading-text';
-  loadingText.textContent = 'Создание скриншота...';
+  loadingText.textContent = t('loading.screenshot');
 
   loadingContent.appendChild(loadingSpinner);
   loadingContent.appendChild(loadingText);
@@ -281,7 +286,7 @@ async function init(): Promise<void> {
       preScreenshot = null;
       resumeRecording();
       showFab(fab);
-      showToast('Баг отправлен!');
+      showToast(t('toast.success'));
     },
     onSubmitError: (msg: string) => {
       showToast(msg, true);
@@ -291,7 +296,7 @@ async function init(): Promise<void> {
       preScreenshot = null;
       resumeRecording();
       showFab(fab);
-      showToast('Вы вышли из аккаунта');
+      showToast(t('toast.logout'));
     },
   };
 
@@ -327,7 +332,7 @@ async function init(): Promise<void> {
     }
 
     // Pre-capture screenshot with loading indicator (before panel opens)
-    showLoading('Создание скриншота...');
+    showLoading(t('loading.screenshot'));
     preScreenshot = await captureScreenshot(picked.cssSelector);
     hideLoading();
 

@@ -2,6 +2,7 @@ import type { PickedElement } from './element-picker';
 import { SCREENSHOT_MIME } from './screenshot';
 import { getRecordingCompressed, resetBuffer, isRecordingAvailable } from './recorder';
 import { getToken, getUser, clearAuth, resolveProjectId, resetProjectCache } from './auth';
+import { t } from './i18n';
 
 interface PanelElements {
   backdrop: HTMLDivElement;
@@ -92,7 +93,7 @@ async function fetchWithRetry(
     }
   }
 
-  throw lastError ?? new Error('Ошибка сети');
+  throw lastError ?? new Error(t('error.network'));
 }
 
 function sleep(ms: number): Promise<void> {
@@ -114,7 +115,7 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   header.className = 'scout-panel-header';
 
   const title = document.createElement('h2');
-  title.textContent = 'Scout — Сообщить о баге';
+  title.textContent = t('panel.title');
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'scout-panel-close';
@@ -142,8 +143,8 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
 
   const logoutBtn = document.createElement('button');
   logoutBtn.className = 'scout-logout-btn';
-  logoutBtn.textContent = 'Выйти';
-  logoutBtn.setAttribute('aria-label', 'Выйти из аккаунта');
+  logoutBtn.textContent = t('panel.logout');
+  logoutBtn.setAttribute('aria-label', t('panel.logoutLabel'));
 
   userBar.appendChild(userInfo);
   userBar.appendChild(logoutBtn);
@@ -158,14 +159,14 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
 
   const selectorLabel = document.createElement('div');
   selectorLabel.className = 'scout-element-info-label';
-  selectorLabel.textContent = 'Элемент';
+  selectorLabel.textContent = t('panel.element');
 
   const selectorDisplay = document.createElement('div');
   selectorDisplay.className = 'scout-element-info-value';
 
   const textLabel = document.createElement('div');
   textLabel.className = 'scout-element-info-label';
-  textLabel.textContent = 'Текст';
+  textLabel.textContent = t('panel.text');
 
   const textDisplay = document.createElement('div');
   textDisplay.className = 'scout-element-text';
@@ -180,10 +181,15 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   field.className = 'scout-field';
 
   const label = document.createElement('label');
-  label.innerHTML = 'Опишите проблему <span class="scout-required">*</span>';
+  label.textContent = '';
+  label.appendChild(document.createTextNode(t('panel.describe') + ' '));
+  const requiredSpan = document.createElement('span');
+  requiredSpan.className = 'scout-required';
+  requiredSpan.textContent = t('panel.required');
+  label.appendChild(requiredSpan);
 
   const textarea = document.createElement('textarea');
-  textarea.placeholder = 'Что пошло не так? Что вы ожидали?';
+  textarea.placeholder = t('panel.placeholder');
   textarea.setAttribute('minlength', '3');
   textarea.setAttribute('maxlength', '5000');
 
@@ -208,17 +214,17 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   priorityField.className = 'scout-field';
 
   const priorityLabel = document.createElement('label');
-  priorityLabel.textContent = 'Приоритет';
+  priorityLabel.textContent = t('panel.priority');
 
   const prioritySelect = document.createElement('select');
   prioritySelect.className = 'scout-input';
   prioritySelect.style.padding = '8px 12px';
 
   const priorityOptions: [string, string][] = [
-    ['critical', 'Критический'],
-    ['high', 'Высокий'],
-    ['medium', 'Средний'],
-    ['low', 'Низкий'],
+    ['critical', t('panel.priorityCritical')],
+    ['high', t('panel.priorityHigh')],
+    ['medium', t('panel.priorityMedium')],
+    ['low', t('panel.priorityLow')],
   ];
   for (const [value, text] of priorityOptions) {
     const opt = document.createElement('option');
@@ -238,7 +244,7 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   screenshotCheckbox.type = 'checkbox';
   screenshotCheckbox.checked = true;
   screenshotLabel.appendChild(screenshotCheckbox);
-  screenshotLabel.appendChild(document.createTextNode('Прикрепить скриншот'));
+  screenshotLabel.appendChild(document.createTextNode(t('panel.screenshot')));
 
   const recordingLabel = document.createElement('label');
   recordingLabel.className = 'scout-checkbox';
@@ -246,7 +252,7 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   recordingCheckbox.type = 'checkbox';
   recordingCheckbox.checked = true;
   recordingLabel.appendChild(recordingCheckbox);
-  recordingLabel.appendChild(document.createTextNode('Прикрепить запись сессии'));
+  recordingLabel.appendChild(document.createTextNode(t('panel.recording')));
 
   // Screenshot preview (professional pattern: show before sending)
   const screenshotPreview = document.createElement('div');
@@ -270,11 +276,11 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
 
   const submitBtn = document.createElement('button');
   submitBtn.className = 'scout-btn scout-btn-primary';
-  submitBtn.textContent = 'Отправить';
+  submitBtn.textContent = t('panel.submit');
 
   const cancelBtn = document.createElement('button');
   cancelBtn.className = 'scout-btn scout-btn-secondary';
-  cancelBtn.textContent = 'Отмена';
+  cancelBtn.textContent = t('panel.cancel');
 
   footer.appendChild(submitBtn);
   footer.appendChild(cancelBtn);
@@ -369,14 +375,14 @@ export function showPanel(
   }
 
   elements.selectorDisplay.textContent = picked.cssSelector;
-  elements.textDisplay.textContent = picked.elementText || '(нет текста)';
+  elements.textDisplay.textContent = picked.elementText || t('panel.noText');
   elements.textarea.value = '';
   elements.textarea.classList.remove('error');
   elements.charCount.textContent = '0 / 5000';
   elements.prioritySelect.value = 'medium';
   elements.screenshotCheckbox.checked = true;
   elements.submitBtn.disabled = false;
-  elements.submitBtn.textContent = 'Отправить';
+  elements.submitBtn.textContent = t('panel.submit');
   elements.cancelBtn.disabled = false;
 
   // Recording checkbox: only enable if recording is available
@@ -430,7 +436,7 @@ function showScreenshotPreview(elements: PanelElements, base64: string): void {
   elements.screenshotPreview.textContent = '';
   const img = document.createElement('img');
   img.src = `data:${SCREENSHOT_MIME};base64,${base64}`;
-  img.alt = 'Превью скриншота';
+  img.alt = t('panel.screenshotAlt');
   img.className = 'scout-screenshot-img';
   elements.screenshotPreview.appendChild(img);
   elements.screenshotPreview.classList.remove('hidden');
@@ -485,14 +491,18 @@ export function attachPanelEvents(
     // Disable controls
     elements.submitBtn.disabled = true;
     elements.cancelBtn.disabled = true;
-    elements.submitBtn.innerHTML = '<span class="scout-spinner"></span>Подготовка...';
+    elements.submitBtn.textContent = '';
+    const btnSpinner = document.createElement('span');
+    btnSpinner.className = 'scout-spinner';
+    elements.submitBtn.appendChild(btnSpinner);
+    elements.submitBtn.appendChild(document.createTextNode(t('panel.preparing')));
 
     try {
       const token = getToken();
-      if (!token) throw new Error('Вы не авторизованы');
+      if (!token) throw new Error(t('error.unauthorized'));
 
       // Step 1: Resolve project
-      setProgress(elements, 'Подключение к проекту...');
+      setProgress(elements, t('panel.connecting'));
       const projectId = await resolveProjectId(apiUrl, projectSlug);
 
       // Step 2: Use pre-captured screenshot (if checkbox is still checked)
@@ -503,8 +513,8 @@ export function attachPanelEvents(
       // Step 3: Serialize + compress recording (fflate gzip)
       let sessionRecording: string | undefined;
       if (elements.recordingCheckbox.checked) {
-        setProgress(elements, 'Сжатие записи сессии...');
-        elements.submitBtn.textContent = 'Запись...';
+        setProgress(elements, t('panel.compressing'));
+        elements.submitBtn.textContent = t('panel.recording_progress');
 
         const result = getRecordingCompressed();
         if (result !== null) {
@@ -513,8 +523,8 @@ export function attachPanelEvents(
       }
 
       // Step 4: Send with retry (exponential backoff: 1s, 2s, 4s)
-      setProgress(elements, 'Отправка на сервер...');
-      elements.submitBtn.textContent = 'Отправка...';
+      setProgress(elements, t('panel.uploading'));
+      elements.submitBtn.textContent = t('panel.sending');
 
       // Auto-capture environment metadata (Marker.io/Usersnap pattern)
       const metadata = collectMetadata();
@@ -545,13 +555,13 @@ export function attachPanelEvents(
           body: JSON.stringify(body),
         },
         (attempt, max) => {
-          setProgress(elements, `Повторная отправка (${attempt}/${max})...`);
+          setProgress(elements, t('panel.retrying', { attempt: String(attempt), max: String(max) }));
         },
       );
 
       if (!res.ok) {
         const errBody = await res.json().catch(() => null);
-        throw new Error(errBody?.error ?? errBody?.message ?? `Ошибка отправки (${res.status})`);
+        throw new Error(errBody?.error ?? errBody?.message ?? t('error.submitFailed', { status: String(res.status) }));
       }
 
       // Success
@@ -559,10 +569,10 @@ export function attachPanelEvents(
       hidePanel(elements);
       callbacks.onSubmitSuccess();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Неизвестная ошибка';
+      const msg = err instanceof Error ? err.message : t('error.unknown');
       elements.submitBtn.disabled = false;
       elements.cancelBtn.disabled = false;
-      elements.submitBtn.textContent = 'Отправить';
+      elements.submitBtn.textContent = t('panel.submit');
       elements.progressStatus.classList.add('hidden');
       callbacks.onSubmitError(msg);
     }

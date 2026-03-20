@@ -1,4 +1,5 @@
 import { generateSelector } from './selector';
+import { t } from './i18n';
 
 export interface PickedElement {
   cssSelector: string;
@@ -56,12 +57,12 @@ export function pickElement(
     bannerIcon.appendChild(line2);
 
     bannerText.appendChild(bannerIcon);
-    bannerText.appendChild(document.createTextNode('Нажмите на элемент с ошибкой'));
+    bannerText.appendChild(document.createTextNode(t('picker.hint')));
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'scout-picker-banner-cancel';
-    cancelBtn.setAttribute('aria-label', 'Отменить');
-    cancelBtn.textContent = 'Отмена';
+    cancelBtn.setAttribute('aria-label', t('picker.cancel'));
+    cancelBtn.textContent = t('picker.cancel');
 
     banner.appendChild(bannerText);
     banner.appendChild(cancelBtn);

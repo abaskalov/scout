@@ -1,3 +1,5 @@
+import { useTranslation } from '../i18n';
+
 interface PaginationProps {
   page: number;
   totalPages: number;
@@ -9,6 +11,8 @@ export default function Pagination({
   totalPages,
   onPageChange,
 }: PaginationProps) {
+  const { t } = useTranslation();
+
   if (totalPages <= 1) return null;
 
   const pages: (number | '...')[] = [];
@@ -31,7 +35,7 @@ export default function Pagination({
         disabled={page <= 1}
         className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        Назад
+        {t('common.prev')}
       </button>
       {pages.map((p, idx) =>
         p === '...' ? (
@@ -57,7 +61,7 @@ export default function Pagination({
         disabled={page >= totalPages}
         className="rounded px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        Вперёд
+        {t('common.next')}
       </button>
     </div>
   );

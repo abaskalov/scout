@@ -1,3 +1,5 @@
+import { useTranslation } from '../i18n';
+
 const colorMap: Record<string, string> = {
   critical: 'bg-red-100 text-red-800',
   high: 'bg-orange-100 text-orange-800',
@@ -5,17 +7,11 @@ const colorMap: Record<string, string> = {
   low: 'bg-gray-100 text-gray-600',
 };
 
-const labelMap: Record<string, string> = {
-  critical: 'Критический',
-  high: 'Высокий',
-  medium: 'Средний',
-  low: 'Низкий',
-};
-
 export default function PriorityBadge({ priority }: { priority: string | null | undefined }) {
+  const { t } = useTranslation();
   if (!priority) return null;
   const color = colorMap[priority] ?? 'bg-gray-100 text-gray-600';
-  const label = labelMap[priority] ?? priority;
+  const label = t(`items.priorities.${priority}`);
 
   return (
     <span
@@ -26,4 +22,4 @@ export default function PriorityBadge({ priority }: { priority: string | null | 
   );
 }
 
-export { colorMap as priorityColorMap, labelMap as priorityLabelMap };
+export { colorMap as priorityColorMap };

@@ -100,7 +100,7 @@ export default function ItemDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const admin = isAdmin();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [item, setItem] = useState<ItemData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -387,7 +387,7 @@ export default function ItemDetail() {
               <StatusBadge status={item.status} />
               <PriorityBadge priority={item.priority} />
               <span className="font-mono text-xs">#{item.id.slice(0, 8)}</span>
-              <span>{formatDate(item.createdAt)}</span>
+              <span>{formatDate(item.createdAt, locale)}</span>
             </div>
             {parseLabels(item.labels).length > 0 && (
               <div className="mt-1.5">
@@ -664,7 +664,7 @@ export default function ItemDetail() {
             {item.resolvedAt && (
               <div>
                 <dt className="text-xs font-medium text-green-700">{t('items.detail.resolution.date')}</dt>
-                <dd className="mt-0.5 text-sm text-green-900">{formatDate(item.resolvedAt)}</dd>
+                <dd className="mt-0.5 text-sm text-green-900">{formatDate(item.resolvedAt, locale)}</dd>
               </div>
             )}
             {item.resolutionNote && (
@@ -710,7 +710,7 @@ export default function ItemDetail() {
                   >
                     {noteTypeLabels[note.type] ?? note.type}
                   </span>
-                  <span>{formatDate(note.createdAt)}</span>
+                  <span>{formatDate(note.createdAt, locale)}</span>
                 </div>
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">
                   {renderNoteContent(note.content)}

@@ -1,3 +1,5 @@
+import { LOCALE_MAP, type Locale } from '../i18n';
+
 /**
  * Parse date string from API into a Date object.
  * SQLite datetime('now') returns "2026-03-16 18:47:23" (UTC, no Z suffix).
@@ -16,9 +18,9 @@ export function parseDate(dateStr: string): Date {
 /**
  * Format date for display in user's timezone.
  */
-export function formatDate(dateStr: string): string {
+export function formatDate(dateStr: string, locale: Locale = 'ru'): string {
   const d = parseDate(dateStr);
-  return d.toLocaleString('ru-RU', {
+  return d.toLocaleString(LOCALE_MAP[locale], {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -30,9 +32,9 @@ export function formatDate(dateStr: string): string {
 /**
  * Short date format (date only).
  */
-export function formatDateShort(dateStr: string): string {
+export function formatDateShort(dateStr: string, locale: Locale = 'ru'): string {
   const d = parseDate(dateStr);
-  return d.toLocaleDateString('ru-RU', {
+  return d.toLocaleDateString(LOCALE_MAP[locale], {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

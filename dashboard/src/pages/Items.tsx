@@ -61,7 +61,7 @@ const STATUS_KEYS: Record<string, string> = {
 export default function Items() {
   const navigate = useNavigate();
   const admin = isAdmin();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -359,7 +359,7 @@ export default function Items() {
                     {item.assigneeName ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-gray-500">
-                    {formatDate(item.createdAt)}
+                    {formatDate(item.createdAt, locale)}
                   </td>
                 </tr>
               ))
@@ -399,7 +399,7 @@ export default function Items() {
               )}
               <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
                 <span>{item.reporterName ?? '—'}</span>
-                <span>{formatDateShort(item.createdAt)}</span>
+                <span>{formatDateShort(item.createdAt, locale)}</span>
               </div>
             </div>
           ))

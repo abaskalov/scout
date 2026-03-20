@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useTranslation } from '../i18n';
 
 // rrweb replayer styles — injected into player container
 const REPLAYER_CSS = `
@@ -51,6 +52,7 @@ interface SessionPlayerProps {
 }
 
 export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
+  const { t } = useTranslation();
   const frameRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const replayerRef = useRef<any>(null);
@@ -125,13 +127,13 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
         setError(null);
 
         const res = await fetch(recordingPath);
-        if (!res.ok) throw new Error(`Не удалось загрузить запись: ${res.status}`);
+        if (!res.ok) throw new Error(t('items.detail.recording.loadError', { status: String(res.status) }));
         const events = await res.json();
 
         if (cancelled || !frameRef.current) return;
 
         if (!events.some((e: any) => e.type === 2)) {
-          setError('Запись повреждена: отсутствует начальный снимок страницы');
+          setError(t('items.detail.recording.corrupted'));
           setLoading(false);
           return;
         }
@@ -145,7 +147,10 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
         const { Replayer } = await import('rrweb');
         if (cancelled || !frameRef.current) return;
 
-        frameRef.current.innerHTML = '';
+        // Clear the container before initializing rrweb replayer
+        while (frameRef.current.firstChild) {
+          frameRef.current.removeChild(frameRef.current.firstChild);
+        }
 
         const replayer = new Replayer(events as any, {
           root: frameRef.current,
@@ -195,7 +200,7 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
         });
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Не удалось загрузить запись');
+          setError(err instanceof Error ? err.message : t('items.detail.recording.genericError'));
           setLoading(false);
         }
       }
@@ -210,7 +215,9 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
       window.removeEventListener('resize', rescale);
       replayerRef.current = null;
       if (frameRef.current) {
-        frameRef.current.innerHTML = '';
+        while (frameRef.current.firstChild) {
+          frameRef.current.removeChild(frameRef.current.firstChild);
+        }
         frameRef.current.style.height = '';
       }
     };
@@ -262,7 +269,7 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
 
   return (
     <div ref={wrapperRef} className="w-full">
-      {loading && <div className="py-4 text-sm text-gray-500">Загрузка записи...</div>}
+      {loading && <div className="py-4 text-sm text-gray-500">{t('items.detail.recording.loading')}</div>}
       {error && (
         <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       )}
@@ -286,7 +293,7 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
                 <button
                   onClick={toggle}
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600"
-                  title={playing ? 'Пауза' : 'Воспроизвести'}
+                  title={playing ? t('items.detail.recording.pause') : t('items.detail.recording.play')}
                 >
                   {playing ? (
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">

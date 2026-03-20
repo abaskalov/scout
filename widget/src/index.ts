@@ -1,5 +1,5 @@
 import { WIDGET_STYLES } from './styles';
-import { getToken, login, clearAuth } from './auth';
+import { getToken, login, clearAuth, initSSO } from './auth';
 import { createFab, showFab, hideFab } from './fab';
 import { pickElement, type PickedElement } from './element-picker';
 import { createPanel, showPanel, hidePanel, attachPanelEvents, type PanelCallbacks } from './panel';
@@ -34,7 +34,7 @@ function ensureViewportFitCover(): void {
   }
 }
 
-function init(): void {
+async function init(): Promise<void> {
   const config = window.__SCOUT_CONFIG__;
   if (!config?.apiUrl || !config?.projectSlug) {
     console.warn('[Scout] Missing window.__SCOUT_CONFIG__ (apiUrl, projectSlug)');
@@ -52,7 +52,8 @@ function init(): void {
 
   const { apiUrl, projectSlug } = config;
 
-
+  // --- Cross-domain SSO: fetch token from scout.kafu.kz via iframe ---
+  await initSSO(apiUrl);
 
   // --- Shadow DOM setup ---
   const host = document.createElement('div');

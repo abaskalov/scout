@@ -161,6 +161,41 @@ app.route('/api', v1);
 // Static files: screenshots, recordings — require authentication
 app.use('/storage/*', authMiddleware, serveStatic({ root: './' }));
 
+// SSO bridge — lightweight HTML page for cross-domain token storage via postMessage
+app.get('/auth/sso', (c) => {
+  // Allow framing from any origin (this page is specifically designed to be iframed)
+  c.header('X-Frame-Options', '');
+  c.header('Content-Security-Policy', "frame-ancestors *; default-src 'self' 'unsafe-inline'");
+
+  return c.html(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Scout SSO Bridge</title></head>
+<body><script>
+(function(){
+  var TK='__scout_token__',UK='__scout_user__';
+  function g(k){try{return localStorage.getItem(k)}catch(e){return null}}
+  function s(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+  function r(k){try{localStorage.removeItem(k)}catch(e){}}
+  window.addEventListener('message',function(e){
+    var d=e.data;
+    if(!d||d.ns!=='scout-sso')return;
+    var resp={ns:'scout-sso',id:d.id};
+    if(d.cmd==='getToken'){
+      resp.token=g(TK);resp.user=g(UK);
+    }else if(d.cmd==='setToken'){
+      if(d.token)s(TK,d.token);
+      if(d.user)s(UK,d.user);
+      resp.ok=true;
+    }else if(d.cmd==='clearToken'){
+      r(TK);r(UK);resp.ok=true;
+    }else if(d.cmd==='ping'){
+      resp.ok=true;
+    }
+    e.source.postMessage(resp,e.origin);
+  });
+})();
+</script></body></html>`);
+});
+
 // Widget JS (built by Vite)
 app.use('/widget/*', serveStatic({
   root: './',

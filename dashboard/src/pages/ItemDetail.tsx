@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { formatDate } from '../lib/date';
 import { isAdmin, storageUrl } from '../lib/auth';
 import { useSSE, type SSEEventType } from '../hooks/useSSE';
+import { useTranslation } from '../i18n';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import Labels, { parseLabels } from '../components/Labels';
@@ -82,10 +83,24 @@ function parseMetadata(raw: string | null): ParsedMetadata | null {
   }
 }
 
+/** Try to parse note content as structured JSON auto-note. */
+function parseAutoNote(content: string): { key: string; params?: Record<string, string> } | null {
+  try {
+    const parsed = JSON.parse(content);
+    if (typeof parsed === 'object' && parsed !== null && typeof parsed.key === 'string') {
+      return parsed as { key: string; params?: Record<string, string> };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default function ItemDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const admin = isAdmin();
+  const { t } = useTranslation();
   const [item, setItem] = useState<ItemData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -116,7 +131,7 @@ export default function ItemDetail() {
       const data = await api<ItemData>('/api/items/get', { id });
       setItem(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить задачу');
+      setError(err instanceof Error ? err.message : t('validation.loadError'));
     } finally {
       setLoading(false);
     }
@@ -178,7 +193,7 @@ export default function ItemDetail() {
       }
       await loadItem();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка запроса');
+      setError(err instanceof Error ? err.message : t('validation.requestError'));
     } finally {
       setActionLoading(false);
     }
@@ -200,7 +215,7 @@ export default function ItemDetail() {
       setMrUrl('');
       await loadItem();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка запроса');
+      setError(err instanceof Error ? err.message : t('validation.requestError'));
     } finally {
       setActionLoading(false);
     }
@@ -208,13 +223,13 @@ export default function ItemDetail() {
 
   async function handleDelete() {
     if (!item) return;
-    if (!window.confirm('Удалить баг? Это действие нельзя отменить.')) return;
+    if (!window.confirm(t('items.detail.deleteConfirm'))) return;
     setActionLoading(true);
     try {
       await api('/api/items/delete', { id: item.id });
       navigate('/items');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка удаления');
+      setError(err instanceof Error ? err.message : t('validation.deleteError'));
       setActionLoading(false);
     }
   }
@@ -226,7 +241,7 @@ export default function ItemDetail() {
       await api('/api/items/reopen', { id: item.id });
       await loadItem();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка запроса');
+      setError(err instanceof Error ? err.message : t('validation.requestError'));
     } finally {
       setActionLoading(false);
     }
@@ -257,7 +272,7 @@ export default function ItemDetail() {
       setEditing(false);
       await loadItem();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка сохранения');
+      setError(err instanceof Error ? err.message : t('validation.saveError'));
     } finally {
       setEditSaving(false);
     }
@@ -273,7 +288,7 @@ export default function ItemDetail() {
       });
       await loadItem();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка назначения');
+      setError(err instanceof Error ? err.message : t('validation.assignError'));
     } finally {
       setAssigneeLoading(false);
     }
@@ -295,15 +310,30 @@ export default function ItemDetail() {
       const getRes = await api<{ notes: typeof item.notes }>('/api/items/get', { id: item.id });
       setItem((prev) => prev ? { ...prev, notes: getRes.notes } : prev);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось добавить заметку');
+      setError(err instanceof Error ? err.message : t('validation.noteError'));
     } finally {
       setNoteSaving(false);
     }
   }
 
+  /** Render note content — auto-notes (JSON) get translated, plain text rendered as-is. */
+  function renderNoteContent(content: string): string {
+    const autoNote = parseAutoNote(content);
+    if (autoNote) {
+      return t(autoNote.key, autoNote.params);
+    }
+    return content;
+  }
+
+  const noteTypeLabels: Record<string, string> = {
+    comment: t('items.detail.notes.types.comment'),
+    status_change: t('items.detail.notes.types.status'),
+    assignment: t('items.detail.notes.types.assignment'),
+  };
+
   if (loading) {
     return (
-      <div className="p-4 md:p-6 text-gray-400">Загрузка...</div>
+      <div className="p-4 md:p-6 text-gray-400">{t('common.loading')}</div>
     );
   }
 
@@ -344,11 +374,15 @@ export default function ItemDetail() {
             onClick={() => navigate(-1)}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
-            &larr; Назад
+            &larr; {t('items.detail.back')}
           </button>
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
           <div className="min-w-0">
+            {/* Page title: item message (truncated) */}
+            <h1 className="text-lg font-bold text-gray-900 line-clamp-2 break-words mb-2">
+              {item.message}
+            </h1>
             <div className="flex flex-wrap items-center gap-2 md:gap-3 text-sm text-gray-500">
               <StatusBadge status={item.status} />
               <PriorityBadge priority={item.priority} />
@@ -370,25 +404,25 @@ export default function ItemDetail() {
                 />
                 <div className="flex flex-col gap-3 md:flex-row md:items-center">
                   <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <span className="text-xs font-medium text-gray-500">Приоритет</span>
+                    <span className="text-xs font-medium text-gray-500">{t('items.table.priority')}</span>
                     <select
                       value={editPriority}
                       onChange={(e) => setEditPriority(e.target.value)}
                       className="rounded-md border border-gray-300 px-2 py-1 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
                     >
-                      <option value="critical">Критический</option>
-                      <option value="high">Высокий</option>
-                      <option value="medium">Средний</option>
-                      <option value="low">Низкий</option>
+                      <option value="critical">{t('items.priorities.critical')}</option>
+                      <option value="high">{t('items.priorities.high')}</option>
+                      <option value="medium">{t('items.priorities.medium')}</option>
+                      <option value="low">{t('items.priorities.low')}</option>
                     </select>
                   </label>
                   <label className="flex flex-1 items-center gap-2 text-sm text-gray-700">
-                    <span className="text-xs font-medium text-gray-500 shrink-0">Метки</span>
+                    <span className="text-xs font-medium text-gray-500 shrink-0">{t('items.table.labels')}</span>
                     <input
                       type="text"
                       value={editLabels}
                       onChange={(e) => setEditLabels(e.target.value)}
-                      placeholder="баг, UI, срочно"
+                      placeholder="bug, UI, urgent"
                       className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
                     />
                   </label>
@@ -399,14 +433,14 @@ export default function ItemDetail() {
                     disabled={editSaving || !editMessage.trim()}
                     className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
                   >
-                    {editSaving ? 'Сохранение...' : 'Сохранить'}
+                    {editSaving ? t('common.saving') : t('common.save')}
                   </button>
                   <button
                     onClick={() => setEditing(false)}
                     disabled={editSaving}
                     className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
-                    Отмена
+                    {t('common.cancel')}
                   </button>
                 </div>
               </div>
@@ -419,7 +453,7 @@ export default function ItemDetail() {
                   <button
                     onClick={startEditing}
                     className="shrink-0 text-xs text-gray-400 hover:text-gray-600"
-                    title="Редактировать"
+                    title={t('items.detail.actions.edit')}
                   >
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -440,14 +474,14 @@ export default function ItemDetail() {
                   disabled={actionLoading}
                   className="w-full md:w-auto rounded-md bg-blue-600 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                 >
-                  Взять в работу
+                  {t('items.detail.actions.claim')}
                 </button>
                 <button
                   onClick={() => handleAction('cancel')}
                   disabled={actionLoading}
                   className="w-full md:w-auto rounded-md border border-gray-300 px-3 py-2 md:py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  Отменить
+                  {t('items.detail.actions.cancel')}
                 </button>
               </>
             )}
@@ -460,21 +494,21 @@ export default function ItemDetail() {
                   disabled={actionLoading}
                   className="w-full md:w-auto rounded-md bg-purple-600 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
                 >
-                  На ревью
+                  {t('items.detail.actions.review')}
                 </button>
                 <button
                   onClick={() => setShowResolveModal(true)}
                   disabled={actionLoading}
                   className="w-full md:w-auto rounded-md bg-green-600 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
                 >
-                  Готово
+                  {t('items.detail.actions.done')}
                 </button>
                 <button
                   onClick={() => handleAction('cancel')}
                   disabled={actionLoading}
                   className="w-full md:w-auto rounded-md border border-gray-300 px-3 py-2 md:py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  Отменить
+                  {t('items.detail.actions.cancel')}
                 </button>
               </>
             )}
@@ -487,14 +521,14 @@ export default function ItemDetail() {
                   disabled={actionLoading}
                   className="w-full md:w-auto rounded-md border border-gray-300 px-3 py-2 md:py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  Вернуть в работу
+                  {t('items.detail.actions.returnToWork')}
                 </button>
                 <button
                   onClick={() => setShowResolveModal(true)}
                   disabled={actionLoading}
                   className="w-full md:w-auto rounded-md bg-green-600 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
                 >
-                  Готово
+                  {t('items.detail.actions.done')}
                 </button>
               </>
             )}
@@ -505,7 +539,7 @@ export default function ItemDetail() {
                 disabled={actionLoading}
                 className="w-full md:w-auto rounded-md bg-yellow-500 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-50"
               >
-                Переоткрыть
+                {t('items.detail.actions.reopen')}
               </button>
             )}
             {/* Delete button — admin only */}
@@ -515,7 +549,7 @@ export default function ItemDetail() {
                 disabled={actionLoading}
                 className="w-full md:w-auto rounded-md bg-red-600 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >
-                Удалить
+                {t('items.detail.actions.delete')}
               </button>
             )}
           </div>
@@ -530,15 +564,15 @@ export default function ItemDetail() {
 
       {/* Info grid — single column on mobile, 2 cols on desktop */}
       <div className="mb-4 md:mb-6 grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 rounded-lg border border-gray-200 bg-white p-3 md:p-4">
-        <InfoRow label="URL страницы" value={item.pageUrl} link />
-        <InfoRow label="CSS-селектор" value={item.cssSelector} mono />
-        <InfoRow label="Элемент" value={item.elementText} />
-        <InfoRow label="Разрешение" value={viewportStr} />
-        <InfoRow label="Автор" value={item.reporterName} />
+        <InfoRow label={t('items.detail.elementInfo.url')} value={item.pageUrl} link />
+        <InfoRow label={t('items.detail.elementInfo.selector')} value={item.cssSelector} mono />
+        <InfoRow label={t('items.detail.elementInfo.element')} value={item.elementText} />
+        <InfoRow label={t('items.detail.elementInfo.resolution')} value={viewportStr} />
+        <InfoRow label={t('items.detail.elementInfo.author')} value={item.reporterName} />
         {/* Assignee — admin gets a dropdown, others see static text */}
         {admin && teamUsers.length > 0 ? (
           <div>
-            <dt className="text-xs font-medium text-gray-500">Исполнитель</dt>
+            <dt className="text-xs font-medium text-gray-500">{t('items.detail.elementInfo.assignee')}</dt>
             <dd className="mt-0.5">
               <select
                 value={item.assigneeId ?? ''}
@@ -546,7 +580,7 @@ export default function ItemDetail() {
                 disabled={assigneeLoading}
                 className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:opacity-50"
               >
-                <option value="">Не назначен</option>
+                <option value="">{t('items.detail.elementInfo.unassigned')}</option>
                 {teamUsers.map((u) => (
                   <option key={u.id} value={u.id}>{u.name}</option>
                 ))}
@@ -554,7 +588,7 @@ export default function ItemDetail() {
             </dd>
           </div>
         ) : (
-          <InfoRow label="Исполнитель" value={item.assigneeName} />
+          <InfoRow label={t('items.detail.elementInfo.assignee')} value={item.assigneeName} />
         )}
       </div>
 
@@ -562,21 +596,21 @@ export default function ItemDetail() {
       {meta && (
         <div className="mb-4 md:mb-6 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 rounded-lg border border-gray-200 bg-white p-3 md:p-4">
           <div className="col-span-2 md:col-span-4">
-            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide">Окружение</h3>
+            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('items.detail.metadata.title')}</h3>
           </div>
-          {meta.browser && <InfoRow label="Браузер" value={meta.browser} />}
-          {meta.os && <InfoRow label="ОС" value={meta.os} />}
-          {meta.screenResolution && <InfoRow label="Экран" value={meta.screenResolution} />}
-          {meta.timezone && <InfoRow label="Часовой пояс" value={meta.timezone} />}
-          {meta.language && <InfoRow label="Язык" value={meta.language} />}
-          {meta.devicePixelRatio && <InfoRow label="DPR" value={meta.devicePixelRatio} />}
+          {meta.browser && <InfoRow label={t('items.detail.metadata.browser')} value={meta.browser} />}
+          {meta.os && <InfoRow label={t('items.detail.metadata.os')} value={meta.os} />}
+          {meta.screenResolution && <InfoRow label={t('items.detail.metadata.screen')} value={meta.screenResolution} />}
+          {meta.timezone && <InfoRow label={t('items.detail.metadata.timezone')} value={meta.timezone} />}
+          {meta.language && <InfoRow label={t('items.detail.metadata.language')} value={meta.language} />}
+          {meta.devicePixelRatio && <InfoRow label={t('items.detail.metadata.dpr')} value={meta.devicePixelRatio} />}
         </div>
       )}
 
       {item.elementHtml && (
         <div className="mb-4 md:mb-6">
           <h3 className="mb-2 text-sm font-medium text-gray-700">
-            HTML элемента
+            {t('items.detail.html')}
           </h3>
           <pre className="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
             <code>{item.elementHtml}</code>
@@ -587,34 +621,34 @@ export default function ItemDetail() {
       {/* Screenshot with lightbox */}
       {screenshotUrl && (
         <div className="mb-4 md:mb-6">
-          <h3 className="mb-2 text-sm font-medium text-gray-700">Скриншот</h3>
+          <h3 className="mb-2 text-sm font-medium text-gray-700">{t('items.detail.screenshot.title')}</h3>
           <div className="rounded-lg border border-gray-200 overflow-auto max-h-[400px]">
-            <a href={screenshotUrl} data-fancybox="screenshot" data-caption="Скриншот страницы">
+            <a href={screenshotUrl} data-fancybox="screenshot" data-caption={t('items.detail.screenshot.caption')}>
               <img
                 src={screenshotUrl}
-                alt="Скриншот"
+                alt={t('items.detail.screenshot.title')}
                 className="w-full h-auto cursor-zoom-in hover:opacity-90 transition-opacity"
               />
             </a>
           </div>
-          <p className="mt-1 text-xs text-gray-400">Нажмите для увеличения. Скролл для просмотра.</p>
+          <p className="mt-1 text-xs text-gray-400">{t('items.detail.screenshot.hint')}</p>
         </div>
       )}
 
       {/* Resolution section — shown when status is done */}
       {item.status === 'done' && (item.branchName || item.mrUrl || item.resolvedAt || item.resolutionNote) && (
         <div className="mb-4 md:mb-6 rounded-lg border border-green-200 bg-green-50 p-3 md:p-4">
-          <h3 className="mb-3 text-sm font-medium text-green-800">Решение</h3>
+          <h3 className="mb-3 text-sm font-medium text-green-800">{t('items.detail.resolution.title')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {item.branchName && (
               <div>
-                <dt className="text-xs font-medium text-green-700">Ветка</dt>
+                <dt className="text-xs font-medium text-green-700">{t('items.detail.resolution.branch')}</dt>
                 <dd className="mt-0.5 text-sm text-green-900 font-mono break-all">{item.branchName}</dd>
               </div>
             )}
             {item.mrUrl && (
               <div>
-                <dt className="text-xs font-medium text-green-700">Merge Request</dt>
+                <dt className="text-xs font-medium text-green-700">{t('items.detail.resolution.mrUrl')}</dt>
                 <dd className="mt-0.5 text-sm break-all">
                   <a
                     href={item.mrUrl}
@@ -629,13 +663,13 @@ export default function ItemDetail() {
             )}
             {item.resolvedAt && (
               <div>
-                <dt className="text-xs font-medium text-green-700">Дата решения</dt>
+                <dt className="text-xs font-medium text-green-700">{t('items.detail.resolution.date')}</dt>
                 <dd className="mt-0.5 text-sm text-green-900">{formatDate(item.resolvedAt)}</dd>
               </div>
             )}
             {item.resolutionNote && (
               <div className="md:col-span-2">
-                <dt className="text-xs font-medium text-green-700">Комментарий</dt>
+                <dt className="text-xs font-medium text-green-700">{t('items.detail.resolution.comment')}</dt>
                 <dd className="mt-0.5 text-sm text-green-900 whitespace-pre-wrap">{item.resolutionNote}</dd>
               </div>
             )}
@@ -647,7 +681,7 @@ export default function ItemDetail() {
       {recordingUrl && (
         <div className="mb-4 md:mb-6 overflow-x-auto">
           <h3 className="mb-2 text-sm font-medium text-gray-700">
-            Запись сессии
+            {t('items.detail.recording')}
           </h3>
           <SessionPlayer recordingPath={recordingUrl} />
         </div>
@@ -655,10 +689,10 @@ export default function ItemDetail() {
 
       {/* Notes timeline — full width */}
       <div className="mb-4 md:mb-6" ref={notesRef}>
-        <h3 className="mb-3 text-sm font-medium text-gray-700">Заметки</h3>
+        <h3 className="mb-3 text-sm font-medium text-gray-700">{t('items.detail.notes.title')}</h3>
         <div className="space-y-3">
           {item.notes.length === 0 ? (
-            <p className="text-sm text-gray-400">Нет заметок</p>
+            <p className="text-sm text-gray-400">{t('items.detail.notes.empty')}</p>
           ) : (
             item.notes.map((note) => (
               <div
@@ -674,12 +708,12 @@ export default function ItemDetail() {
                       noteTypeColors[note.type] ?? 'bg-gray-100 text-gray-600'
                     }`}
                   >
-                    {{ comment: 'Комментарий', status_change: 'Статус', assignment: 'Назначение' }[note.type] || note.type}
+                    {noteTypeLabels[note.type] ?? note.type}
                   </span>
                   <span>{formatDate(note.createdAt)}</span>
                 </div>
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">
-                  {note.content}
+                  {renderNoteContent(note.content)}
                 </p>
               </div>
             ))
@@ -691,7 +725,7 @@ export default function ItemDetail() {
           <textarea
             value={noteContent}
             onChange={(e) => setNoteContent(e.target.value)}
-            placeholder="Добавить заметку..."
+            placeholder={t('items.detail.notes.placeholder')}
             rows={3}
             className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
           />
@@ -700,7 +734,7 @@ export default function ItemDetail() {
             disabled={noteSaving || !noteContent.trim()}
             className="mt-2 w-full md:w-auto rounded-md bg-gray-900 px-4 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-             {noteSaving ? 'Отправка...' : 'Отправить'}
+             {noteSaving ? t('items.detail.notes.sending') : t('items.detail.notes.send')}
           </button>
         </form>
       </div>
@@ -710,11 +744,11 @@ export default function ItemDetail() {
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40">
           <div className="w-full md:max-w-md rounded-t-xl md:rounded-lg border border-gray-200 bg-white p-5 md:p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <h3 className="mb-4 text-lg font-semibold text-gray-900">
-              Завершить задачу
+              {t('items.detail.resolve.title')}
             </h3>
             <label className="block">
               <span className="text-sm font-medium text-gray-700">
-                Комментарий к решению
+                {t('items.detail.resolve.note')}
               </span>
               <textarea
                 value={resolutionNote}
@@ -725,7 +759,7 @@ export default function ItemDetail() {
             </label>
             <label className="mt-3 block">
               <span className="text-sm font-medium text-gray-700">
-                Название ветки
+                {t('items.detail.resolve.branch')}
               </span>
               <input
                 type="text"
@@ -736,7 +770,7 @@ export default function ItemDetail() {
               />
             </label>
             <label className="mt-3 block">
-              <span className="text-sm font-medium text-gray-700">Ссылка на MR</span>
+              <span className="text-sm font-medium text-gray-700">{t('items.detail.resolve.mrUrl')}</span>
               <input
                 type="url"
                 value={mrUrl}
@@ -750,14 +784,14 @@ export default function ItemDetail() {
                 onClick={() => setShowResolveModal(false)}
                 className="w-full md:w-auto rounded-md border border-gray-300 px-4 py-2 md:py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
-                Отмена
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleResolve}
                 disabled={actionLoading}
                 className="w-full md:w-auto rounded-md bg-green-600 px-4 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
               >
-                {actionLoading ? 'Сохранение...' : 'Завершить'}
+                {actionLoading ? t('items.detail.resolve.saving') : t('items.detail.resolve.submit')}
               </button>
             </div>
           </div>

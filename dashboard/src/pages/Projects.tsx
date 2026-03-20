@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
+import { useTranslation } from '../i18n';
 import Pagination from '../components/Pagination';
+import Toggle from '../components/Toggle';
 
 interface ProjectRaw {
   id: string;
@@ -40,6 +42,7 @@ const emptyForm = {
 };
 
 export default function Projects() {
+  const { t } = useTranslation();
   const [projects, setProjects] = useState<Project[]>([]);
   const [pagination, setPagination] = useState<PaginationData>({
     page: 1,
@@ -121,19 +124,19 @@ export default function Projects() {
       setShowModal(false);
       await loadProjects();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка сохранения');
+      setError(err instanceof Error ? err.message : t('validation.saveError'));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Удалить этот проект?')) return;
+    if (!confirm(t('projects.deleteConfirm'))) return;
     try {
       await api('/api/projects/delete', { id });
       await loadProjects();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Ошибка удаления');
+      alert(err instanceof Error ? err.message : t('validation.deleteError'));
     }
   }
 
@@ -148,19 +151,22 @@ export default function Projects() {
       });
       await loadProjects();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Ошибка обновления');
+      alert(err instanceof Error ? err.message : t('validation.updateError'));
     }
   }
 
   return (
     <div className="p-4 md:p-6">
       <div className="mb-4 md:mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Проекты</h1>
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">{t('projects.title')}</h1>
+          <p className="mt-1 text-sm text-gray-500">{t('projects.description')}</p>
+        </div>
         <button
           onClick={openCreate}
           className="rounded-md bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
         >
-          Создать проект
+          {t('projects.create')}
         </button>
       </div>
 
@@ -169,25 +175,25 @@ export default function Projects() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-              <th className="px-4 py-3">Название</th>
-              <th className="px-4 py-3">Слаг</th>
-              <th className="px-4 py-3">Источники</th>
-              <th className="px-4 py-3 w-24 text-center">Авто-фикс</th>
-              <th className="px-4 py-3 w-24 text-center">Активен</th>
-              <th className="px-4 py-3 w-28 text-right">Действия</th>
+              <th className="px-4 py-3">{t('projects.table.name')}</th>
+              <th className="px-4 py-3">{t('projects.table.slug')}</th>
+              <th className="px-4 py-3">{t('projects.table.origins')}</th>
+              <th className="px-4 py-3 w-24 text-center">{t('projects.table.autofix')}</th>
+              <th className="px-4 py-3 w-24 text-center">{t('projects.table.active')}</th>
+              <th className="px-4 py-3 w-28 text-right">{t('projects.table.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  Загрузка...
+                  {t('common.loading')}
                 </td>
               </tr>
             ) : projects.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  Нет данных
+                  {t('common.noData')}
                 </td>
               </tr>
             ) : (
@@ -204,13 +210,13 @@ export default function Projects() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <Toggle
-                      value={p.autofixEnabled}
+                      checked={p.autofixEnabled}
                       onChange={() => toggleField(p, 'autofixEnabled')}
                     />
                   </td>
                   <td className="px-4 py-3 text-center">
                     <Toggle
-                      value={p.isActive}
+                      checked={p.isActive}
                       onChange={() => toggleField(p, 'isActive')}
                     />
                   </td>
@@ -219,13 +225,13 @@ export default function Projects() {
                       onClick={() => openEdit(p)}
                       className="text-sm text-blue-600 hover:underline"
                     >
-                      Изменить
+                      {t('common.edit')}
                     </button>
                     <button
                       onClick={() => handleDelete(p.id)}
                       className="ml-3 text-sm text-red-600 hover:underline"
                     >
-                      Удалить
+                      {t('common.delete')}
                     </button>
                   </td>
                 </tr>
@@ -238,9 +244,9 @@ export default function Projects() {
       {/* Mobile card list */}
       <div className="md:hidden space-y-2">
         {loading ? (
-          <div className="py-8 text-center text-gray-400">Загрузка...</div>
+          <div className="py-8 text-center text-gray-400">{t('common.loading')}</div>
         ) : projects.length === 0 ? (
-          <div className="py-8 text-center text-gray-400">Нет данных</div>
+          <div className="py-8 text-center text-gray-400">{t('common.noData')}</div>
         ) : (
           projects.map((p) => (
             <div
@@ -254,9 +260,9 @@ export default function Projects() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {p.isActive ? (
-                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">Активен</span>
+                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">{t('common.active')}</span>
                   ) : (
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">Неактивен</span>
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">{t('common.inactive')}</span>
                   )}
                 </div>
               </div>
@@ -269,17 +275,17 @@ export default function Projects() {
                 <div className="flex items-center gap-3">
                   <label className="flex items-center gap-1.5 text-xs text-gray-500">
                     <Toggle
-                      value={p.autofixEnabled}
+                      checked={p.autofixEnabled}
                       onChange={() => toggleField(p, 'autofixEnabled')}
                     />
-                    Авто-фикс
+                    {t('projects.form.autofix')}
                   </label>
                   <label className="flex items-center gap-1.5 text-xs text-gray-500">
                     <Toggle
-                      value={p.isActive}
+                      checked={p.isActive}
                       onChange={() => toggleField(p, 'isActive')}
                     />
-                    Активен
+                    {t('projects.form.active')}
                   </label>
                 </div>
                 <div className="flex items-center gap-3">
@@ -287,13 +293,13 @@ export default function Projects() {
                     onClick={() => openEdit(p)}
                     className="text-xs text-blue-600 hover:underline"
                   >
-                    Изменить
+                    {t('common.edit')}
                   </button>
                   <button
                     onClick={() => handleDelete(p.id)}
                     className="text-xs text-red-600 hover:underline"
                   >
-                    Удалить
+                    {t('common.delete')}
                   </button>
                 </div>
               </div>
@@ -316,7 +322,7 @@ export default function Projects() {
             className="w-full md:max-w-md rounded-t-xl md:rounded-lg border border-gray-200 bg-white p-5 md:p-6 shadow-xl max-h-[90vh] overflow-y-auto"
           >
             <h3 className="mb-4 text-lg font-semibold text-gray-900">
-              {editingId ? 'Редактирование проекта' : 'Создание проекта'}
+              {editingId ? t('projects.modal.edit') : t('projects.modal.create')}
             </h3>
 
             {error && (
@@ -326,7 +332,7 @@ export default function Projects() {
             )}
 
             <label className="block">
-              <span className="text-sm font-medium text-gray-700">Название</span>
+              <span className="text-sm font-medium text-gray-700">{t('projects.form.name')}</span>
               <input
                 type="text"
                 value={form.name}
@@ -338,21 +344,21 @@ export default function Projects() {
 
             {!editingId && (
               <label className="mt-3 block">
-                <span className="text-sm font-medium text-gray-700">Слаг</span>
+                <span className="text-sm font-medium text-gray-700">{t('projects.form.slug')}</span>
                 <input
                   type="text"
                   value={form.slug}
                   onChange={(e) => setForm({ ...form, slug: e.target.value })}
                   required
                   className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
-                  placeholder="my-project" 
+                  placeholder="my-project"
                 />
               </label>
             )}
 
             <div className="mt-3">
               <span className="text-sm font-medium text-gray-700">
-                Разрешённые источники
+                {t('projects.form.origins')}
               </span>
               <div className="mt-1 space-y-2">
                 {form.allowedOrigins.map((origin, idx) => (
@@ -380,7 +386,7 @@ export default function Projects() {
                           setForm({ ...form, allowedOrigins: updated });
                         }}
                         className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"
-                        title="Удалить"
+                        title={t('common.delete')}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
                           <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
@@ -397,11 +403,11 @@ export default function Projects() {
                 }
                 className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700"
               >
-                + Добавить источник
+                {t('projects.form.addOrigin')}
               </button>
               {form.allowedOrigins.some((o) => o && !o.match(/^https?:\/\//)) && (
                 <p className="mt-1 text-xs text-red-500">
-                  Источник должен начинаться с http:// или https://
+                  {t('projects.form.originHint')}
                 </p>
               )}
             </div>
@@ -417,7 +423,7 @@ export default function Projects() {
                     }
                     className="rounded border-gray-300"
                   />
-                  Авто-фикс
+                  {t('projects.form.autofix')}
                 </label>
                 <label className="flex items-center gap-2 text-sm text-gray-700">
                   <input
@@ -428,7 +434,7 @@ export default function Projects() {
                     }
                     className="rounded border-gray-300"
                   />
-                  Активен
+                  {t('projects.form.active')}
                 </label>
               </div>
             )}
@@ -439,43 +445,19 @@ export default function Projects() {
                 onClick={() => setShowModal(false)}
                 className="w-full md:w-auto rounded-md border border-gray-300 px-4 py-2 md:py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
-                Отмена
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
                 disabled={saving}
                 className="w-full md:w-auto rounded-md bg-gray-900 px-4 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
               >
-                {saving ? 'Сохранение...' : 'Сохранить'}
+                {saving ? t('common.saving') : t('common.save')}
               </button>
             </div>
           </form>
         </div>
       )}
     </div>
-  );
-}
-
-function Toggle({
-  value,
-  onChange,
-}: {
-  value: boolean;
-  onChange: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-        value ? 'bg-green-500' : 'bg-gray-300'
-      }`}
-    >
-      <span
-        className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-          value ? 'translate-x-[18px]' : 'translate-x-[3px]'
-        }`}
-      />
-    </button>
   );
 }

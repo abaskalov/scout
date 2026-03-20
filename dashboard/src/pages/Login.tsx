@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { isAuthenticated, login } from '../lib/auth';
+import { useTranslation } from '../i18n';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -23,7 +25,7 @@ export default function Login() {
       await login(email, password);
       navigate('/items', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка входа');
+      setError(err instanceof Error ? err.message : t('auth.loginError'));
     } finally {
       setLoading(false);
     }
@@ -35,8 +37,8 @@ export default function Login() {
     >
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Scout</h1>
-          <p className="mt-1 text-sm text-gray-500">Войти в аккаунт</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('auth.title')}</h1>
+          <p className="mt-1 text-sm text-gray-500">{t('auth.subtitle')}</p>
         </div>
 
         <form
@@ -50,7 +52,7 @@ export default function Login() {
           )}
 
           <label className="block">
-            <span className="text-sm font-medium text-gray-700">Эл. почта</span>
+            <span className="text-sm font-medium text-gray-700">{t('auth.email')}</span>
             <input
               type="email"
               value={email}
@@ -63,14 +65,14 @@ export default function Login() {
           </label>
 
           <label className="mt-4 block">
-            <span className="text-sm font-medium text-gray-700">Пароль</span>
+            <span className="text-sm font-medium text-gray-700">{t('auth.password')}</span>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-              placeholder="Пароль"
+              placeholder={t('auth.password')}
             />
           </label>
 
@@ -79,7 +81,7 @@ export default function Login() {
             disabled={loading}
             className="mt-6 w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {loading ? 'Вход...' : 'Войти'}
+            {loading ? t('auth.loggingIn') : t('auth.loginButton')}
           </button>
         </form>
       </div>

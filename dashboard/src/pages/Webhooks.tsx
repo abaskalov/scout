@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { api } from '../lib/api';
+import { useTranslation } from '../i18n';
+import Toggle from '../components/Toggle';
 
 interface Webhook {
   id: string;
@@ -19,12 +21,12 @@ interface Project {
   slug: string;
 }
 
-const ALL_EVENTS = [
-  { value: 'item.created', label: 'Новый баг' },
-  { value: 'item.status_changed', label: 'Статус изменён' },
-  { value: 'item.assigned', label: 'Назначен' },
-  { value: 'item.commented', label: 'Комментарий' },
-  { value: 'item.deleted', label: 'Удалён' },
+const ALL_EVENT_KEYS = [
+  { value: 'item.created', key: 'webhooks.events.item.created' },
+  { value: 'item.status_changed', key: 'webhooks.events.item.status_changed' },
+  { value: 'item.assigned', key: 'webhooks.events.item.assigned' },
+  { value: 'item.commented', key: 'webhooks.events.item.commented' },
+  { value: 'item.deleted', key: 'webhooks.events.item.deleted' },
 ] as const;
 
 const emptyForm = {
@@ -36,6 +38,7 @@ const emptyForm = {
 export default function Webhooks() {
   const [searchParams] = useSearchParams();
   const initialProjectId = searchParams.get('projectId') || '';
+  const { t } = useTranslation();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId);
@@ -128,19 +131,19 @@ export default function Webhooks() {
       setShowModal(false);
       await loadWebhooks();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка сохранения');
+      setError(err instanceof Error ? err.message : t('validation.saveError'));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Удалить этот вебхук?')) return;
+    if (!confirm(t('webhooks.deleteConfirm'))) return;
     try {
       await api('/api/webhooks/delete', { id });
       await loadWebhooks();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Ошибка удаления');
+      alert(err instanceof Error ? err.message : t('validation.deleteError'));
     }
   }
 
@@ -152,7 +155,7 @@ export default function Webhooks() {
       });
       await loadWebhooks();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Ошибка обновления');
+      alert(err instanceof Error ? err.message : t('validation.updateError'));
     }
   }
 
@@ -163,13 +166,13 @@ export default function Webhooks() {
       setTestResult({
         id,
         ok: res.ok,
-        message: res.ok ? `OK (${res.status})` : `Ошибка: ${res.error || res.status}`,
+        message: res.ok ? `OK (${res.status})` : `${t('common.error')}: ${res.error || res.status}`,
       });
     } catch (err) {
       setTestResult({
         id,
         ok: false,
-        message: err instanceof Error ? err.message : 'Ошибка отправки',
+        message: err instanceof Error ? err.message : t('webhooks.testError'),
       });
     }
   }
@@ -190,7 +193,10 @@ export default function Webhooks() {
   return (
     <div className="p-4 md:p-6">
       <div className="mb-4 md:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Вебхуки</h1>
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">{t('webhooks.title')}</h1>
+          <p className="mt-1 text-sm text-gray-500">{t('webhooks.description')}</p>
+        </div>
         <div className="flex items-center gap-3">
           <select
             value={selectedProjectId}
@@ -206,7 +212,7 @@ export default function Webhooks() {
             disabled={!selectedProjectId}
             className="rounded-md bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            Добавить вебхук
+            {t('webhooks.create')}
           </button>
         </div>
       </div>
@@ -216,24 +222,24 @@ export default function Webhooks() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-              <th className="px-4 py-3">URL</th>
-              <th className="px-4 py-3">События</th>
-              <th className="px-4 py-3 w-24 text-center">HMAC</th>
-              <th className="px-4 py-3 w-24 text-center">Активен</th>
-              <th className="px-4 py-3 w-48 text-right">Действия</th>
+              <th className="px-4 py-3">{t('webhooks.table.url')}</th>
+              <th className="px-4 py-3">{t('webhooks.table.events')}</th>
+              <th className="px-4 py-3 w-24 text-center">{t('webhooks.table.hmac')}</th>
+              <th className="px-4 py-3 w-24 text-center">{t('webhooks.table.active')}</th>
+              <th className="px-4 py-3 w-48 text-right">{t('webhooks.table.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
-                  Загрузка...
+                  {t('common.loading')}
                 </td>
               </tr>
             ) : webhooksItems.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
-                  Нет вебхуков
+                  {t('webhooks.empty')}
                 </td>
               </tr>
             ) : (
@@ -256,13 +262,13 @@ export default function Webhooks() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     {w.secret ? (
-                      <span className="text-green-600 text-xs font-medium">Да</span>
+                      <span className="text-green-600 text-xs font-medium">{t('common.yes')}</span>
                     ) : (
-                      <span className="text-gray-400 text-xs">Нет</span>
+                      <span className="text-gray-400 text-xs">{t('common.no')}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <Toggle value={w.isActive} onChange={() => handleToggle(w)} />
+                    <Toggle checked={w.isActive} onChange={() => handleToggle(w)} />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -270,19 +276,19 @@ export default function Webhooks() {
                         onClick={() => handleTest(w.id)}
                         className="text-xs text-gray-500 hover:text-gray-700 hover:underline"
                       >
-                        Тест
+                        {t('webhooks.test')}
                       </button>
                       <button
                         onClick={() => openEdit(w)}
                         className="text-xs text-blue-600 hover:underline"
                       >
-                        Изменить
+                        {t('common.edit')}
                       </button>
                       <button
                         onClick={() => handleDelete(w.id)}
                         className="text-xs text-red-600 hover:underline"
                       >
-                        Удалить
+                        {t('common.delete')}
                       </button>
                     </div>
                     {testResult?.id === w.id && (
@@ -301,9 +307,9 @@ export default function Webhooks() {
       {/* Mobile card list */}
       <div className="md:hidden space-y-2">
         {loading ? (
-          <div className="py-8 text-center text-gray-400">Загрузка...</div>
+          <div className="py-8 text-center text-gray-400">{t('common.loading')}</div>
         ) : webhooksItems.length === 0 ? (
-          <div className="py-8 text-center text-gray-400">Нет вебхуков</div>
+          <div className="py-8 text-center text-gray-400">{t('webhooks.empty')}</div>
         ) : (
           webhooksItems.map((w) => (
             <div key={w.id} className="rounded-lg border border-gray-200 bg-white p-3">
@@ -321,16 +327,16 @@ export default function Webhooks() {
                     ))}
                   </div>
                 </div>
-                <Toggle value={w.isActive} onChange={() => handleToggle(w)} />
+                <Toggle checked={w.isActive} onChange={() => handleToggle(w)} />
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs text-gray-400">
                   {w.secret ? <span className="text-green-600">HMAC</span> : null}
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => handleTest(w.id)} className="text-xs text-gray-500 hover:underline">Тест</button>
-                  <button onClick={() => openEdit(w)} className="text-xs text-blue-600 hover:underline">Изменить</button>
-                  <button onClick={() => handleDelete(w.id)} className="text-xs text-red-600 hover:underline">Удалить</button>
+                  <button onClick={() => handleTest(w.id)} className="text-xs text-gray-500 hover:underline">{t('webhooks.test')}</button>
+                  <button onClick={() => openEdit(w)} className="text-xs text-blue-600 hover:underline">{t('common.edit')}</button>
+                  <button onClick={() => handleDelete(w.id)} className="text-xs text-red-600 hover:underline">{t('common.delete')}</button>
                 </div>
               </div>
               {testResult?.id === w.id && (
@@ -351,7 +357,7 @@ export default function Webhooks() {
             className="w-full md:max-w-md rounded-t-xl md:rounded-lg border border-gray-200 bg-white p-5 md:p-6 shadow-xl max-h-[90vh] overflow-y-auto"
           >
             <h3 className="mb-4 text-lg font-semibold text-gray-900">
-              {editingId ? 'Редактирование вебхука' : 'Новый вебхук'}
+              {editingId ? t('webhooks.modal.edit') : t('webhooks.modal.create')}
             </h3>
 
             {error && (
@@ -361,7 +367,7 @@ export default function Webhooks() {
             )}
 
             <label className="block">
-              <span className="text-sm font-medium text-gray-700">URL</span>
+              <span className="text-sm font-medium text-gray-700">{t('webhooks.form.url')}</span>
               <input
                 type="url"
                 value={form.url}
@@ -374,7 +380,7 @@ export default function Webhooks() {
 
             <label className="mt-3 block">
               <span className="text-sm font-medium text-gray-700">
-                HMAC Secret <span className="text-gray-400 font-normal">(опционально)</span>
+                {t('webhooks.form.hmacSecret')} <span className="text-gray-400 font-normal">({t('webhooks.form.hmacOptional')})</span>
               </span>
               <input
                 type="text"
@@ -384,14 +390,14 @@ export default function Webhooks() {
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
               />
               <span className="text-xs text-gray-400">
-                Используется для подписи X-Scout-Signature
+                {t('webhooks.form.hmacHint')}
               </span>
             </label>
 
             <fieldset className="mt-3">
-              <legend className="text-sm font-medium text-gray-700">События</legend>
+              <legend className="text-sm font-medium text-gray-700">{t('webhooks.form.events')}</legend>
               <div className="mt-2 space-y-1.5">
-                {ALL_EVENTS.map(({ value, label }) => (
+                {ALL_EVENT_KEYS.map(({ value, key }) => (
                   <label key={value} className="flex items-center gap-2 text-sm text-gray-700">
                     <input
                       type="checkbox"
@@ -400,12 +406,12 @@ export default function Webhooks() {
                       className="rounded border-gray-300"
                     />
                     <span className="font-mono text-xs text-gray-500">{value}</span>
-                    <span className="text-gray-400">— {label}</span>
+                    <span className="text-gray-400">— {t(key)}</span>
                   </label>
                 ))}
               </div>
               {form.events.length === 0 && (
-                <p className="mt-1 text-xs text-red-500">Выберите хотя бы одно событие</p>
+                <p className="mt-1 text-xs text-red-500">{t('webhooks.eventsRequired')}</p>
               )}
             </fieldset>
 
@@ -415,43 +421,19 @@ export default function Webhooks() {
                 onClick={() => setShowModal(false)}
                 className="w-full md:w-auto rounded-md border border-gray-300 px-4 py-2 md:py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
-                Отмена
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
                 disabled={saving || form.events.length === 0}
                 className="w-full md:w-auto rounded-md bg-gray-900 px-4 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
               >
-                {saving ? 'Сохранение...' : 'Сохранить'}
+                {saving ? t('common.saving') : t('common.save')}
               </button>
             </div>
           </form>
         </div>
       )}
     </div>
-  );
-}
-
-function Toggle({
-  value,
-  onChange,
-}: {
-  value: boolean;
-  onChange: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-        value ? 'bg-green-500' : 'bg-gray-300'
-      }`}
-    >
-      <span
-        className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-          value ? 'translate-x-[18px]' : 'translate-x-[3px]'
-        }`}
-      />
-    </button>
   );
 }

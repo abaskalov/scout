@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { formatDate, formatDateShort } from '../lib/date';
 import { isAdmin } from '../lib/auth';
 import { useSSE } from '../hooks/useSSE';
+import { useTranslation } from '../i18n';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
 import Labels, { parseLabels } from '../components/Labels';
@@ -48,18 +49,19 @@ interface Counts {
 
 const STATUSES = ['all', 'new', 'in_progress', 'review', 'done', 'cancelled'] as const;
 
-const statusLabels: Record<string, string> = {
-  all: 'Все',
-  new: 'Новые',
-  in_progress: 'В работе',
-  review: 'На ревью',
-  done: 'Готово',
-  cancelled: 'Отменено',
+const STATUS_KEYS: Record<string, string> = {
+  all: 'items.statuses.all',
+  new: 'items.statuses.new',
+  in_progress: 'items.statuses.in_progress',
+  review: 'items.statuses.review',
+  done: 'items.statuses.done',
+  cancelled: 'items.statuses.cancelled',
 };
 
 export default function Items() {
   const navigate = useNavigate();
   const admin = isAdmin();
+  const { t } = useTranslation();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -215,7 +217,10 @@ export default function Items() {
   return (
     <div className="p-4 md:p-6">
       <div className="mb-4 md:mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Задачи</h1>
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">{t('items.title')}</h1>
+          <p className="mt-1 text-sm text-gray-500">{t('items.description')}</p>
+        </div>
         <select
           value={selectedProject ?? ''}
           onChange={handleProjectChange}
@@ -236,7 +241,7 @@ export default function Items() {
             type="text"
             value={searchInput}
             onChange={(e) => handleSearchInput(e.target.value)}
-            placeholder="Поиск по описанию..."
+            placeholder={t('items.filters.searchPlaceholder')}
             className="block w-full rounded-md border border-gray-300 pl-3 pr-8 py-1.5 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
           />
           {searchInput && (
@@ -256,11 +261,11 @@ export default function Items() {
           onChange={handlePriorityFilter}
           className="w-full md:w-44 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
         >
-          <option value="">Все приоритеты</option>
-          <option value="critical">Критический</option>
-          <option value="high">Высокий</option>
-          <option value="medium">Средний</option>
-          <option value="low">Низкий</option>
+          <option value="">{t('items.filters.allPriorities')}</option>
+          <option value="critical">{t('items.priorities.critical')}</option>
+          <option value="high">{t('items.priorities.high')}</option>
+          <option value="medium">{t('items.priorities.medium')}</option>
+          <option value="low">{t('items.priorities.low')}</option>
         </select>
         {admin && teamUsers.length > 0 && (
           <select
@@ -268,7 +273,7 @@ export default function Items() {
             onChange={handleAssigneeFilter}
             className="w-full md:w-48 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
           >
-            <option value="">Все исполнители</option>
+            <option value="">{t('items.filters.allAssignees')}</option>
             {teamUsers.map((u) => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
@@ -290,7 +295,7 @@ export default function Items() {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {statusLabels[s]}
+              {t(STATUS_KEYS[s]!)}
               {count !== null && (
                 <span className="ml-1.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
                   {count}
@@ -306,26 +311,26 @@ export default function Items() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
-              <th className="px-4 py-3">Сообщение</th>
-              <th className="px-4 py-3 w-28">Статус</th>
-              <th className="px-4 py-3 w-28">Приоритет</th>
-              <th className="px-4 py-3 w-36">Метки</th>
-              <th className="px-4 py-3 w-36">Автор</th>
-              <th className="px-4 py-3 w-36">Исполнитель</th>
-              <th className="px-4 py-3 w-40">Создано</th>
+              <th className="px-4 py-3">{t('items.table.message')}</th>
+              <th className="px-4 py-3 w-28">{t('items.table.status')}</th>
+              <th className="px-4 py-3 w-28">{t('items.table.priority')}</th>
+              <th className="px-4 py-3 w-36">{t('items.table.labels')}</th>
+              <th className="px-4 py-3 w-36">{t('items.table.author')}</th>
+              <th className="px-4 py-3 w-36">{t('items.table.assignee')}</th>
+              <th className="px-4 py-3 w-40">{t('items.table.created')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                  Загрузка...
+                  {t('common.loading')}
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                  {search ? 'Ничего не найдено' : 'Нет данных'}
+                  {search ? t('items.notFound') : t('items.empty')}
                 </td>
               </tr>
             ) : (
@@ -366,10 +371,10 @@ export default function Items() {
       {/* Mobile card list */}
       <div className="md:hidden space-y-2">
         {loading ? (
-          <div className="py-8 text-center text-gray-400">Загрузка...</div>
+          <div className="py-8 text-center text-gray-400">{t('common.loading')}</div>
         ) : items.length === 0 ? (
           <div className="py-8 text-center text-gray-400">
-            {search ? 'Ничего не найдено' : 'Нет данных'}
+            {search ? t('items.notFound') : t('items.empty')}
           </div>
         ) : (
           items.map((item) => (

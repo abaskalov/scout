@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router';
 import { getUser, isAdmin, logout } from '../lib/auth';
 import { api } from '../lib/api';
 import { useSSE, type SSEEventType } from '../hooks/useSSE';
+import { useTranslation, LOCALE_LABELS, type Locale } from '../i18n';
 
 export default function Layout() {
   const user = getUser();
@@ -10,6 +11,7 @@ export default function Layout() {
   const [newCount, setNewCount] = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const location = useLocation();
+  const { t, locale, setLocale } = useTranslation();
 
   // Close user menu on route change
   useEffect(() => {
@@ -66,6 +68,24 @@ export default function Layout() {
       isActive ? 'text-gray-900' : 'text-gray-400'
     }`;
 
+  const localeSwitcher = (
+    <div className="flex gap-1">
+      {(['ru', 'en', 'uz'] as const).map((l: Locale) => (
+        <button
+          key={l}
+          onClick={() => setLocale(l)}
+          className={`px-2 py-1 text-xs rounded ${
+            locale === l
+              ? 'bg-gray-900 text-white'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          {LOCALE_LABELS[l]}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Desktop Sidebar */}
@@ -91,7 +111,7 @@ export default function Layout() {
               <path d="M2 17l10 5 10-5" />
               <path d="M2 12l10 5 10-5" />
             </svg>
-            Задачи
+            {t('nav.items')}
             {newCount > 0 && (
               <span className="ml-auto rounded-full bg-yellow-400 px-2 py-0.5 text-xs font-semibold text-yellow-900">
                 {newCount}
@@ -104,14 +124,14 @@ export default function Layout() {
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
                 </svg>
-                Проекты
+                {t('nav.projects')}
               </NavLink>
               <NavLink to="/webhooks" className={linkClass}>
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                   <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                 </svg>
-                Вебхуки
+                {t('nav.webhooks')}
               </NavLink>
               <NavLink to="/users" className={linkClass}>
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -120,7 +140,7 @@ export default function Layout() {
                   <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
-                Пользователи
+                {t('nav.users')}
               </NavLink>
             </>
           )}
@@ -131,12 +151,17 @@ export default function Layout() {
             {user?.name ?? user?.email ?? 'User'}
           </div>
           <div className="text-xs text-gray-500 truncate">{user?.email}</div>
-          <button
-            onClick={logout}
-            className="mt-2 text-xs text-red-600 hover:text-red-800"
-          >
-            Выйти
-          </button>
+          <div className="mt-2 flex items-center justify-between">
+            <button
+              onClick={logout}
+              className="text-xs text-red-600 hover:text-red-800"
+            >
+              {t('nav.logout')}
+            </button>
+          </div>
+          <div className="mt-2">
+            {localeSwitcher}
+          </div>
         </div>
       </aside>
 
@@ -160,7 +185,7 @@ export default function Layout() {
         <span className="text-xs text-gray-500 truncate max-w-[140px]">{user?.name ?? user?.email ?? ''}</span>
       </div>
 
-      {/* Mobile user menu overlay (triggered from bottom nav "Профиль") */}
+      {/* Mobile user menu overlay (triggered from bottom nav profile button) */}
       {showUserMenu && (
         <div className="fixed inset-0 z-40 md:hidden" onClick={() => setShowUserMenu(false)}>
           <div className="absolute inset-0 bg-black/20" />
@@ -170,12 +195,15 @@ export default function Layout() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-1 text-sm font-medium text-gray-800">{user?.name ?? 'User'}</div>
-            <div className="mb-4 text-xs text-gray-500">{user?.email}</div>
+            <div className="mb-3 text-xs text-gray-500">{user?.email}</div>
+            <div className="mb-4">
+              {localeSwitcher}
+            </div>
             <button
               onClick={logout}
               className="w-full rounded-md border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
             >
-              Выйти
+              {t('nav.logout')}
             </button>
           </div>
         </div>
@@ -213,7 +241,7 @@ export default function Layout() {
               </span>
             )}
           </div>
-          Задачи
+          {t('nav.items')}
         </NavLink>
         {admin && (
           <>
@@ -221,14 +249,14 @@ export default function Layout() {
               <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
               </svg>
-              Проекты
+              {t('nav.projects')}
             </NavLink>
             <NavLink to="/webhooks" className={bottomNavLinkClass}>
               <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
               </svg>
-              Вебхуки
+              {t('nav.webhooks')}
             </NavLink>
             <NavLink to="/users" className={bottomNavLinkClass}>
               <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -237,7 +265,7 @@ export default function Layout() {
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
-              Пользователи
+              {t('nav.users')}
             </NavLink>
           </>
         )}
@@ -249,7 +277,7 @@ export default function Layout() {
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
             <circle cx="12" cy="7" r="4" />
           </svg>
-          Профиль
+          {t('nav.profile')}
         </button>
       </nav>
     </div>

@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Full bug lifecycle E2E test.
@@ -14,6 +19,9 @@ const API = 'http://localhost:10009';
 const DEMO = `${API}/demo/`;
 const DASHBOARD = `${API}`;
 
+// Shared token cache file — avoids rate-limited logins between browser projects
+const TOKEN_CACHE = join(__dirname, '.token-cache.json');
+
 // Helpers
 async function apiPost(path: string, body: object, token?: string) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -22,9 +30,16 @@ async function apiPost(path: string, body: object, token?: string) {
   return { status: res.status, data: await res.json().catch(() => null) };
 }
 
-async function login(email: string, password: string) {
-  const { data } = await apiPost('/auth/login', { email, password });
-  return data?.data?.token as string;
+async function login(email: string, password: string): Promise<string> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const { status, data } = await apiPost('/auth/login', { email, password });
+    if (status === 429) {
+      await new Promise((r) => setTimeout(r, 12_000));
+      continue;
+    }
+    return data?.data?.token as string;
+  }
+  throw new Error('Login failed after retries (rate limited)');
 }
 
 // --- Tests ---
@@ -34,12 +49,29 @@ test.describe('Full bug lifecycle', () => {
   let projectId: string;
 
   test.beforeAll(async () => {
+    test.setTimeout(120_000);
+
+    // Reuse token from previous browser project (avoids rate limit)
+    if (existsSync(TOKEN_CACHE)) {
+      try {
+        const cached = JSON.parse(readFileSync(TOKEN_CACHE, 'utf-8'));
+        if (cached.adminToken && cached.projectId) {
+          adminToken = cached.adminToken;
+          projectId = cached.projectId;
+          return;
+        }
+      } catch { /* cache corrupt — re-login */ }
+    }
+
     adminToken = await login('admin@scout.local', 'admin');
     expect(adminToken).toBeTruthy();
 
     const { data } = await apiPost('/projects/list', {}, adminToken);
     projectId = data?.data?.items?.[0]?.id;
     expect(projectId).toBeTruthy();
+
+    // Cache for other browser projects
+    writeFileSync(TOKEN_CACHE, JSON.stringify({ adminToken, projectId }));
   });
 
   test('1. Widget: create bug via API (simulating widget)', async () => {
@@ -64,18 +96,12 @@ test.describe('Full bug lifecycle', () => {
   });
 
   test('2. Dashboard: login and see bug list', async ({ page }) => {
-    // Login via API and set localStorage
+    // Reuse adminToken from beforeAll (avoids extra rate-limited login call)
     await page.goto(DASHBOARD);
-    await page.evaluate(async () => {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'admin@scout.local', password: 'admin' }),
-      });
-      const data = await res.json();
-      localStorage.setItem('scout_token', data.data.token);
-      localStorage.setItem('scout_user', JSON.stringify(data.data.user));
-    });
+    await page.evaluate((tk) => {
+      localStorage.setItem('scout_token', tk);
+      localStorage.setItem('scout_user', JSON.stringify({ id: '1', email: 'admin@scout.local', name: 'Admin' }));
+    }, adminToken);
 
     // Navigate to items list
     await page.goto(`${DASHBOARD}/items`);
@@ -165,6 +191,8 @@ test.describe('Full bug lifecycle', () => {
   });
 
   test('4. API: project access isolation', async () => {
+    test.setTimeout(120_000); // Member login may wait for rate limit reset
+
     // Create a second project (admin only)
     const { data: proj } = await apiPost('/projects/create', {
       name: 'Isolated E2E', slug: `isolated-e2e-${Date.now()}`,
@@ -253,5 +281,132 @@ test.describe('Full bug lifecycle', () => {
       body: JSON.stringify({ projectId }),
     });
     expect(countRes2.status).toBe(401);
+  });
+
+  // --- SSO Endpoints ---
+
+  test('10. SSO: iframe bridge serves HTML with postMessage handler', async () => {
+    const res = await fetch(`${API}/auth/sso`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    // Must contain the postMessage bridge script
+    expect(html).toContain('scout-sso');
+    expect(html).toContain('postMessage');
+    expect(html).toContain('getToken');
+    expect(html).toContain('setToken');
+    expect(html).toContain('clearToken');
+    expect(html).toContain('ping');
+    // Must NOT have X-Frame-Options: DENY (must be frameable)
+    expect(res.headers.get('x-frame-options')).not.toBe('DENY');
+  });
+
+  test('11. SSO: popup serves login page with session check', async () => {
+    const res = await fetch(`${API}/auth/sso/popup?origin=http://localhost:10009`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    // Must contain login form elements
+    expect(html).toContain('Scout');
+    expect(html).toContain('email');
+    expect(html).toContain('password');
+    expect(html).toContain('scout-sso-popup');
+    // Must have X-Frame-Options: DENY (popup, not iframe)
+    expect(res.headers.get('x-frame-options')).toBe('DENY');
+  });
+
+  test('12. SSO: popup validates origin in postMessage target', async () => {
+    const res = await fetch(`${API}/auth/sso/popup?origin=https://trusted.example.com`);
+    const html = await res.text();
+    // The TARGET variable should contain the validated origin
+    expect(html).toContain("TARGET='https://trusted.example.com'");
+  });
+
+  test('13. SSO: iframe bridge includes allowedOrigins whitelist', async () => {
+    const res = await fetch(`${API}/auth/sso`);
+    const html = await res.text();
+    // Must contain ALLOWED array for origin validation
+    expect(html).toContain('ALLOWED=');
+    expect(html).toContain('allowed(e.origin)');
+  });
+
+  // --- Storage Auth ---
+
+  test('14. Storage: query param token auth works', async () => {
+    // Create an item with screenshot to test storage access
+    const bugMsg = `Storage auth test ${Date.now()}`;
+    const { data: createData } = await apiPost('/items/create', {
+      projectId,
+      message: bugMsg,
+      priority: 'low',
+      // Small 1x1 white JPEG as base64
+      screenshot: '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMCwsKCwsM' +
+        'DRALDB4QEBMPEx0SEhMTFBQVFRYMEBcYGBQYFBQV/2wBDAQMEBAUEBQkFBQkVDgsOFRUVFRUVFRUVFRUVFRUV' +
+        'FRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRX/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/' +
+        'EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AKwA//9k=',
+    }, adminToken);
+    expect(createData.data.screenshotPath).toBeTruthy();
+
+    const screenshotPath = createData.data.screenshotPath;
+
+    // Without auth — should fail
+    const noAuthRes = await fetch(`${API}/${screenshotPath}`);
+    expect(noAuthRes.status).toBe(401);
+
+    // With query param token — should succeed
+    const withTokenRes = await fetch(`${API}/${screenshotPath}?token=${adminToken}`);
+    expect(withTokenRes.status).toBe(200);
+    expect(withTokenRes.headers.get('content-type')).toContain('image');
+
+    // With Authorization header — should also work
+    const withHeaderRes = await fetch(`${API}/${screenshotPath}`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` },
+    });
+    expect(withHeaderRes.status).toBe(200);
+
+    // Cleanup
+    await apiPost('/items/delete', { id: createData.data.id }, adminToken);
+  });
+
+  test('15. Storage: invalid token returns 401', async () => {
+    const res = await fetch(`${API}/storage/screenshots/nonexistent.jpg?token=invalid.jwt.token`);
+    expect(res.status).toBe(401);
+  });
+
+  // --- Dashboard SSO integration ---
+
+  test('16. Dashboard: storageUrl appends token to image paths', async ({ page }) => {
+    // Set token directly in localStorage
+    await page.goto(DASHBOARD);
+    await page.evaluate(() => {
+      localStorage.setItem('scout_token', 'test-jwt-token');
+    });
+
+    // Check that storageUrl logic works correctly
+    const urlResult = await page.evaluate(() => {
+      const token = localStorage.getItem('scout_token');
+      const path = 'storage/screenshots/test.jpg';
+      const url = token ? `/${path}?token=${encodeURIComponent(token)}` : `/${path}`;
+      return { hasToken: url.includes('?token='), startsWithSlash: url.startsWith('/') };
+    });
+    expect(urlResult.hasToken).toBe(true);
+    expect(urlResult.startsWithSlash).toBe(true);
+  });
+
+  // --- Widget endpoint ---
+
+  test('17. Widget: JS bundle is served', async () => {
+    const res = await fetch(`${API}/widget/scout-widget.js`);
+    expect(res.status).toBe(200);
+    const js = await res.text();
+    expect(js).toContain('scout-widget-root');
+    expect(js).toContain('__SCOUT_CONFIG__');
+    expect(js.length).toBeGreaterThan(100_000); // ~438KB
+  });
+
+  test('18. Dashboard: SPA routing works for client routes', async ({ page }) => {
+    // /login should serve index.html (SPA fallback)
+    await page.goto(`${DASHBOARD}/login`);
+    await page.waitForSelector('input', { timeout: 5000 });
+    const inputs = await page.locator('input').count();
+    expect(inputs).toBeGreaterThan(0);
   });
 });

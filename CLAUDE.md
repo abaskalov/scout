@@ -98,6 +98,22 @@ POST, JSON body, `Bearer JWT` или API Key (`sk_live_*`). Префикс `/api
 | Popup логин | `GET /auth/sso/popup?origin=...` |
 | Widget auth | `widget/src/auth.ts` |
 
+## Скриншоты (widget)
+
+- **Библиотека**: `html2canvas-pro` (форк html2canvas с поддержкой oklch/oklab/color-mix)
+- **Cross-origin iframes**: заменяются placeholder div'ами ПЕРЕД html2canvas, восстанавливаются ПОСЛЕ (Safari блокирует клонирование cross-origin iframe'ов)
+- **Файл**: `widget/src/screenshot.ts`
+- **Формат**: JPEG quality 0.85, base64 без data: prefix
+- **iOS**: viewport-only capture (полная страница крашит canvas)
+- **Storage**: `/storage/screenshots/*.jpg` — требует auth через `?token=` query param
+
+## Session Replay (widget + dashboard)
+
+- **Запись**: rrweb в виджете, gzip через fflate, 60с rolling buffer
+- **Воспроизведение**: rrweb Replayer в dashboard (`SessionPlayer.tsx`)
+- **CORS fix**: MutationObserver удаляет cross-origin `<link>` из replay iframe до загрузки
+- **Storage**: `/storage/recordings/*.json` — требует auth через `?token=`
+
 ## Даты
 
 UTC в API. `new Date().toISOString()` для новых записей. Dashboard парсит через `dashboard/src/lib/date.ts`.

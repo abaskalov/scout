@@ -44,7 +44,7 @@ Tester clicks element  →  Widget captures context + screenshot + recording
 
 | Area | Details |
 |------|---------|
-| **Widget** | Shadow DOM isolation, element picker with instruction banner, html2canvas screenshot with element highlight, rrweb session recording (60s buffer), cross-domain SSO |
+| **Widget** | Shadow DOM isolation, element picker with instruction banner, html2canvas-pro screenshot with element highlight, rrweb session recording (60s buffer), cross-domain SSO |
 | **Dashboard** | React SPA, rrweb session player, items/projects/users/webhooks management, locale switcher |
 | **i18n** | Russian, English, Uzbek (Latin). Dashboard + widget. Server error codes translated on client |
 | **AI Orchestrator** | Claims bugs, runs opencode, validates, creates PRs, updates status |
@@ -223,7 +223,7 @@ pnpm db:generate  # generate DB migration after schema change
 |-------|-----------|
 | API | Hono, Drizzle ORM, better-sqlite3, Zod |
 | Dashboard | React 19, Tailwind CSS 4, Vite 6 |
-| Widget | Vanilla TS, html2canvas, rrweb, fflate |
+| Widget | Vanilla TS, html2canvas-pro, rrweb, fflate |
 | Auth | JWT, bcrypt, API keys |
 | Tests | Vitest (unit), Playwright (E2E) |
 | Deploy | Docker, GitHub Actions, Caddy |

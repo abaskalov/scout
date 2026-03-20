@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { isAuthenticated } from './lib/auth';
+import { I18nProvider } from './i18n';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Items from './pages/Items';
@@ -17,25 +18,27 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/*"
-          element={
-            <AuthGuard>
-              <Layout />
-            </AuthGuard>
-          }
-        >
-          <Route index element={<Navigate to="/items" replace />} />
-          <Route path="items" element={<Items />} />
-          <Route path="items/:id" element={<ItemDetail />} />
-          <Route path="projects" element={<Projects />} />
-          <Route path="webhooks" element={<Webhooks />} />
-          <Route path="users" element={<Users />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <I18nProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/*"
+            element={
+              <AuthGuard>
+                <Layout />
+              </AuthGuard>
+            }
+          >
+            <Route index element={<Navigate to="/items" replace />} />
+            <Route path="items" element={<Items />} />
+            <Route path="items/:id" element={<ItemDetail />} />
+            <Route path="projects" element={<Projects />} />
+            <Route path="webhooks" element={<Webhooks />} />
+            <Route path="users" element={<Users />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </I18nProvider>
   );
 }

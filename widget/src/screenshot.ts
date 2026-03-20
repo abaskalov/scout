@@ -69,18 +69,22 @@ function fallbackForProp(prop: string): string {
 
 /**
  * Resolve oklch/oklab CSS values to rgb using the browser's own CSS engine.
- * Creates a temporary element, sets the value, reads back getComputedStyle.
+ * Uses a persistent off-screen element to avoid DOM thrashing.
  * Falls back to property-aware default if resolution fails.
  */
+let resolveEl: HTMLSpanElement | null = null;
+
 function resolveColor(value: string, prop: string): string {
   try {
-    const el = document.createElement('span');
-    el.style.setProperty('color', value);
-    document.body.appendChild(el);
-    const resolved = getComputedStyle(el).color;
-    el.remove();
-    // getComputedStyle returns rgb()/rgba() — html2canvas can parse these
-    if (resolved && resolved !== '' && !resolved.includes('oklch') && !resolved.includes('oklab')) {
+    if (!resolveEl) {
+      resolveEl = document.createElement('span');
+      resolveEl.style.cssText = 'position:fixed;top:-9999px;left:-9999px;pointer-events:none;visibility:hidden';
+      document.body.appendChild(resolveEl);
+    }
+    resolveEl.style.color = '';
+    resolveEl.style.color = value;
+    const resolved = getComputedStyle(resolveEl).color;
+    if (resolved && resolved !== '' && !hasUnsupportedColor(resolved)) {
       return resolved;
     }
   } catch { /* resolution failed */ }
@@ -123,13 +127,13 @@ function sanitizeUnsupportedColors(root: HTMLElement): void {
         }
       }
       // Sanitize CSS custom properties (--tw-*, etc.) that store oklch values
-      const cs = getComputedStyle(node);
-      for (let i = 0; i < cs.length; i++) {
-        const prop = cs[i]!;
-        if (prop.startsWith('--')) {
-          const val = style.getPropertyValue(prop);
-          if (val && hasUnsupportedColor(val)) {
-            style.setProperty(prop, replaceUnsupportedColors(val, 'transparent'));
+      // Read from inline style only (not computed — clone may not be in DOM yet)
+      for (let ci = 0; ci < style.length; ci++) {
+        const cprop = style[ci]!;
+        if (cprop.startsWith('--')) {
+          const cval = style.getPropertyValue(cprop);
+          if (cval && hasUnsupportedColor(cval)) {
+            style.setProperty(cprop, replaceUnsupportedColors(cval, 'transparent'));
           }
         }
       }
@@ -234,6 +238,7 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
           timeout,
         ]);
         const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+        if (resolveEl) { resolveEl.remove(); resolveEl = null; }
         return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
       } catch {
         // Strategy failed — try next
@@ -241,6 +246,8 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
     }
 
     console.warn('[Scout] All screenshot strategies failed');
+    // Cleanup resolve helper
+    if (resolveEl) { resolveEl.remove(); resolveEl = null; }
     return null;
   } catch (err) {
     console.warn('[Scout] Screenshot capture failed:', err);

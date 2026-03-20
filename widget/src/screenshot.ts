@@ -240,8 +240,8 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
         const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
         if (resolveEl) { resolveEl.remove(); resolveEl = null; }
         return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-      } catch {
-        // Strategy failed — try next
+      } catch (err) {
+        console.warn('[Scout] Strategy failed:', strategy, err);
       }
     }
 

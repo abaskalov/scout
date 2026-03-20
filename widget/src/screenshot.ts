@@ -1,40 +1,106 @@
 import html2canvas from 'html2canvas';
+import { t } from './i18n';
 
 /**
- * Capture a full-page screenshot using html2canvas.
- *
- * html2canvas renders the DOM to <canvas> by parsing CSS and drawing directly —
- * NO SVG foreignObject (unlike modern-screenshot / html-to-image).
- * This makes it the most cross-browser-compatible DOM screenshot solution.
- *
- * Professional improvements applied:
- * - JPEG format instead of PNG (3-5x smaller payload)
- * - Timeout via Promise.race (prevents hanging on complex pages)
- * - useCORS for cross-origin images (best-effort)
- * - Graceful degradation (returns null on failure)
+ * Screenshot capture with two strategies:
+ * 1. getDisplayMedia (Screen Capture API) — pixel-perfect, requires user permission
+ * 2. html2canvas fallback — approximate rendering, no permission needed
  *
  * Returns base64-encoded JPEG string (without data: prefix), or null on failure.
  */
 
-const SCREENSHOT_TIMEOUT_DESKTOP_MS = 10_000;
-const SCREENSHOT_TIMEOUT_IOS_MS = 8_000;
 const JPEG_QUALITY = 0.85;
+const HTML2CANVAS_TIMEOUT_MS = 10_000;
 
-/** Detect iOS Safari (iPhone, iPad, iPod — including iPad with desktop UA) */
-function isIOSSafari(): boolean {
+/** Detect iOS (no getDisplayMedia support) */
+function isIOS(): boolean {
   const ua = navigator?.userAgent ?? '';
   if (/iPhone|iPad|iPod/i.test(ua)) return true;
-  // iPad with desktop UA (iPadOS 13+)
   if (/Macintosh/i.test(ua) && navigator?.maxTouchPoints > 1) return true;
   return false;
 }
 
-const SCREENSHOT_TIMEOUT_MS = isIOSSafari() ? SCREENSHOT_TIMEOUT_IOS_MS : SCREENSHOT_TIMEOUT_DESKTOP_MS;
+// ============================================================
+// Strategy 1: getDisplayMedia — pixel-perfect native capture
+// ============================================================
 
-/**
- * Match balanced parentheses for a CSS function call.
- * Handles nested parens: oklch(0.5 0.2 calc(180 + 30))
- */
+async function captureNative(): Promise<string | null> {
+  // Not supported on iOS or in insecure contexts
+  if (isIOS() || !navigator.mediaDevices?.getDisplayMedia) return null;
+
+  let stream: MediaStream | null = null;
+
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: 'browser' } as MediaTrackConstraints,
+      audio: false,
+      // @ts-expect-error — preferCurrentTab is supported in Chrome 94+
+      preferCurrentTab: true,
+    });
+
+    const track = stream.getVideoTracks()[0];
+    if (!track) return null;
+
+    // Capture frame from video track
+    // @ts-expect-error — ImageCapture is available in Chrome 59+
+    if (typeof ImageCapture !== 'undefined') {
+      // @ts-expect-error
+      const capture = new ImageCapture(track);
+      const bitmap = await capture.grabFrame();
+
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close();
+
+      const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+    }
+
+    // Fallback: use video element to grab frame
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    video.muted = true;
+
+    await new Promise<void>((resolve) => {
+      video.onloadedmetadata = () => { video.play(); resolve(); };
+    });
+    // Wait one frame for the video to render
+    await new Promise((r) => requestAnimationFrame(r));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.drawImage(video, 0, 0);
+    video.pause();
+    video.srcObject = null;
+
+    const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+  } catch {
+    // User denied permission or API not available
+    return null;
+  } finally {
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+    }
+  }
+}
+
+// ============================================================
+// Strategy 2: html2canvas fallback
+// ============================================================
+
+/** CSS color functions unsupported by html2canvas v1.4 */
+const UNSUPPORTED_FNS = ['oklch', 'oklab', 'lab', 'lch', 'color-mix', 'light-dark'];
+
 function replaceColorFn(css: string, fnName: string, replacement: string): string {
   let result = '';
   let i = 0;
@@ -43,7 +109,6 @@ function replaceColorFn(css: string, fnName: string, replacement: string): strin
     const idx = lower.indexOf(fnName + '(', i);
     if (idx === -1) { result += css.slice(i); break; }
     result += css.slice(i, idx);
-    // Find matching closing paren
     let depth = 0;
     let j = idx + fnName.length;
     for (; j < css.length; j++) {
@@ -56,10 +121,6 @@ function replaceColorFn(css: string, fnName: string, replacement: string): strin
   return result;
 }
 
-/** CSS color functions unsupported by html2canvas v1.4 */
-const UNSUPPORTED_FNS = ['oklch', 'oklab', 'lab', 'lch', 'color-mix', 'light-dark'];
-
-/** Property-aware fallback: text→black, background→transparent, border→gray */
 function fallbackForProp(prop: string): string {
   if (/^color$|^-webkit-text/.test(prop)) return '#000';
   if (/border|outline/.test(prop)) return '#ccc';
@@ -75,15 +136,9 @@ function replaceUnsupportedColors(css: string, fallback: string): string {
   return result;
 }
 
-/**
- * Sanitize unsupported CSS color functions in the cloned DOM.
- * html2canvas v1.4 crashes on oklch/oklab/color-mix used by Tailwind 4.
- * CSS custom properties (--var) store literal oklch() values that survive getComputedStyle.
- */
 function sanitizeUnsupportedColors(root: HTMLElement): void {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
   let node: Node | null = walker.currentNode;
-
   while (node) {
     if (node instanceof HTMLElement) {
       const style = node.style;
@@ -91,27 +146,70 @@ function sanitizeUnsupportedColors(root: HTMLElement): void {
         const prop = style[i]!;
         const val = style.getPropertyValue(prop);
         const replaced = replaceUnsupportedColors(val, fallbackForProp(prop));
-        if (replaced !== val) {
-          style.setProperty(prop, replaced);
-        }
+        if (replaced !== val) style.setProperty(prop, replaced);
       }
     }
     node = walker.nextNode();
   }
-
-  // Sanitize <style> tags in the cloned document
   const doc = root.ownerDocument;
   if (doc) {
     doc.querySelectorAll('style').forEach((styleEl) => {
       const text = styleEl.textContent ?? '';
       const replaced = replaceUnsupportedColors(text, 'transparent');
-      if (replaced !== text) {
-        styleEl.textContent = replaced;
-      }
+      if (replaced !== text) styleEl.textContent = replaced;
     });
   }
 }
 
+async function captureHtml2Canvas(): Promise<string | null> {
+  const ios = isIOS();
+  const w = ios ? window.innerWidth : Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, window.innerWidth);
+  const h = ios ? window.innerHeight : Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight);
+  const sx = ios ? window.scrollX : 0;
+  const sy = ios ? window.scrollY : 0;
+
+  const baseOpts = {
+    width: w, height: h, windowWidth: w, windowHeight: h,
+    scrollX: ios ? -sx : 0, scrollY: ios ? -sy : 0,
+    x: ios ? sx : 0, y: ios ? sy : 0,
+    scale: 1, backgroundColor: '#ffffff',
+    ignoreElements: (el: Element) => el.id === 'scout-widget-root',
+    logging: false,
+    onclone: (_doc: Document, clone: HTMLElement) => sanitizeUnsupportedColors(clone),
+  };
+
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Screenshot timeout')), HTML2CANVAS_TIMEOUT_MS),
+  );
+
+  for (const strategy of [
+    { useCORS: true, allowTaint: false },
+    { useCORS: false, allowTaint: true },
+  ]) {
+    try {
+      const canvas = await Promise.race([
+        html2canvas(document.documentElement, { ...baseOpts, ...strategy }),
+        timeout,
+      ]);
+      const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+    } catch {
+      // Strategy failed — try next
+    }
+  }
+
+  return null;
+}
+
+// ============================================================
+// Public API
+// ============================================================
+
+/**
+ * Capture screenshot. Tries native Screen Capture API first (pixel-perfect),
+ * falls back to html2canvas (approximate but no permission needed).
+ * Optionally highlights a picked element with red border.
+ */
 export async function captureScreenshot(highlightSelector?: string): Promise<string | null> {
   let highlightOverlay: HTMLDivElement | null = null;
 
@@ -120,15 +218,12 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
       const el = document.querySelector(highlightSelector);
       if (el) {
         const rect = el.getBoundingClientRect();
-        const absTop = rect.top + window.scrollY;
-        const absLeft = rect.left + window.scrollX;
-
         highlightOverlay = document.createElement('div');
         highlightOverlay.setAttribute('data-scout-highlight', 'true');
         highlightOverlay.style.cssText = `
-          position: absolute;
-          top: ${absTop - 3}px;
-          left: ${absLeft - 3}px;
+          position: fixed;
+          top: ${rect.top - 3}px;
+          left: ${rect.left - 3}px;
           width: ${rect.width + 6}px;
           height: ${rect.height + 6}px;
           border: 3px solid #ef4444;
@@ -146,78 +241,15 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
   }
 
   try {
-    const ios = isIOSSafari();
+    // Strategy 1: Native screen capture (pixel-perfect)
+    const native = await captureNative();
+    if (native) return native;
 
-    // iOS Safari: capture viewport only (full-page creates huge canvas that crashes)
-    // Desktop: capture full page
-    const captureWidth = ios
-      ? window.innerWidth
-      : Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, window.innerWidth);
-    const captureHeight = ios
-      ? window.innerHeight
-      : Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight);
-
-    // On iOS, capture from current scroll position (viewport)
-    const scrollX = ios ? window.scrollX : 0;
-    const scrollY = ios ? window.scrollY : 0;
-
-    const baseOpts = {
-      width: captureWidth,
-      height: captureHeight,
-      windowWidth: captureWidth,
-      windowHeight: captureHeight,
-      scrollX: ios ? -scrollX : 0,
-      scrollY: ios ? -scrollY : 0,
-      x: ios ? scrollX : 0,
-      y: ios ? scrollY : 0,
-      scale: 1,
-      backgroundColor: '#ffffff',
-      ignoreElements: (element: Element) => element.id === 'scout-widget-root',
-      logging: false,
-      // html2canvas v1 doesn't support oklch/oklab/lab/lch color functions.
-      // Replace them with fallback colors in the cloned DOM before rendering.
-      onclone: (_doc: Document, clone: HTMLElement) => {
-        sanitizeUnsupportedColors(clone);
-      },
-    };
-
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
-    );
-
-    // Strategy 1: useCORS (clean canvas, exportable)
-    // Strategy 2: allowTaint (renders all images but canvas may be tainted)
-    for (const strategy of [
-      { useCORS: true, allowTaint: false },
-      { useCORS: false, allowTaint: true },
-    ]) {
-      try {
-        const canvas = await Promise.race([
-          html2canvas(document.documentElement, { ...baseOpts, ...strategy }),
-          timeout,
-        ]);
-        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-        return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-      } catch (err) {
-        console.warn('[Scout] Screenshot strategy failed:', strategy, err);
-        // Strategy failed — try next
-      }
-    }
-
-    console.warn('[Scout] All screenshot strategies failed');
-    return null;
-  } catch (err) {
-    console.warn('[Scout] Screenshot capture failed:', err);
-    return null;
+    // Strategy 2: html2canvas fallback (approximate)
+    return await captureHtml2Canvas();
   } finally {
-    if (highlightOverlay) {
-      highlightOverlay.remove();
-    }
+    if (highlightOverlay) highlightOverlay.remove();
   }
 }
 
-/**
- * Get the MIME type used for screenshots.
- * Used by panel to set correct content type.
- */
 export const SCREENSHOT_MIME = 'image/jpeg';

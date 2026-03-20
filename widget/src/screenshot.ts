@@ -1,235 +1,19 @@
-import html2canvas from 'html2canvas';
-import { t } from './i18n';
+import { domToJpeg } from 'modern-screenshot';
 
 /**
- * Screenshot capture with two strategies:
- * 1. getDisplayMedia (Screen Capture API) — pixel-perfect, requires user permission
- * 2. html2canvas fallback — approximate rendering, no permission needed
+ * Screenshot capture using modern-screenshot (SVG foreignObject).
+ *
+ * Unlike html2canvas which re-implements CSS rendering on canvas,
+ * modern-screenshot uses SVG foreignObject — the browser itself renders
+ * the DOM natively. This means oklch, color-mix, grid, flexbox, and all
+ * modern CSS features work out of the box.
  *
  * Returns base64-encoded JPEG string (without data: prefix), or null on failure.
  */
 
 const JPEG_QUALITY = 0.85;
-const HTML2CANVAS_TIMEOUT_MS = 10_000;
+const SCREENSHOT_TIMEOUT_MS = 10_000;
 
-/** Detect iOS (no getDisplayMedia support) */
-function isIOS(): boolean {
-  const ua = navigator?.userAgent ?? '';
-  if (/iPhone|iPad|iPod/i.test(ua)) return true;
-  if (/Macintosh/i.test(ua) && navigator?.maxTouchPoints > 1) return true;
-  return false;
-}
-
-// ============================================================
-// Strategy 1: getDisplayMedia — pixel-perfect native capture
-// ============================================================
-
-async function captureNative(): Promise<string | null> {
-  // Not supported on iOS or in insecure contexts
-  if (isIOS() || !navigator.mediaDevices?.getDisplayMedia) return null;
-
-  let stream: MediaStream | null = null;
-
-  try {
-    stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { displaySurface: 'browser' } as MediaTrackConstraints,
-      audio: false,
-      // @ts-expect-error — preferCurrentTab is supported in Chrome 94+
-      preferCurrentTab: true,
-    });
-
-    const track = stream.getVideoTracks()[0];
-    if (!track) return null;
-
-    // Grab a single frame from the video track
-    let rawCanvas: HTMLCanvasElement;
-
-    // @ts-expect-error — ImageCapture is available in Chrome 59+
-    if (typeof ImageCapture !== 'undefined') {
-      // @ts-expect-error
-      const capture = new ImageCapture(track);
-      const bitmap = await capture.grabFrame();
-      rawCanvas = document.createElement('canvas');
-      rawCanvas.width = bitmap.width;
-      rawCanvas.height = bitmap.height;
-      const ctx = rawCanvas.getContext('2d');
-      if (!ctx) return null;
-      ctx.drawImage(bitmap, 0, 0);
-      bitmap.close();
-    } else {
-      // Fallback: use video element
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      video.muted = true;
-      await new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => { video.play(); resolve(); };
-      });
-      await new Promise((r) => requestAnimationFrame(r));
-      rawCanvas = document.createElement('canvas');
-      rawCanvas.width = video.videoWidth;
-      rawCanvas.height = video.videoHeight;
-      const ctx = rawCanvas.getContext('2d');
-      if (!ctx) return null;
-      ctx.drawImage(video, 0, 0);
-      video.pause();
-      video.srcObject = null;
-    }
-
-    // If user shared entire screen instead of tab, crop to viewport area.
-    // The device pixel ratio scales the capture — account for it.
-    const dpr = window.devicePixelRatio || 1;
-    const vpW = Math.round(window.innerWidth * dpr);
-    const vpH = Math.round(window.innerHeight * dpr);
-    const isFullScreen = rawCanvas.width > vpW * 1.2 || rawCanvas.height > vpH * 1.2;
-
-    if (isFullScreen) {
-      // Crop: use screenX/screenY + browser chrome offset to estimate content area.
-      // For most browsers the content starts at the top of the captured tab surface.
-      // We crop to viewport dimensions from center-ish of the captured image.
-      const cropW = Math.min(vpW, rawCanvas.width);
-      const cropH = Math.min(vpH, rawCanvas.height);
-      const cropCanvas = document.createElement('canvas');
-      cropCanvas.width = cropW;
-      cropCanvas.height = cropH;
-      const ctx = cropCanvas.getContext('2d');
-      if (!ctx) return null;
-      // Estimate content offset — take from bottom-center of the capture
-      // (browser chrome is at top, dock at bottom)
-      const sx = Math.max(0, Math.round((rawCanvas.width - cropW) / 2));
-      const sy = Math.max(0, rawCanvas.height - cropH);
-      ctx.drawImage(rawCanvas, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
-      const dataUrl = cropCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
-      return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-    }
-
-    const dataUrl = rawCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
-    return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-  } catch {
-    // User denied permission or API not available
-    return null;
-  } finally {
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-    }
-  }
-}
-
-// ============================================================
-// Strategy 2: html2canvas fallback
-// ============================================================
-
-/** CSS color functions unsupported by html2canvas v1.4 */
-const UNSUPPORTED_FNS = ['oklch', 'oklab', 'lab', 'lch', 'color-mix', 'light-dark'];
-
-function replaceColorFn(css: string, fnName: string, replacement: string): string {
-  let result = '';
-  let i = 0;
-  const lower = css.toLowerCase();
-  while (i < css.length) {
-    const idx = lower.indexOf(fnName + '(', i);
-    if (idx === -1) { result += css.slice(i); break; }
-    result += css.slice(i, idx);
-    let depth = 0;
-    let j = idx + fnName.length;
-    for (; j < css.length; j++) {
-      if (css[j] === '(') depth++;
-      else if (css[j] === ')') { depth--; if (depth === 0) { j++; break; } }
-    }
-    result += replacement;
-    i = j;
-  }
-  return result;
-}
-
-function fallbackForProp(prop: string): string {
-  if (/^color$|^-webkit-text/.test(prop)) return '#000';
-  if (/border|outline/.test(prop)) return '#ccc';
-  if (/shadow/.test(prop)) return 'none';
-  return 'transparent';
-}
-
-function replaceUnsupportedColors(css: string, fallback: string): string {
-  let result = css;
-  for (const fn of UNSUPPORTED_FNS) {
-    result = replaceColorFn(result, fn, fallback);
-  }
-  return result;
-}
-
-function sanitizeUnsupportedColors(root: HTMLElement): void {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-  let node: Node | null = walker.currentNode;
-  while (node) {
-    if (node instanceof HTMLElement) {
-      const style = node.style;
-      for (let i = 0; i < style.length; i++) {
-        const prop = style[i]!;
-        const val = style.getPropertyValue(prop);
-        const replaced = replaceUnsupportedColors(val, fallbackForProp(prop));
-        if (replaced !== val) style.setProperty(prop, replaced);
-      }
-    }
-    node = walker.nextNode();
-  }
-  const doc = root.ownerDocument;
-  if (doc) {
-    doc.querySelectorAll('style').forEach((styleEl) => {
-      const text = styleEl.textContent ?? '';
-      const replaced = replaceUnsupportedColors(text, 'transparent');
-      if (replaced !== text) styleEl.textContent = replaced;
-    });
-  }
-}
-
-async function captureHtml2Canvas(): Promise<string | null> {
-  const ios = isIOS();
-  const w = ios ? window.innerWidth : Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, window.innerWidth);
-  const h = ios ? window.innerHeight : Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight);
-  const sx = ios ? window.scrollX : 0;
-  const sy = ios ? window.scrollY : 0;
-
-  const baseOpts = {
-    width: w, height: h, windowWidth: w, windowHeight: h,
-    scrollX: ios ? -sx : 0, scrollY: ios ? -sy : 0,
-    x: ios ? sx : 0, y: ios ? sy : 0,
-    scale: 1, backgroundColor: '#ffffff',
-    ignoreElements: (el: Element) => el.id === 'scout-widget-root',
-    logging: false,
-    onclone: (_doc: Document, clone: HTMLElement) => sanitizeUnsupportedColors(clone),
-  };
-
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('Screenshot timeout')), HTML2CANVAS_TIMEOUT_MS),
-  );
-
-  for (const strategy of [
-    { useCORS: true, allowTaint: false },
-    { useCORS: false, allowTaint: true },
-  ]) {
-    try {
-      const canvas = await Promise.race([
-        html2canvas(document.documentElement, { ...baseOpts, ...strategy }),
-        timeout,
-      ]);
-      const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-      return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-    } catch {
-      // Strategy failed — try next
-    }
-  }
-
-  return null;
-}
-
-// ============================================================
-// Public API
-// ============================================================
-
-/**
- * Capture screenshot. Tries native Screen Capture API first (pixel-perfect),
- * falls back to html2canvas (approximate but no permission needed).
- * Optionally highlights a picked element with red border.
- */
 export async function captureScreenshot(highlightSelector?: string): Promise<string | null> {
   let highlightOverlay: HTMLDivElement | null = null;
 
@@ -261,12 +45,25 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
   }
 
   try {
-    // Strategy 1: Native screen capture (pixel-perfect)
-    const native = await captureNative();
-    if (native) return native;
+    const dataUrl = await Promise.race([
+      domToJpeg(document.documentElement, {
+        quality: JPEG_QUALITY,
+        scale: 1,
+        filter: (node: Node) => {
+          if (node instanceof HTMLElement && node.id === 'scout-widget-root') return false;
+          return true;
+        },
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
+      ),
+    ]);
 
-    // Strategy 2: html2canvas fallback (approximate)
-    return await captureHtml2Canvas();
+    if (!dataUrl) return null;
+    return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+  } catch (err) {
+    console.warn('[Scout] Screenshot capture failed:', err);
+    return null;
   } finally {
     if (highlightOverlay) highlightOverlay.remove();
   }

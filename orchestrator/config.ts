@@ -3,10 +3,14 @@
  * Maps Scout projects to git repositories and validation commands.
  */
 
+export type AgentTool = 'claude' | 'opencode';
+
 export interface ProjectConfig {
   /** Path to the git repository */
   repoPath: string;
-  /** Target branch for MR */
+  /** AI tool to use for this project */
+  agent: AgentTool;
+  /** Target branch for PRs */
   targetBranch: string;
   /** Command to run typecheck */
   typecheckCmd: string;
@@ -22,7 +26,8 @@ export interface OrchestratorConfig {
   /** Agent credentials */
   agentEmail: string;
   agentPassword: string;
-  /** opencode binary path (default: 'opencode') */
+  /** Binary paths for AI tools */
+  claudeBin: string;
   opencodeBin: string;
   /** Project configs keyed by Scout project slug */
   projects: Record<string, ProjectConfig>;
@@ -36,14 +41,16 @@ export function loadConfig(): OrchestratorConfig {
     scoutApiUrl: process.env.SCOUT_API_URL || 'http://localhost:10009',
     agentEmail: process.env.SCOUT_AGENT_EMAIL || 'agent@scout.local',
     agentPassword: process.env.SCOUT_AGENT_PASSWORD || 'agent',
+    claudeBin: process.env.CLAUDE_BIN || 'claude',
     opencodeBin: process.env.OPENCODE_BIN || 'opencode',
     projects: {
-      // Example: map Scout project slug to git repository
-      // 'my-app': {
-      //   repoPath: '/path/to/my-app',
-      //   targetBranch: 'main',
-      //   typecheckCmd: 'npm run typecheck',
-      //   lintCmd: 'npm run lint:fix',
+      // Example:
+      // 'avtozor': {
+      //   repoPath: '/path/to/avtozor',
+      //   agent: 'claude',
+      //   targetBranch: 'dev',
+      //   typecheckCmd: 'pnpm typecheck',
+      //   lintCmd: 'pnpm lint --fix',
       //   maxAttempts: 3,
       // },
     },

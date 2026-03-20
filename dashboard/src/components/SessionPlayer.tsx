@@ -153,10 +153,31 @@ export default function SessionPlayer({ recordingPath }: SessionPlayerProps) {
           UNSAFE_replayCanvas: true,
           skipInactive: true,
           mouseTail: { strokeStyle: '#3b82f6', lineWidth: 2 },
+          // Prevent cross-origin CSS loading errors in replay iframe
+          loadTimeout: 0,
+          insertStyleRules: [
+            '* { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important; }',
+          ],
         });
 
         replayerRef.current = replayer;
         replayer.pause(0);
+
+        // Remove external <link> stylesheets from replay iframe to avoid CORS errors.
+        // rrweb inlines CSS during recording (inlineStylesheet:true), so the computed
+        // styles are already in the snapshot — external links are redundant.
+        try {
+          const iframe = replayer.wrapper?.querySelector('iframe');
+          const iframeDoc = iframe?.contentDocument;
+          if (iframeDoc) {
+            iframeDoc.querySelectorAll('link[rel="stylesheet"]').forEach((link: Element) => {
+              const href = link.getAttribute('href') || '';
+              if (href.startsWith('http') && !href.includes(window.location.hostname)) {
+                link.remove();
+              }
+            });
+          }
+        } catch { /* cross-origin iframe access blocked — ignore */ }
 
         // Inject cursor/mouse styles into player container
         const styleEl = document.createElement('style');

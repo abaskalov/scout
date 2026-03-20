@@ -61,10 +61,30 @@ const UNSUPPORTED_FNS = ['oklch', 'oklab', 'lab', 'lch', 'color-mix', 'light-dar
 
 /** Property-aware fallback: text→black, background→transparent, border→gray */
 function fallbackForProp(prop: string): string {
-  if (/^color$|^-webkit-text/.test(prop)) return '#000';
-  if (/border|outline/.test(prop)) return '#ccc';
+  if (/^color$|^-webkit-text|^caret/.test(prop)) return '#000';
+  if (/border|outline|column-rule/.test(prop)) return '#ccc';
   if (/shadow/.test(prop)) return 'none';
   return 'transparent';
+}
+
+/**
+ * Resolve oklch/oklab CSS values to rgb using the browser's own CSS engine.
+ * Creates a temporary element, sets the value, reads back getComputedStyle.
+ * Falls back to property-aware default if resolution fails.
+ */
+function resolveColor(value: string, prop: string): string {
+  try {
+    const el = document.createElement('span');
+    el.style.setProperty('color', value);
+    document.body.appendChild(el);
+    const resolved = getComputedStyle(el).color;
+    el.remove();
+    // getComputedStyle returns rgb()/rgba() — html2canvas can parse these
+    if (resolved && resolved !== '' && !resolved.includes('oklch') && !resolved.includes('oklab')) {
+      return resolved;
+    }
+  } catch { /* resolution failed */ }
+  return fallbackForProp(prop);
 }
 
 function replaceUnsupportedColors(css: string, fallback: string): string {
@@ -80,6 +100,12 @@ function replaceUnsupportedColors(css: string, fallback: string): string {
  * html2canvas v1.4 crashes on oklch/oklab/color-mix used by Tailwind 4.
  * CSS custom properties (--var) store literal oklch() values that survive getComputedStyle.
  */
+/** Check if a string contains any unsupported color functions */
+function hasUnsupportedColor(css: string): boolean {
+  const lower = css.toLowerCase();
+  return UNSUPPORTED_FNS.some((fn) => lower.includes(fn + '('));
+}
+
 function sanitizeUnsupportedColors(root: HTMLElement): void {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
   let node: Node | null = walker.currentNode;
@@ -90,9 +116,21 @@ function sanitizeUnsupportedColors(root: HTMLElement): void {
       for (let i = 0; i < style.length; i++) {
         const prop = style[i]!;
         const val = style.getPropertyValue(prop);
-        const replaced = replaceUnsupportedColors(val, fallbackForProp(prop));
-        if (replaced !== val) {
-          style.setProperty(prop, replaced);
+        if (hasUnsupportedColor(val)) {
+          // Try to resolve via browser's CSS engine (preserves actual color)
+          const resolved = resolveColor(val, prop);
+          style.setProperty(prop, resolved);
+        }
+      }
+      // Sanitize CSS custom properties (--tw-*, etc.) that store oklch values
+      const cs = getComputedStyle(node);
+      for (let i = 0; i < cs.length; i++) {
+        const prop = cs[i]!;
+        if (prop.startsWith('--')) {
+          const val = style.getPropertyValue(prop);
+          if (val && hasUnsupportedColor(val)) {
+            style.setProperty(prop, replaceUnsupportedColors(val, 'transparent'));
+          }
         }
       }
     }
@@ -104,9 +142,8 @@ function sanitizeUnsupportedColors(root: HTMLElement): void {
   if (doc) {
     doc.querySelectorAll('style').forEach((styleEl) => {
       const text = styleEl.textContent ?? '';
-      const replaced = replaceUnsupportedColors(text, 'transparent');
-      if (replaced !== text) {
-        styleEl.textContent = replaced;
+      if (hasUnsupportedColor(text)) {
+        styleEl.textContent = replaceUnsupportedColors(text, 'transparent');
       }
     });
   }
@@ -181,10 +218,6 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
       },
     };
 
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
-    );
-
     // Strategy 1: useCORS (clean canvas, exportable)
     // Strategy 2: allowTaint (renders all images but canvas may be tainted)
     for (const strategy of [
@@ -192,14 +225,17 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
       { useCORS: false, allowTaint: true },
     ]) {
       try {
+        // Fresh timeout per strategy — so second attempt gets full time budget
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
+        );
         const canvas = await Promise.race([
           html2canvas(document.documentElement, { ...baseOpts, ...strategy }),
           timeout,
         ]);
         const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
         return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-      } catch (err) {
-        console.warn('[Scout] Screenshot strategy failed:', strategy, err);
+      } catch {
         // Strategy failed — try next
       }
     }

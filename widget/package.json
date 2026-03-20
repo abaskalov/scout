@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "fflate": "^0.8.2",
-    "html2canvas": "^1.4.1",
+    "html2canvas-pro": "^2.0.2",
     "rrweb": "2.0.0-alpha.20"
   },
   "devDependencies": {

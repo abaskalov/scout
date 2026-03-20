@@ -1,210 +1,93 @@
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 
 /**
- * Capture a screenshot using html2canvas with oklch/modern CSS safety patches.
+ * Screenshot capture using html2canvas-pro.
  *
- * html2canvas v1.4 crashes on oklch/oklab/color-mix CSS functions (Tailwind 4).
- * We patch its internal color parser to return transparent instead of throwing.
- * The onclone hook then resolves real colors via getComputedStyle.
+ * html2canvas-pro is a maintained fork that supports oklch, oklab, lab, lch,
+ * color-mix, and other modern CSS color functions natively — no sanitization needed.
+ *
+ * Cross-origin iframes (SSO bridge, analytics, etc.) are replaced with placeholder
+ * divs before capture to avoid Safari's "Blocked a frame" SecurityError.
  *
  * Returns base64-encoded JPEG string (without data: prefix), or null on failure.
  */
 
-const SCREENSHOT_TIMEOUT_MS = 8_000; // Single timeout for all platforms
+const SCREENSHOT_TIMEOUT_MS = 8_000;
 const JPEG_QUALITY = 0.85;
 
-/**
- * Wrap getComputedStyle to intercept oklch/oklab values before html2canvas sees them.
- * html2canvas calls getComputedStyle internally — we proxy it to replace unsupported
- * color functions with browser-resolved rgb() equivalents.
- */
-let gcsOriginal: typeof window.getComputedStyle | null = null;
-let gcsResolveCache: Map<string, string> | null = null;
-
-/** Install getComputedStyle proxy that converts oklch→rgb before html2canvas sees them */
-function installComputedStyleProxy(): void {
-  if (gcsOriginal) return; // already installed
-  gcsOriginal = window.getComputedStyle;
-  gcsResolveCache = new Map();
-  const original = gcsOriginal;
-  const cache = gcsResolveCache;
-
-  window.getComputedStyle = function (el: Element, pseudo?: string | null): CSSStyleDeclaration {
-    const cs = original.call(window, el, pseudo);
-    return new Proxy(cs, {
-      get(target, prop) {
-        if (prop === 'getPropertyValue') {
-          return function (name: string): string {
-            const val = target.getPropertyValue(name);
-            if (val && hasUnsupportedColor(val)) {
-              const key = name + ':' + val;
-              let resolved = cache.get(key);
-              if (!resolved) { resolved = resolveColor(val, name); cache.set(key, resolved); }
-              return resolved;
-            }
-            return val;
-          };
-        }
-        const value = Reflect.get(target, prop);
-        if (typeof value === 'function') return value.bind(target);
-        if (typeof prop === 'string' && typeof value === 'string' && hasUnsupportedColor(value)) {
-          return resolveColor(value, prop);
-        }
-        return value;
-      },
-    });
-  } as typeof window.getComputedStyle;
-}
-
-/** Restore original getComputedStyle */
-function uninstallComputedStyleProxy(): void {
-  if (gcsOriginal) {
-    window.getComputedStyle = gcsOriginal;
-    gcsOriginal = null;
-    gcsResolveCache = null;
-  }
-}
-
-/** Detect iOS Safari (iPhone, iPad, iPod — including iPad with desktop UA) */
+/** Detect iOS Safari */
 function isIOSSafari(): boolean {
   const ua = navigator?.userAgent ?? '';
   if (/iPhone|iPad|iPod/i.test(ua)) return true;
-  // iPad with desktop UA (iPadOS 13+)
   if (/Macintosh/i.test(ua) && navigator?.maxTouchPoints > 1) return true;
   return false;
 }
 
-/** Detect any Safari (iOS + macOS) */
-function isSafari(): boolean {
-  const ua = navigator?.userAgent ?? '';
-  return /Safari/i.test(ua) && !/Chrome/i.test(ua) && !/Chromium/i.test(ua);
+// ============================================================
+// Cross-origin iframe handling
+// ============================================================
+
+interface ReplacedIframe {
+  iframe: HTMLIFrameElement;
+  placeholder: HTMLDivElement;
+  parent: Node;
 }
 
 /**
- * Match balanced parentheses for a CSS function call.
- * Handles nested parens: oklch(0.5 0.2 calc(180 + 30))
+ * Replace cross-origin iframes with gray placeholder divs.
+ * Must be called BEFORE html2canvas — Safari blocks DOM cloning of cross-origin iframes.
  */
-function replaceColorFn(css: string, fnName: string, replacement: string): string {
-  let result = '';
-  let i = 0;
-  const lower = css.toLowerCase();
-  while (i < css.length) {
-    const idx = lower.indexOf(fnName + '(', i);
-    if (idx === -1) { result += css.slice(i); break; }
-    result += css.slice(i, idx);
-    // Find matching closing paren
-    let depth = 0;
-    let j = idx + fnName.length;
-    for (; j < css.length; j++) {
-      if (css[j] === '(') depth++;
-      else if (css[j] === ')') { depth--; if (depth === 0) { j++; break; } }
+function replaceCrossOriginIframes(): ReplacedIframe[] {
+  const replaced: ReplacedIframe[] = [];
+
+  document.querySelectorAll('iframe').forEach((iframe) => {
+    let isCrossOrigin = false;
+    try {
+      if (!iframe.contentDocument) isCrossOrigin = true;
+    } catch {
+      isCrossOrigin = true;
     }
-    result += replacement;
-    i = j;
-  }
-  return result;
-}
 
-/** CSS color functions unsupported by html2canvas v1.4 */
-const UNSUPPORTED_FNS = ['oklch', 'oklab', 'lab', 'lch', 'color-mix', 'light-dark'];
-
-/** Property-aware fallback: text→black, background→transparent, border→gray */
-function fallbackForProp(prop: string): string {
-  if (/^color$|^-webkit-text|^caret/.test(prop)) return '#000';
-  if (/border|outline|column-rule/.test(prop)) return '#ccc';
-  if (/shadow/.test(prop)) return 'none';
-  return 'transparent';
-}
-
-/**
- * Resolve oklch/oklab CSS values to rgb using the browser's own CSS engine.
- * Uses a persistent off-screen element to avoid DOM thrashing.
- * Falls back to property-aware default if resolution fails.
- */
-let resolveEl: HTMLSpanElement | null = null;
-
-function resolveColor(value: string, prop: string): string {
-  try {
-    if (!resolveEl) {
-      resolveEl = document.createElement('span');
-      resolveEl.style.cssText = 'position:fixed;top:-9999px;left:-9999px;pointer-events:none;visibility:hidden';
-      document.body.appendChild(resolveEl);
-    }
-    resolveEl.style.color = '';
-    resolveEl.style.color = value;
-    const resolved = getComputedStyle(resolveEl).color;
-    if (resolved && resolved !== '' && !hasUnsupportedColor(resolved)) {
-      return resolved;
-    }
-  } catch { /* resolution failed */ }
-  return fallbackForProp(prop);
-}
-
-function replaceUnsupportedColors(css: string, fallback: string): string {
-  let result = css;
-  for (const fn of UNSUPPORTED_FNS) {
-    result = replaceColorFn(result, fn, fallback);
-  }
-  return result;
-}
-
-/**
- * Sanitize unsupported CSS color functions in the cloned DOM.
- * html2canvas v1.4 crashes on oklch/oklab/color-mix used by Tailwind 4.
- * CSS custom properties (--var) store literal oklch() values that survive getComputedStyle.
- */
-/** Check if a string contains any unsupported color functions */
-function hasUnsupportedColor(css: string): boolean {
-  const lower = css.toLowerCase();
-  return UNSUPPORTED_FNS.some((fn) => lower.includes(fn + '('));
-}
-
-function sanitizeUnsupportedColors(root: HTMLElement): void {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-  let node: Node | null = walker.currentNode;
-
-  while (node) {
-    if (node instanceof HTMLElement) {
-      const style = node.style;
-      for (let i = 0; i < style.length; i++) {
-        const prop = style[i]!;
-        const val = style.getPropertyValue(prop);
-        if (hasUnsupportedColor(val)) {
-          // Try to resolve via browser's CSS engine (preserves actual color)
-          const resolved = resolveColor(val, prop);
-          style.setProperty(prop, resolved);
-        }
+    if (isCrossOrigin && iframe.parentNode) {
+      const rect = iframe.getBoundingClientRect();
+      const placeholder = document.createElement('div');
+      // Only show visible placeholder for visible iframes
+      if (rect.width > 0 && rect.height > 0) {
+        placeholder.style.cssText = `width:${rect.width}px;height:${rect.height}px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:4px;`;
+      } else {
+        placeholder.style.cssText = iframe.style.cssText;
       }
-      // Sanitize CSS custom properties (--tw-*, etc.) that store oklch values
-      // Read from inline style only (not computed — clone may not be in DOM yet)
-      for (let ci = 0; ci < style.length; ci++) {
-        const cprop = style[ci]!;
-        if (cprop.startsWith('--')) {
-          const cval = style.getPropertyValue(cprop);
-          if (cval && hasUnsupportedColor(cval)) {
-            style.setProperty(cprop, replaceUnsupportedColors(cval, 'transparent'));
-          }
-        }
-      }
-    }
-    node = walker.nextNode();
-  }
 
-  // Sanitize <style> tags in the cloned document
-  const doc = root.ownerDocument;
-  if (doc) {
-    doc.querySelectorAll('style').forEach((styleEl) => {
-      const text = styleEl.textContent ?? '';
-      if (hasUnsupportedColor(text)) {
-        styleEl.textContent = replaceUnsupportedColors(text, 'transparent');
-      }
-    });
+      const parent = iframe.parentNode;
+      parent.replaceChild(placeholder, iframe);
+      replaced.push({ iframe, placeholder, parent });
+    }
+  });
+
+  return replaced;
+}
+
+/** Restore original iframes from placeholders (no reload — same element re-inserted) */
+function restoreIframes(replaced: ReplacedIframe[]): void {
+  for (const { iframe, placeholder, parent } of replaced) {
+    try {
+      parent.replaceChild(iframe, placeholder);
+    } catch {
+      // Placeholder may have been removed — re-append iframe
+      try { parent.appendChild(iframe); } catch { /* give up */ }
+    }
   }
 }
+
+// ============================================================
+// Screenshot capture
+// ============================================================
 
 export async function captureScreenshot(highlightSelector?: string): Promise<string | null> {
   let highlightOverlay: HTMLDivElement | null = null;
+  let replacedIframes: ReplacedIframe[] = [];
 
+  // Add element highlight overlay
   if (highlightSelector) {
     try {
       const el = document.querySelector(highlightSelector);
@@ -236,96 +119,52 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
   }
 
   try {
-    // Proxy getComputedStyle to convert oklch→rgb before html2canvas parser sees them.
-    // html2canvas reads computed styles internally and crashes on oklch().
-    installComputedStyleProxy();
+    // Replace cross-origin iframes BEFORE html2canvas touches the DOM
+    replacedIframes = replaceCrossOriginIframes();
 
     const ios = isIOSSafari();
-
-    // iOS Safari: capture viewport only (full-page creates huge canvas that crashes)
-    // Desktop: capture full page
     const captureWidth = ios
       ? window.innerWidth
       : Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, window.innerWidth);
     const captureHeight = ios
       ? window.innerHeight
       : Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight);
-
-    // On iOS, capture from current scroll position (viewport)
     const scrollX = ios ? window.scrollX : 0;
     const scrollY = ios ? window.scrollY : 0;
 
-    const baseOpts = {
-      width: captureWidth,
-      height: captureHeight,
-      windowWidth: captureWidth,
-      windowHeight: captureHeight,
-      scrollX: ios ? -scrollX : 0,
-      scrollY: ios ? -scrollY : 0,
-      x: ios ? scrollX : 0,
-      y: ios ? scrollY : 0,
-      scale: 1,
-      backgroundColor: '#ffffff',
-      ignoreElements: (element: Element) => {
-        // Exclude scout widget + any cross-origin iframes (cause SecurityError in Safari)
-        if (element.id === 'scout-widget-root') return true;
-        if (element instanceof HTMLIFrameElement) {
-          try {
-            // If we can't access contentDocument, it's cross-origin — skip it
-            const doc = element.contentDocument;
-            return !doc;
-          } catch {
-            return true;
-          }
-        }
-        return false;
-      },
-      logging: false,
-      // html2canvas v1 doesn't support oklch/oklab/lab/lch color functions.
-      // Replace them with fallback colors in the cloned DOM before rendering.
-      onclone: (_doc: Document, clone: HTMLElement) => {
-        sanitizeUnsupportedColors(clone);
-      },
-    };
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
+    );
 
-    // Safari: allowTaint always throws SecurityError on toDataURL — skip it
-    const strategies = isSafari()
-      ? [{ useCORS: true, allowTaint: false }]
-      : [{ useCORS: true, allowTaint: false }, { useCORS: false, allowTaint: true }];
+    const canvas = await Promise.race([
+      html2canvas(document.documentElement, {
+        width: captureWidth,
+        height: captureHeight,
+        windowWidth: captureWidth,
+        windowHeight: captureHeight,
+        scrollX: ios ? -scrollX : 0,
+        scrollY: ios ? -scrollY : 0,
+        x: ios ? scrollX : 0,
+        y: ios ? scrollY : 0,
+        scale: 1,
+        backgroundColor: '#ffffff',
+        ignoreElements: (element: Element) => element.id === 'scout-widget-root',
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+      }),
+      timeout,
+    ]);
 
-    for (const strategy of strategies) {
-      try {
-        const timeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Screenshot timeout')), SCREENSHOT_TIMEOUT_MS),
-        );
-        const canvas = await Promise.race([
-          html2canvas(document.documentElement, { ...baseOpts, ...strategy }),
-          timeout,
-        ]);
-        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-        if (resolveEl) { resolveEl.remove(); resolveEl = null; }
-        return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-      } catch {
-        // Strategy failed — try next (if any)
-      }
-    }
-
-    console.warn('[Scout] All screenshot strategies failed');
-    // Cleanup resolve helper
-    if (resolveEl) { resolveEl.remove(); resolveEl = null; }
-    return null;
+    const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
   } catch (err) {
     console.warn('[Scout] Screenshot capture failed:', err);
     return null;
   } finally {
-    uninstallComputedStyleProxy();
-    if (resolveEl) { resolveEl.remove(); resolveEl = null; }
+    restoreIframes(replacedIframes);
     if (highlightOverlay) highlightOverlay.remove();
   }
 }
 
-/**
- * Get the MIME type used for screenshots.
- * Used by panel to set correct content type.
- */
 export const SCREENSHOT_MIME = 'image/jpeg';

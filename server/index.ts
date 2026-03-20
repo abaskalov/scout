@@ -324,7 +324,8 @@ app.get('/*', (c) => {
 // Global error handler — no stack traces to client
 app.onError((err, c) => {
   if (err instanceof HTTPException) {
-    return c.json({ error: err.message }, err.status);
+    const code = 'code' in err ? (err as { code: string }).code : undefined;
+    return c.json({ error: err.message, ...(code && { code }) }, err.status);
   }
   logger.error({ err, method: c.req.method, path: c.req.path }, 'Unhandled request error');
   return c.json({ error: 'Internal server error' }, 500);

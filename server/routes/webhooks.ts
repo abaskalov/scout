@@ -27,7 +27,7 @@ export const webhookRoutes = new Hono()
 
       // Verify project exists
       const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
-      if (!project) throw new NotFoundError('Project');
+      if (!project) throw new NotFoundError('Project', 'PROJECT_NOT_FOUND');
 
       const id = randomUUID();
       db.insert(webhooks).values({
@@ -64,7 +64,7 @@ export const webhookRoutes = new Hono()
       const user = c.get('user');
 
       const existing = db.select().from(webhooks).where(eq(webhooks.id, id)).get();
-      if (!existing) throw new NotFoundError('Webhook');
+      if (!existing) throw new NotFoundError('Webhook', 'WEBHOOK_NOT_FOUND');
 
       const updateData: Record<string, unknown> = {
         updatedAt: new Date().toISOString(),
@@ -88,7 +88,7 @@ export const webhookRoutes = new Hono()
       const user = c.get('user');
 
       const existing = db.select().from(webhooks).where(eq(webhooks.id, id)).get();
-      if (!existing) throw new NotFoundError('Webhook');
+      if (!existing) throw new NotFoundError('Webhook', 'WEBHOOK_NOT_FOUND');
 
       db.delete(webhooks).where(eq(webhooks.id, id)).run();
       logAudit({ userId: user.id, action: 'delete_webhook', entityType: 'webhook', entityId: id, ipAddress: getClientIp(c) });
@@ -102,7 +102,7 @@ export const webhookRoutes = new Hono()
       const { id } = c.req.valid('json');
 
       const hook = db.select().from(webhooks).where(eq(webhooks.id, id)).get();
-      if (!hook) throw new NotFoundError('Webhook');
+      if (!hook) throw new NotFoundError('Webhook', 'WEBHOOK_NOT_FOUND');
 
       const result = await sendTestWebhook(hook.url, hook.secret, hook.projectId);
       return c.json({ data: result });

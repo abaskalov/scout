@@ -15,14 +15,6 @@ interface DbOrTx {
   delete: typeof db.delete;
 }
 
-const STATUS_LABELS: Record<ItemStatus, string> = {
-  new: 'новые',
-  in_progress: 'в работе',
-  review: 'на ревью',
-  done: 'готово',
-  cancelled: 'отменено',
-};
-
 const VALID_TRANSITIONS: Record<ItemStatus, ItemStatus[]> = {
   new: ['in_progress', 'cancelled'],
   in_progress: ['review', 'done', 'cancelled'],
@@ -98,7 +90,7 @@ function deleteFile(path: string | null): void {
 
 export function validateTransition(from: ItemStatus, to: ItemStatus): void {
   if (!VALID_TRANSITIONS[from]?.includes(to)) {
-    throw new ValidationError(`Invalid status transition: ${from} → ${to}`);
+    throw new ValidationError(`Invalid status transition: ${from} → ${to}`, 'INVALID_STATUS_TRANSITION');
   }
 }
 
@@ -183,12 +175,12 @@ export function claimItem(itemId: string, user: User) {
 
     if (result.changes === 0) {
       const item = tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
-      if (!item) throw new NotFoundError('Item');
-      throw new ConflictError('Item already claimed or not in "new" status');
+      if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
+      throw new ConflictError('Item already claimed or not in "new" status', 'CONFLICT');
     }
 
-    addAutoNote(tx, itemId, user.id, `Назначено: ${user.name}`, 'assignment');
-    addAutoNote(tx, itemId, user.id, 'Статус: новые → в работе', 'status_change');
+    addAutoNote(tx, itemId, user.id, JSON.stringify({ type: 'assignment', userName: user.name }), 'assignment');
+    addAutoNote(tx, itemId, user.id, JSON.stringify({ type: 'status_change', from: 'new', to: 'in_progress' }), 'status_change');
 
     return tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
   });
@@ -206,7 +198,7 @@ export function updateItemStatus(
   },
 ) {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
-  if (!item) throw new NotFoundError('Item');
+  if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
 
   validateTransition(item.status as ItemStatus, newStatus);
 
@@ -227,9 +219,7 @@ export function updateItemStatus(
     }
 
     tx.update(scoutItems).set(updateData).where(eq(scoutItems.id, itemId)).run();
-    const fromLabel = STATUS_LABELS[item.status as ItemStatus] || item.status;
-    const toLabel = STATUS_LABELS[newStatus] || newStatus;
-    addAutoNote(tx, itemId, user.id, `Статус: ${fromLabel} → ${toLabel}`, 'status_change');
+    addAutoNote(tx, itemId, user.id, JSON.stringify({ type: 'status_change', from: item.status, to: newStatus }), 'status_change');
 
     return tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
   });
@@ -242,7 +232,7 @@ export function updateItem(itemId: string, data: {
   labels?: string[];
 }) {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
-  if (!item) throw new NotFoundError('Item');
+  if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
 
   const updates: Record<string, unknown> = { updatedAt: now() };
   if (data.message !== undefined) updates.message = data.message;
@@ -256,7 +246,7 @@ export function updateItem(itemId: string, data: {
 
 export function reopenItem(itemId: string, user: User) {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
-  if (!item) throw new NotFoundError('Item');
+  if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
 
   validateTransition(item.status as ItemStatus, 'new');
 
@@ -269,7 +259,7 @@ export function reopenItem(itemId: string, user: User) {
       updatedAt: now(),
     }).where(eq(scoutItems.id, itemId)).run();
 
-    addAutoNote(tx, itemId, user.id, 'Переоткрыт', 'status_change');
+    addAutoNote(tx, itemId, user.id, JSON.stringify({ type: 'reopen' }), 'status_change');
 
     return tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
   });
@@ -277,7 +267,7 @@ export function reopenItem(itemId: string, user: User) {
 
 export function deleteItem(itemId: string): void {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
-  if (!item) throw new NotFoundError('Item');
+  if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
 
   // Delete from DB first — if this fails, files remain (can be cleaned up later)
   db.delete(scoutItems).where(eq(scoutItems.id, itemId)).run();

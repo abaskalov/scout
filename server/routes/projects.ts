@@ -25,7 +25,7 @@ export const projectRoutes = new Hono()
 
       // Check unique slug
       const existing = db.select().from(projects).where(eq(projects.slug, slug)).get();
-      if (existing) throw new ConflictError(`Project with slug '${slug}' already exists`);
+      if (existing) throw new ConflictError(`Project with slug '${slug}' already exists`, 'DUPLICATE_SLUG');
 
       const id = randomUUID();
       db.insert(projects).values({
@@ -106,11 +106,11 @@ export const projectRoutes = new Hono()
       const user = c.get('user');
 
       const project = db.select().from(projects).where(eq(projects.id, id)).get();
-      if (!project) throw new NotFoundError('Project');
+      if (!project) throw new NotFoundError('Project', 'PROJECT_NOT_FOUND');
 
       // Check project access
       if (!checkProjectAccess(user.id, user.role, id)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       return c.json({ data: project });
@@ -124,7 +124,7 @@ export const projectRoutes = new Hono()
       const { id, name, allowedOrigins, autofixEnabled, isActive } = c.req.valid('json');
 
       const existing = db.select().from(projects).where(eq(projects.id, id)).get();
-      if (!existing) throw new NotFoundError('Project');
+      if (!existing) throw new NotFoundError('Project', 'PROJECT_NOT_FOUND');
 
       const updateData: Record<string, unknown> = {
         updatedAt: new Date().toISOString(),
@@ -149,13 +149,13 @@ export const projectRoutes = new Hono()
       const { id } = c.req.valid('json');
 
       const existing = db.select().from(projects).where(eq(projects.id, id)).get();
-      if (!existing) throw new NotFoundError('Project');
+      if (!existing) throw new NotFoundError('Project', 'PROJECT_NOT_FOUND');
 
       // Check if project has items
       const [{ total }] = db.select({ total: count() }).from(scoutItems)
         .where(eq(scoutItems.projectId, id)).all();
       if (total > 0) {
-        throw new ValidationError(`Cannot delete project with ${total} items. Delete items first.`);
+        throw new ValidationError(`Cannot delete project with ${total} items. Delete items first.`, 'PROJECT_HAS_ITEMS');
       }
 
       db.delete(projects).where(eq(projects.id, id)).run();

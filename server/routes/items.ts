@@ -50,11 +50,11 @@ export const itemRoutes = new Hono()
 
       // Verify project exists
       const project = db.select().from(projects).where(eq(projects.id, data.projectId)).get();
-      if (!project) throw new NotFoundError('Project');
+      if (!project) throw new NotFoundError('Project', 'PROJECT_NOT_FOUND');
 
       // Check project access
       if (!checkProjectAccess(user.id, user.role, data.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       const item = createItem({ ...data, reporterId: user.id });
@@ -73,7 +73,7 @@ export const itemRoutes = new Hono()
 
       // Check project access
       if (!checkProjectAccess(user.id, user.role, projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       const conditions = [eq(scoutItems.projectId, projectId)];
@@ -112,11 +112,11 @@ export const itemRoutes = new Hono()
     async (c) => {
       const { id } = c.req.valid('json');
       const item = db.select().from(scoutItems).where(eq(scoutItems.id, id)).get();
-      if (!item) throw new NotFoundError('Item');
+      if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
 
       const user = c.get('user');
       if (!checkProjectAccess(user.id, user.role, item.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       const notes = db.select().from(scoutItemNotes)
@@ -141,7 +141,7 @@ export const itemRoutes = new Hono()
 
       // Check project access
       if (!checkProjectAccess(user.id, user.role, projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
       const statuses = ['new', 'in_progress', 'review', 'done', 'cancelled'] as const;
       const counts: Record<string, number> = {};
@@ -166,9 +166,9 @@ export const itemRoutes = new Hono()
 
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
-      if (!existing) throw new NotFoundError('Item');
+      if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
       if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       const item = claimItem(id, user);
@@ -188,9 +188,9 @@ export const itemRoutes = new Hono()
 
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
-      if (!existing) throw new NotFoundError('Item');
+      if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
       if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'new';
@@ -213,9 +213,9 @@ export const itemRoutes = new Hono()
 
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
-      if (!existing) throw new NotFoundError('Item');
+      if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
       if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'new';
@@ -236,9 +236,9 @@ export const itemRoutes = new Hono()
 
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
-      if (!existing) throw new NotFoundError('Item');
+      if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
       if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'new';
@@ -261,9 +261,9 @@ export const itemRoutes = new Hono()
 
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
-      if (!existing) throw new NotFoundError('Item');
+      if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
       if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       deleteItem(id);
@@ -283,9 +283,9 @@ export const itemRoutes = new Hono()
 
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, data.id)).get();
-      if (!existing) throw new NotFoundError('Item');
+      if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
       if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       const item = updateItem(data.id, {
@@ -309,9 +309,9 @@ export const itemRoutes = new Hono()
 
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
-      if (!existing) throw new NotFoundError('Item');
+      if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
       if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'done';
@@ -331,11 +331,11 @@ export const itemRoutes = new Hono()
 
       // Verify item exists
       const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
-      if (!item) throw new NotFoundError('Item');
+      if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
 
       // Check project access via item's projectId
       if (!checkProjectAccess(user.id, user.role, item.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту');
+        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
       }
 
       const id = randomUUID();

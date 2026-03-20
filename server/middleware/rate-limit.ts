@@ -50,7 +50,7 @@ export function rateLimit(windowMs: number, max: number): MiddlewareHandler {
       const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
       c.header('Retry-After', String(retryAfter));
       return c.json(
-        { error: 'Слишком много запросов. Попробуйте позже.' },
+        { error: 'Слишком много запросов. Попробуйте позже.', code: 'RATE_LIMITED' },
         429,
       );
     }

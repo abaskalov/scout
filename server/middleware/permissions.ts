@@ -13,7 +13,7 @@ export function requireRole(...roles: UserRole[]) {
       return;
     }
     if (!roles.includes(user.role as UserRole)) {
-      throw new ForbiddenError(`Role '${user.role}' cannot access this resource`);
+      throw new ForbiddenError(`Role '${user.role}' cannot access this resource`, 'FORBIDDEN');
     }
     await next();
   });

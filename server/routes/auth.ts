@@ -19,13 +19,13 @@ export const authRoutes = new Hono()
     const user = db.select().from(users).where(eq(users.email, email)).get();
     if (!user || !user.isActive) {
       logAudit({ userId: null, action: 'login_failure', entityType: 'auth', details: { email }, ipAddress: ip });
-      throw new UnauthorizedError('Invalid email or password');
+      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
     const valid = await comparePassword(password, user.passwordHash);
     if (!valid) {
       logAudit({ userId: user.id, action: 'login_failure', entityType: 'auth', details: { email }, ipAddress: ip });
-      throw new UnauthorizedError('Invalid email or password');
+      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
     logAudit({ userId: user.id, action: 'login', entityType: 'auth', details: { email }, ipAddress: ip });

@@ -23,7 +23,7 @@ export const apiKeyRoutes = new Hono()
 
       // Verify project exists
       const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
-      if (!project) throw new NotFoundError('Project');
+      if (!project) throw new NotFoundError('Project', 'PROJECT_NOT_FOUND');
 
       const user = c.get('user');
       const id = randomUUID();
@@ -94,7 +94,7 @@ export const apiKeyRoutes = new Hono()
       const { id } = c.req.valid('json');
 
       const existing = db.select().from(apiKeys).where(eq(apiKeys.id, id)).get();
-      if (!existing) throw new NotFoundError('API Key');
+      if (!existing) throw new NotFoundError('API Key', 'API_KEY_NOT_FOUND');
 
       db.update(apiKeys)
         .set({ isActive: false })

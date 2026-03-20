@@ -1,31 +1,41 @@
 import { HTTPException } from 'hono/http-exception';
 
 export class UnauthorizedError extends HTTPException {
-  constructor(message = 'Unauthorized') {
+  code: string;
+  constructor(message = 'Unauthorized', code = 'UNAUTHORIZED') {
     super(401, { message });
+    this.code = code;
   }
 }
 
 export class ForbiddenError extends HTTPException {
-  constructor(message = 'Forbidden') {
+  code: string;
+  constructor(message = 'Forbidden', code = 'FORBIDDEN') {
     super(403, { message });
+    this.code = code;
   }
 }
 
 export class NotFoundError extends HTTPException {
-  constructor(resource = 'Resource') {
+  code: string;
+  constructor(resource = 'Resource', code = 'NOT_FOUND') {
     super(404, { message: `${resource} not found` });
+    this.code = code;
   }
 }
 
 export class ValidationError extends HTTPException {
-  constructor(message = 'Validation failed') {
+  code: string;
+  constructor(message = 'Validation failed', code = 'VALIDATION_FAILED') {
     super(400, { message });
+    this.code = code;
   }
 }
 
 export class ConflictError extends HTTPException {
-  constructor(message = 'Conflict') {
+  code: string;
+  constructor(message = 'Conflict', code = 'CONFLICT') {
     super(409, { message });
+    this.code = code;
   }
 }

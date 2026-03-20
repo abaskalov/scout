@@ -29,17 +29,17 @@ function extractToken(c: { req: { header: (n: string) => string | undefined; que
  */
 export const storageAuth = createMiddleware(async (c, next) => {
   const token = extractToken(c);
-  if (!token) throw new UnauthorizedError('Missing authentication');
+  if (!token) throw new UnauthorizedError('Missing authentication', 'UNAUTHORIZED');
 
   let payload;
   try {
     payload = verifyToken(token);
   } catch {
-    throw new UnauthorizedError('Invalid or expired token');
+    throw new UnauthorizedError('Invalid or expired token', 'TOKEN_EXPIRED');
   }
 
   const user = db.select().from(users).where(eq(users.id, payload.userId)).get();
-  if (!user || !user.isActive) throw new UnauthorizedError('User not found or inactive');
+  if (!user || !user.isActive) throw new UnauthorizedError('User not found or inactive', 'USER_INACTIVE');
 
   c.set('user', user);
   await next();
@@ -48,7 +48,7 @@ export const storageAuth = createMiddleware(async (c, next) => {
 export const authMiddleware = createMiddleware(async (c, next) => {
   const header = c.req.header('Authorization');
   if (!header?.startsWith('Bearer ')) {
-    throw new UnauthorizedError('Missing or invalid Authorization header');
+    throw new UnauthorizedError('Missing or invalid Authorization header', 'UNAUTHORIZED');
   }
 
   const token = header.slice(7);
@@ -63,24 +63,24 @@ export const authMiddleware = createMiddleware(async (c, next) => {
       )).get();
 
     if (!apiKey) {
-      throw new UnauthorizedError('Неверный API-ключ');
+      throw new UnauthorizedError('Неверный API-ключ', 'API_KEY_INVALID');
     }
 
     // Verify full key via bcrypt
     const valid = await bcrypt.compare(token, apiKey.keyHash);
     if (!valid) {
-      throw new UnauthorizedError('Неверный API-ключ');
+      throw new UnauthorizedError('Неверный API-ключ', 'API_KEY_INVALID');
     }
 
     // Check expiry
     if (apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date()) {
-      throw new UnauthorizedError('API-ключ истёк');
+      throw new UnauthorizedError('API-ключ истёк', 'API_KEY_EXPIRED');
     }
 
     // Load user
     const user = db.select().from(users).where(eq(users.id, apiKey.userId)).get();
     if (!user || !user.isActive) {
-      throw new UnauthorizedError('Пользователь деактивирован');
+      throw new UnauthorizedError('Пользователь деактивирован', 'USER_INACTIVE');
     }
 
     // Update last used (fire-and-forget, don't block response)
@@ -96,12 +96,12 @@ export const authMiddleware = createMiddleware(async (c, next) => {
   try {
     payload = verifyToken(token);
   } catch {
-    throw new UnauthorizedError('Invalid or expired token');
+    throw new UnauthorizedError('Invalid or expired token', 'TOKEN_EXPIRED');
   }
 
   const user = db.select().from(users).where(eq(users.id, payload.userId)).get();
   if (!user || !user.isActive) {
-    throw new UnauthorizedError('User not found or inactive');
+    throw new UnauthorizedError('User not found or inactive', 'USER_INACTIVE');
   }
 
   c.set('user', user);

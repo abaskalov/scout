@@ -31,7 +31,7 @@ export const userRoutes = new Hono()
 
       // Check unique email
       const existing = db.select().from(users).where(eq(users.email, email)).get();
-      if (existing) throw new ConflictError(`User with email '${email}' already exists`);
+      if (existing) throw new ConflictError(`User with email '${email}' already exists`, 'DUPLICATE_EMAIL');
 
       const id = randomUUID();
       const passwordHash = await hashPassword(password);
@@ -126,7 +126,7 @@ export const userRoutes = new Hono()
     async (c) => {
       const { id } = c.req.valid('json');
       const user = db.select().from(users).where(eq(users.id, id)).get();
-      if (!user) throw new NotFoundError('User');
+      if (!user) throw new NotFoundError('User', 'USER_NOT_FOUND');
 
       const pivots = db.select().from(pivotUsersProjects)
         .where(eq(pivotUsersProjects.userId, id)).all();
@@ -143,7 +143,7 @@ export const userRoutes = new Hono()
       const { id, name, role, isActive, projectIds, password } = c.req.valid('json');
 
       const existing = db.select().from(users).where(eq(users.id, id)).get();
-      if (!existing) throw new NotFoundError('User');
+      if (!existing) throw new NotFoundError('User', 'USER_NOT_FOUND');
 
       const updateData: Record<string, unknown> = {
         updatedAt: new Date().toISOString(),
@@ -186,12 +186,12 @@ export const userRoutes = new Hono()
       const { id } = c.req.valid('json');
 
       const existing = db.select().from(users).where(eq(users.id, id)).get();
-      if (!existing) throw new NotFoundError('User');
+      if (!existing) throw new NotFoundError('User', 'USER_NOT_FOUND');
 
       // Prevent deleting yourself
       const currentUser = c.get('user');
       if (currentUser.id === id) {
-        throw new ConflictError('Cannot delete yourself');
+        throw new ConflictError('Cannot delete yourself', 'CANNOT_DELETE_SELF');
       }
 
       db.delete(users).where(eq(users.id, id)).run();

@@ -28,6 +28,13 @@ export function isAuthenticated(): boolean {
   return !!getToken();
 }
 
+/** Build authenticated URL for storage files (screenshots, recordings). */
+export function storageUrl(path: string): string {
+  const token = getToken();
+  const url = path.startsWith('/') ? path : `/${path}`;
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url;
+}
+
 export function isAdmin(): boolean {
   const user = getUser();
   return user?.role === 'admin';

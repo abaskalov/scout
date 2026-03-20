@@ -18,7 +18,7 @@ import { projects } from './db/schema.js';
 import { eq } from 'drizzle-orm';
 import { securityHeaders } from './middleware/security-headers.js';
 import { rateLimit } from './middleware/rate-limit.js';
-import { authMiddleware } from './middleware/auth.js';
+import { authMiddleware, storageAuth } from './middleware/auth.js';
 import { logger } from './lib/logger.js';
 
 const app = new Hono();
@@ -159,7 +159,8 @@ app.route('/api/v1', v1);
 app.route('/api', v1);
 
 // Static files: screenshots, recordings — require authentication
-app.use('/storage/*', authMiddleware, serveStatic({ root: './' }));
+// Supports both Authorization header and ?token= query param (for <img src>, fetch without headers)
+app.use('/storage/*', storageAuth, serveStatic({ root: './' }));
 
 // SSO bridge — lightweight HTML page for cross-domain token storage via postMessage
 app.get('/auth/sso', (c) => {

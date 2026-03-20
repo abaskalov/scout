@@ -4,7 +4,7 @@ import { Fancybox } from '@fancyapps/ui';
 import '@fancyapps/ui/dist/fancybox/fancybox.css';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/date';
-import { isAdmin } from '../lib/auth';
+import { isAdmin, storageUrl } from '../lib/auth';
 import { useSSE, type SSEEventType } from '../hooks/useSSE';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
@@ -320,10 +320,10 @@ export default function ItemDetail() {
   if (!item) return null;
 
   const screenshotUrl = item.screenshotPath
-    ? `/${item.screenshotPath}`
+    ? storageUrl(item.screenshotPath)
     : null;
   const recordingUrl = item.sessionRecordingPath
-    ? `/${item.sessionRecordingPath}`
+    ? storageUrl(item.sessionRecordingPath)
     : null;
 
   const viewportStr = item.viewportWidth && item.viewportHeight

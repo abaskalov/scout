@@ -13,6 +13,38 @@ declare module 'hono' {
   }
 }
 
+/**
+ * Extract Bearer token from Authorization header or ?token= query param.
+ * Header takes priority. Returns null if neither is present.
+ */
+function extractToken(c: { req: { header: (n: string) => string | undefined; query: (n: string) => string | undefined } }): string | null {
+  const header = c.req.header('Authorization');
+  if (header?.startsWith('Bearer ')) return header.slice(7);
+  return c.req.query('token') ?? null;
+}
+
+/**
+ * Storage auth — accepts both Authorization header and ?token= query param.
+ * Needed because <img src> and plain fetch() can't send Authorization headers.
+ */
+export const storageAuth = createMiddleware(async (c, next) => {
+  const token = extractToken(c);
+  if (!token) throw new UnauthorizedError('Missing authentication');
+
+  let payload;
+  try {
+    payload = verifyToken(token);
+  } catch {
+    throw new UnauthorizedError('Invalid or expired token');
+  }
+
+  const user = db.select().from(users).where(eq(users.id, payload.userId)).get();
+  if (!user || !user.isActive) throw new UnauthorizedError('User not found or inactive');
+
+  c.set('user', user);
+  await next();
+});
+
 export const authMiddleware = createMiddleware(async (c, next) => {
   const header = c.req.header('Authorization');
   if (!header?.startsWith('Bearer ')) {

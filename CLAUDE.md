@@ -22,7 +22,7 @@
 server/          — Hono API (порт 10009)
 dashboard/       — React SPA (pnpm workspace: scout-dashboard)
 widget/          — IIFE bundle (pnpm workspace: scout-widget)
-orchestrator/    — AI-агент workflow
+orchestrator/    — AI-агент (отдельный Docker, polls Scout API → Claude Code → PR)
 test/            — Vitest unit-тесты
 e2e/             — Playwright E2E (18 тестов × 3 браузера)
 drizzle/         — DB миграции (drizzle-kit)
@@ -117,6 +117,18 @@ POST, JSON body, `Bearer JWT` или API Key (`sk_live_*`). Префикс `/api
 ## Даты
 
 UTC в API. `new Date().toISOString()` для новых записей. Dashboard парсит через `dashboard/src/lib/date.ts`.
+
+## Scout Agent (orchestrator)
+
+AI-агент в отдельном Docker контейнере. Polls Scout API → Claude Code → PR.
+
+- **Конфиг**: `orchestrator/agent.yaml` (slug → список git repo URLs)
+- **Docker**: `orchestrator/Dockerfile` + `docker-compose.yaml`
+- **Локально**: `SCOUT_WORKSPACE=/path/to/repos pnpm orchestrator`
+- **AI сам определяет** какой репозиторий затронут по контексту бага
+- **Prompt**: `orchestrator/agent-prompt.md`
+
+Для добавления проекта: создать в Scout dashboard + добавить в `agent.yaml`.
 
 ## CI/CD
 

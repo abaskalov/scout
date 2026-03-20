@@ -82,6 +82,10 @@ export class ScoutClient {
     return json.data;
   }
 
+  getToken(): string {
+    return this.token || '';
+  }
+
   async login(): Promise<void> {
     const res = await fetch(`${this.apiUrl}/api/auth/login`, {
       method: 'POST',

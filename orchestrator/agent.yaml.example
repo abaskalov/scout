@@ -1,0 +1,30 @@
+# Scout Agent Configuration
+#
+# Copy to agent.yaml and fill in your values.
+# Environment variables override these values.
+
+# Scout API (can also use SCOUT_URL env var)
+scout_url: https://scout.kafu.kz
+agent_email: agent@scout.local
+agent_password: <CHANGE-ME>
+
+# Workspace path (repos are cloned here)
+workspace: /workspace
+
+# Poll interval in seconds (0 = single run)
+poll_interval: 300
+
+# AI agent binary (claude or path to custom binary)
+agent_bin: claude
+
+# Max fix attempts per bug
+max_attempts: 3
+
+# Projects: map Scout project slug → git repos
+# The agent will clone all repos and determine which one to fix.
+projects:
+  avtozor:
+    repos:
+      - git@github.com:your-org/avtozor-front.git
+      - git@github.com:your-org/item-api.git
+      - git@github.com:your-org/customer-api.git

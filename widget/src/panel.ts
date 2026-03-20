@@ -1,5 +1,5 @@
 import type { PickedElement } from './element-picker';
-import { captureScreenshot, SCREENSHOT_MIME } from './screenshot';
+import { SCREENSHOT_MIME } from './screenshot';
 import { getRecordingCompressed, resetBuffer, isRecordingAvailable } from './recorder';
 import { getToken, getUser, clearAuth, resolveProjectId, resetProjectCache } from './auth';
 
@@ -93,6 +93,10 @@ async function fetchWithRetry(
   }
 
   throw lastError ?? new Error('Ошибка сети');
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -347,11 +351,12 @@ function teardownViewportHandler(): void {
 }
 
 /**
- * Show the panel with the picked element info.
+ * Show the panel with the picked element info and optional pre-captured screenshot.
  */
 export function showPanel(
   elements: PanelElements,
   picked: PickedElement,
+  preScreenshot?: string | null,
 ): void {
   // Update user info (Marker.io/Usersnap pattern: show who's logged in)
   const user = getUser();
@@ -379,9 +384,13 @@ export function showPanel(
   elements.recordingCheckbox.checked = recAvailable;
   elements.recordingCheckbox.disabled = !recAvailable;
 
-  // Reset preview and progress
-  elements.screenshotPreview.classList.add('hidden');
-  elements.screenshotPreview.innerHTML = '';
+  // Show pre-captured screenshot preview or reset
+  if (preScreenshot) {
+    showScreenshotPreview(elements, preScreenshot);
+  } else {
+    elements.screenshotPreview.classList.add('hidden');
+    elements.screenshotPreview.textContent = '';
+  }
   elements.progressStatus.classList.add('hidden');
   elements.progressStatus.textContent = '';
 
@@ -414,16 +423,11 @@ function setProgress(elements: PanelElements, text: string): void {
   elements.progressStatus.classList.remove('hidden');
 }
 
-function setProgressWarning(elements: PanelElements, text: string): void {
-  elements.progressStatus.innerHTML = `<span class="scout-progress-warn">!</span>${text}`;
-  elements.progressStatus.classList.remove('hidden');
-}
-
 /**
  * Show screenshot preview thumbnail in the panel.
  */
 function showScreenshotPreview(elements: PanelElements, base64: string): void {
-  elements.screenshotPreview.innerHTML = '';
+  elements.screenshotPreview.textContent = '';
   const img = document.createElement('img');
   img.src = `data:${SCREENSHOT_MIME};base64,${base64}`;
   img.alt = 'Превью скриншота';
@@ -440,6 +444,7 @@ export function attachPanelEvents(
   apiUrl: string,
   projectSlug: string,
   picked: () => PickedElement | null,
+  getPreScreenshot: () => string | null,
   callbacks: PanelCallbacks,
 ): void {
   elements.cancelBtn.addEventListener('click', () => {
@@ -482,8 +487,6 @@ export function attachPanelEvents(
     elements.cancelBtn.disabled = true;
     elements.submitBtn.innerHTML = '<span class="scout-spinner"></span>Подготовка...';
 
-    const warnings: string[] = [];
-
     try {
       const token = getToken();
       if (!token) throw new Error('Вы не авторизованы');
@@ -492,46 +495,26 @@ export function attachPanelEvents(
       setProgress(elements, 'Подключение к проекту...');
       const projectId = await resolveProjectId(apiUrl, projectSlug);
 
-      // Step 2: Capture screenshot
-      let screenshot: string | undefined;
-      if (elements.screenshotCheckbox.checked) {
-        setProgress(elements, 'Создание скриншота...');
-        elements.submitBtn.innerHTML = '<span class="scout-spinner"></span>Скриншот...';
-
-        elements.backdrop.style.display = 'none';
-        const result = await captureScreenshot(p.cssSelector);
-        elements.backdrop.style.display = '';
-
-        if (result !== null) {
-          screenshot = result;
-          // Show preview (professional pattern)
-          showScreenshotPreview(elements, result);
-        } else {
-          warnings.push('Скриншот не удалось создать');
-          setProgressWarning(elements, 'Скриншот не удался, продолжаем...');
-          await sleep(500);
-        }
-      }
+      // Step 2: Use pre-captured screenshot (if checkbox is still checked)
+      const screenshot = elements.screenshotCheckbox.checked
+        ? getPreScreenshot() ?? undefined
+        : undefined;
 
       // Step 3: Serialize + compress recording (fflate gzip)
       let sessionRecording: string | undefined;
       if (elements.recordingCheckbox.checked) {
         setProgress(elements, 'Сжатие записи сессии...');
-        elements.submitBtn.innerHTML = '<span class="scout-spinner"></span>Запись...';
+        elements.submitBtn.textContent = 'Запись...';
 
         const result = getRecordingCompressed();
         if (result !== null) {
           sessionRecording = result;
-        } else {
-          warnings.push('Запись сессии недоступна');
-          setProgressWarning(elements, 'Запись не удалась, продолжаем...');
-          await sleep(500);
         }
       }
 
       // Step 4: Send with retry (exponential backoff: 1s, 2s, 4s)
       setProgress(elements, 'Отправка на сервер...');
-      elements.submitBtn.innerHTML = '<span class="scout-spinner"></span>Отправка...';
+      elements.submitBtn.textContent = 'Отправка...';
 
       // Auto-capture environment metadata (Marker.io/Usersnap pattern)
       const metadata = collectMetadata();
@@ -574,17 +557,8 @@ export function attachPanelEvents(
       // Success
       resetBuffer();
       hidePanel(elements);
-
-      if (warnings.length > 0) {
-        callbacks.onSubmitSuccess();
-        setTimeout(() => {
-          callbacks.onSubmitError(warnings.join('. '));
-        }, 3500);
-      } else {
-        callbacks.onSubmitSuccess();
-      }
+      callbacks.onSubmitSuccess();
     } catch (err: unknown) {
-      elements.backdrop.style.display = '';
       const msg = err instanceof Error ? err.message : 'Неизвестная ошибка';
       elements.submitBtn.disabled = false;
       elements.cancelBtn.disabled = false;
@@ -593,8 +567,4 @@ export function attachPanelEvents(
       callbacks.onSubmitError(msg);
     }
   });
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -92,6 +92,111 @@ export const WIDGET_STYLES = `
     display: none;
   }
 
+  /* Picker instruction banner */
+  .scout-picker-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000002;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: calc(12px + var(--safe-top)) 16px 12px;
+    background: #1e293b;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    transform: translateY(-100%);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  .scout-picker-banner.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .scout-picker-banner-text {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .scout-picker-banner-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    opacity: 0.8;
+  }
+
+  .scout-picker-banner-cancel {
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: #fff;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    min-height: 36px;
+  }
+
+  .scout-picker-banner-cancel:active {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  /* Loading overlay (between element pick and panel open) */
+  .scout-loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000002;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .scout-loading-overlay.visible {
+    opacity: 1;
+  }
+
+  .scout-loading-overlay.hidden {
+    display: none;
+  }
+
+  .scout-loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    background: #fff;
+    padding: 32px 40px;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  }
+
+  .scout-loading-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid #e5e7eb;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: scout-spin 0.7s linear infinite;
+  }
+
+  .scout-loading-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+  }
+
   /* Panel */
   .scout-panel-backdrop {
     position: fixed;

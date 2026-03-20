@@ -28,6 +28,54 @@ export function pickElement(
     overlay.classList.remove('hidden');
     highlight.classList.add('hidden');
 
+    // Instruction banner — tells user what to do
+    const banner = document.createElement('div');
+    banner.className = 'scout-picker-banner';
+
+    const bannerText = document.createElement('span');
+    bannerText.className = 'scout-picker-banner-text';
+
+    const bannerIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    bannerIcon.setAttribute('class', 'scout-picker-banner-icon');
+    bannerIcon.setAttribute('viewBox', '0 0 24 24');
+    bannerIcon.setAttribute('fill', 'none');
+    bannerIcon.setAttribute('stroke', 'currentColor');
+    bannerIcon.setAttribute('stroke-width', '2');
+    bannerIcon.setAttribute('stroke-linecap', 'round');
+    bannerIcon.setAttribute('stroke-linejoin', 'round');
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', '12');
+    circle.setAttribute('cy', '12');
+    circle.setAttribute('r', '10');
+    const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    line1.setAttribute('d', 'M12 16v-4');
+    const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    line2.setAttribute('d', 'M12 8h.01');
+    bannerIcon.appendChild(circle);
+    bannerIcon.appendChild(line1);
+    bannerIcon.appendChild(line2);
+
+    bannerText.appendChild(bannerIcon);
+    bannerText.appendChild(document.createTextNode('Нажмите на элемент с ошибкой'));
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'scout-picker-banner-cancel';
+    cancelBtn.setAttribute('aria-label', 'Отменить');
+    cancelBtn.textContent = 'Отмена';
+
+    banner.appendChild(bannerText);
+    banner.appendChild(cancelBtn);
+    shadow.appendChild(banner);
+
+    // Trigger animation
+    requestAnimationFrame(() => banner.classList.add('visible'));
+
+    cancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cleanup();
+      resolve(null);
+    });
+
     let currentTarget: Element | null = null;
 
     function updateHighlight(el: Element): void {
@@ -181,6 +229,8 @@ export function pickElement(
     function cleanup(): void {
       overlay.classList.add('hidden');
       highlight.classList.add('hidden');
+      banner.classList.remove('visible');
+      setTimeout(() => banner.remove(), 200);
       overlay.removeEventListener('mousemove', onMouseMove);
       overlay.removeEventListener('click', onClick);
       overlay.removeEventListener('touchstart', onTouchStart);

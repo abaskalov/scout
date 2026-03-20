@@ -3,6 +3,7 @@ import { getToken, login, clearAuth } from './auth';
 import { createFab, showFab, hideFab } from './fab';
 import { pickElement, type PickedElement } from './element-picker';
 import { createPanel, showPanel, hidePanel, attachPanelEvents, type PanelCallbacks } from './panel';
+import { captureScreenshot } from './screenshot';
 import { startRecording, pauseRecording, resumeRecording } from './recorder';
 
 interface ScoutConfig {
@@ -232,18 +233,51 @@ function init(): void {
   }
   document.addEventListener('keydown', onLoginEsc, true);
 
+  // --- Loading overlay (shown between element pick and panel open) ---
+  const loadingOverlay = document.createElement('div');
+  loadingOverlay.className = 'scout-loading-overlay hidden';
+
+  const loadingContent = document.createElement('div');
+  loadingContent.className = 'scout-loading-content';
+
+  const loadingSpinner = document.createElement('div');
+  loadingSpinner.className = 'scout-loading-spinner';
+
+  const loadingText = document.createElement('div');
+  loadingText.className = 'scout-loading-text';
+  loadingText.textContent = 'Создание скриншота...';
+
+  loadingContent.appendChild(loadingSpinner);
+  loadingContent.appendChild(loadingText);
+  loadingOverlay.appendChild(loadingContent);
+  shadow.appendChild(loadingOverlay);
+
+  function showLoading(text: string): void {
+    loadingText.textContent = text;
+    loadingOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => loadingOverlay.classList.add('visible'));
+  }
+
+  function hideLoading(): void {
+    loadingOverlay.classList.remove('visible');
+    setTimeout(() => loadingOverlay.classList.add('hidden'), 200);
+  }
+
   // --- Create panel ---
   const panelElements = createPanel(shadow);
   let currentPicked: PickedElement | null = null;
+  let preScreenshot: string | null = null;
 
   const panelCallbacks: PanelCallbacks = {
     onClose: () => {
       currentPicked = null;
+      preScreenshot = null;
       resumeRecording();
       showFab(fab);
     },
     onSubmitSuccess: () => {
       currentPicked = null;
+      preScreenshot = null;
       resumeRecording();
       showFab(fab);
       showToast('Баг отправлен!');
@@ -253,6 +287,7 @@ function init(): void {
     },
     onLogout: () => {
       currentPicked = null;
+      preScreenshot = null;
       resumeRecording();
       showFab(fab);
       showToast('Вы вышли из аккаунта');
@@ -264,6 +299,7 @@ function init(): void {
     apiUrl,
     projectSlug,
     () => currentPicked,
+    () => preScreenshot,
     panelCallbacks,
   );
 
@@ -271,7 +307,6 @@ function init(): void {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !panelElements.backdrop.classList.contains('hidden')) {
       hidePanel(panelElements);
-      resumeRecording();
       panelCallbacks.onClose();
     }
   }, true);
@@ -290,8 +325,13 @@ function init(): void {
       return;
     }
 
+    // Pre-capture screenshot with loading indicator (before panel opens)
+    showLoading('Создание скриншота...');
+    preScreenshot = await captureScreenshot(picked.cssSelector);
+    hideLoading();
+
     currentPicked = picked;
-    showPanel(panelElements, picked);
+    showPanel(panelElements, picked, preScreenshot);
   }
 
   // --- Create FAB ---

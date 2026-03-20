@@ -17,7 +17,7 @@ import html2canvas from 'html2canvas';
  */
 
 const SCREENSHOT_TIMEOUT_DESKTOP_MS = 10_000;
-const SCREENSHOT_TIMEOUT_IOS_MS = 5_000;
+const SCREENSHOT_TIMEOUT_IOS_MS = 8_000;
 const JPEG_QUALITY = 0.85;
 
 /** Detect iOS Safari (iPhone, iPad, iPod — including iPad with desktop UA) */
@@ -65,28 +65,32 @@ export async function captureScreenshot(highlightSelector?: string): Promise<str
   }
 
   try {
-    const fullWidth = Math.max(
-      document.documentElement.scrollWidth,
-      document.body.scrollWidth,
-      window.innerWidth,
-    );
-    const fullHeight = Math.max(
-      document.documentElement.scrollHeight,
-      document.body.scrollHeight,
-      window.innerHeight,
-    );
+    const ios = isIOSSafari();
+
+    // iOS Safari: capture viewport only (full-page creates huge canvas that crashes)
+    // Desktop: capture full page
+    const captureWidth = ios
+      ? window.innerWidth
+      : Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, window.innerWidth);
+    const captureHeight = ios
+      ? window.innerHeight
+      : Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight);
+
+    // On iOS, capture from current scroll position (viewport)
+    const scrollX = ios ? window.scrollX : 0;
+    const scrollY = ios ? window.scrollY : 0;
 
     // Capture with timeout (prevents hanging on complex pages)
     const canvas = await Promise.race([
       html2canvas(document.documentElement, {
-        width: fullWidth,
-        height: fullHeight,
-        windowWidth: fullWidth,
-        windowHeight: fullHeight,
-        scrollX: 0,
-        scrollY: 0,
-        x: 0,
-        y: 0,
+        width: captureWidth,
+        height: captureHeight,
+        windowWidth: captureWidth,
+        windowHeight: captureHeight,
+        scrollX: ios ? -scrollX : 0,
+        scrollY: ios ? -scrollY : 0,
+        x: ios ? scrollX : 0,
+        y: ios ? scrollY : 0,
         scale: 1,
         backgroundColor: '#ffffff',
         ignoreElements: (element: Element) => {

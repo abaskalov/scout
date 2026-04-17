@@ -49,7 +49,7 @@ Tester clicks element  →  Widget captures context + screenshot + recording
 | **i18n** | Russian, English, Uzbek (Latin). Dashboard + widget. Server error codes translated on client |
 | **AI Orchestrator** | Claims bugs, runs opencode, validates, creates PRs, updates status |
 | **Auth** | JWT + API keys (`sk_live_*`), role-based access (admin/member/agent), cross-domain SSO (cookie + iframe + popup) |
-| **Infra** | Single process (API + SPA + widget on one port), SQLite, Docker, manual deploy via local script |
+| **Infra** | Single process (API + SPA + widget on one port), SQLite, Docker, publishable GHCR image |
 
 ## Quickstart
 
@@ -62,7 +62,7 @@ docker run -d \
   -e SCOUT_JWT_SECRET=$(openssl rand -hex 32) \
   -v scout-data:/app/data \
   -v scout-storage:/app/storage \
-  ghcr.io/scout-dev-org/scout:main
+  ghcr.io/scout-dev-org/scout:master
 ```
 
 Open http://localhost:10009 — login `admin@scout.local` / `admin`.
@@ -158,7 +158,7 @@ services:
       - caddy_data:/data
 
   scout:
-    image: ghcr.io/scout-dev-org/scout:main
+    image: ghcr.io/scout-dev-org/scout:master
     environment:
       - SCOUT_JWT_SECRET=${SCOUT_JWT_SECRET}
     volumes:
@@ -196,19 +196,11 @@ scout.example.com {
 
 ### CI/CD
 
-Push to `main` → typecheck + tests → Docker build + publish to GHCR.
+Push to `dev` → typecheck + tests.
 
-### Manual deploy
+Push to `master` → typecheck + tests → Docker build + publish to GHCR.
 
-```bash
-pnpm deploy:prod
-```
-
-Optional overrides:
-
-```bash
-DEPLOY_HOST=<CHANGE-ME-HOST> DEPLOY_PORT=<CHANGE-ME-PORT> DEPLOY_USER=<CHANGE-ME-USER> DEPLOY_PATH=<CHANGE-ME-PATH> DEPLOY_SERVICE=<CHANGE-ME-SERVICE> pnpm deploy:prod
-```
+This repository intentionally does not contain production deploy automation. Deploying the published image to a server is owned by the operator of that server.
 
 ### Backup
 
@@ -238,7 +230,7 @@ pnpm db:generate  # generate DB migration after schema change
 | Widget | Vanilla TS, html2canvas-pro, rrweb, fflate |
 | Auth | JWT, bcrypt, API keys |
 | Tests | Vitest (unit), Playwright (E2E) |
-| Deploy | Docker, GHCR, local deploy script, Caddy |
+| Deploy | Docker, GHCR, Caddy |
 
 ## License
 

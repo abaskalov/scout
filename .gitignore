@@ -12,3 +12,7 @@ CLAUDE.md
 # Test artifacts
 test-results/
 *.png
+
+# Local operator scripts
+scripts/local/
+scripts/*.local.*

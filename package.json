@@ -19,8 +19,7 @@
     "db:push": "drizzle-kit push",
     "db:seed": "tsx server/db/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "typecheck": "tsc --noEmit",
-    "deploy:prod": "./scripts/deploy.sh"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "^1",

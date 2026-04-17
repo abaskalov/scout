@@ -79,7 +79,7 @@ function detectDefaultBranch(repoPath: string): string {
     "git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'",
     repoPath,
   ).trim();
-  return result || 'main';
+  return result || 'master';
 }
 
 // ── AI Agent ─────────────────────────────────────────────────

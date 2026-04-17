@@ -1,8 +1,8 @@
-name: Deploy
+name: Docker
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     tags: ['v*']
 
 # Cancel in-progress deploys on new push
@@ -69,23 +69,3 @@ jobs:
           # Cache Docker layers in GitHub Actions cache (huge speedup)
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  deploy:
-    name: Deploy to Production
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: scout.kafu.kz
-          port: 2251
-          username: root
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd /opt/scout
-            docker compose pull scout
-            docker compose up -d --force-recreate scout
-            echo "Deployed $(docker inspect --format='{{.Image}}' scout-scout-1 | cut -c8-19) at $(date)"

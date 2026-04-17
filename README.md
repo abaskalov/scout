@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/abaskalov/scout/actions/workflows/ci.yml"><img src="https://github.com/abaskalov/scout/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/abaskalov/scout/actions/workflows/docker.yml"><img src="https://github.com/abaskalov/scout/actions/workflows/docker.yml/badge.svg" alt="Docker" /></a>
-  <a href="https://github.com/abaskalov/scout/pkgs/container/scout"><img src="https://img.shields.io/badge/ghcr.io-scout-blue?logo=docker" alt="Docker Image" /></a>
+  <a href="https://github.com/scout-dev-org/scout/actions/workflows/ci.yml"><img src="https://github.com/scout-dev-org/scout/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/scout-dev-org/scout/actions/workflows/docker.yml"><img src="https://github.com/scout-dev-org/scout/actions/workflows/docker.yml/badge.svg" alt="Docker" /></a>
+  <a href="https://github.com/scout-dev-org/scout/pkgs/container/scout"><img src="https://img.shields.io/badge/ghcr.io-scout-blue?logo=docker" alt="Docker Image" /></a>
 </p>
 
 <p align="center">
@@ -49,7 +49,7 @@ Tester clicks element  →  Widget captures context + screenshot + recording
 | **i18n** | Russian, English, Uzbek (Latin). Dashboard + widget. Server error codes translated on client |
 | **AI Orchestrator** | Claims bugs, runs opencode, validates, creates PRs, updates status |
 | **Auth** | JWT + API keys (`sk_live_*`), role-based access (admin/member/agent), cross-domain SSO (cookie + iframe + popup) |
-| **Infra** | Single process (API + SPA + widget on one port), SQLite, Docker, auto-deploy on push to main |
+| **Infra** | Single process (API + SPA + widget on one port), SQLite, Docker, publishable GHCR image |
 
 ## Quickstart
 
@@ -62,7 +62,7 @@ docker run -d \
   -e SCOUT_JWT_SECRET=$(openssl rand -hex 32) \
   -v scout-data:/app/data \
   -v scout-storage:/app/storage \
-  ghcr.io/abaskalov/scout:main
+  ghcr.io/scout-dev-org/scout:master
 ```
 
 Open http://localhost:10009 — login `admin@scout.local` / `admin`.
@@ -72,7 +72,7 @@ Auto-creates admin, AI agent, and demo project on first start. **Change password
 ### From source
 
 ```bash
-git clone https://github.com/abaskalov/scout.git && cd scout
+git clone https://github.com/scout-dev-org/scout.git && cd scout
 pnpm install
 pnpm db:seed     # create DB with test data
 pnpm dev:all     # API + dashboard + widget (hot reload)
@@ -158,7 +158,7 @@ services:
       - caddy_data:/data
 
   scout:
-    image: ghcr.io/abaskalov/scout:main
+    image: ghcr.io/scout-dev-org/scout:master
     environment:
       - SCOUT_JWT_SECRET=${SCOUT_JWT_SECRET}
     volumes:
@@ -196,7 +196,11 @@ scout.example.com {
 
 ### CI/CD
 
-Push to `main` → typecheck + tests → Docker build → deploy. Fully automatic.
+Push to `dev` → typecheck + tests.
+
+Push to `master` → typecheck + tests → Docker build + publish to GHCR.
+
+This repository intentionally does not contain production deploy automation. Deploying the published image to a server is owned by the operator of that server.
 
 ### Backup
 
@@ -226,7 +230,7 @@ pnpm db:generate  # generate DB migration after schema change
 | Widget | Vanilla TS, html2canvas-pro, rrweb, fflate |
 | Auth | JWT, bcrypt, API keys |
 | Tests | Vitest (unit), Playwright (E2E) |
-| Deploy | Docker, GitHub Actions, Caddy |
+| Deploy | Docker, GHCR, Caddy |
 
 ## License
 

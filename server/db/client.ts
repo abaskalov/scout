@@ -6,6 +6,7 @@ import { mkdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { logger } from '../lib/logger.js';
+import { ensureSqliteSchema, hasCoreTables } from './sqlite-schema.js';
 
 const dbPath = process.env.SCOUT_DB_PATH || 'data/scout.db';
 
@@ -19,154 +20,25 @@ sqlite.pragma('journal_mode = WAL');
 sqlite.pragma('foreign_keys = ON');
 sqlite.pragma('busy_timeout = 5000');
 
-// Auto-create tables if they don't exist (production-safe, idempotent)
-sqlite.exec(`
-  CREATE TABLE IF NOT EXISTS projects (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT UNIQUE NOT NULL,
-    allowed_origins TEXT NOT NULL DEFAULT '[]',
-    autofix_enabled INTEGER NOT NULL DEFAULT 1,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    name TEXT NOT NULL,
-    role TEXT NOT NULL,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS pivot_users_projects (
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    PRIMARY KEY (user_id, project_id)
-  );
-
-  CREATE TABLE IF NOT EXISTS scout_items (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL REFERENCES projects(id),
-    message TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'new',
-    page_url TEXT,
-    page_route TEXT,
-    component_file TEXT,
-    css_selector TEXT,
-    element_text TEXT,
-    element_html TEXT,
-    viewport_width INTEGER,
-    viewport_height INTEGER,
-    screenshot_path TEXT,
-    session_recording_path TEXT,
-    priority TEXT DEFAULT 'medium',
-    labels TEXT,
-    metadata TEXT,
-    reporter_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-    assignee_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-    resolved_by_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-    resolution_note TEXT,
-    branch_name TEXT,
-    mr_url TEXT,
-    attempt_count INTEGER NOT NULL DEFAULT 0,
-    resolved_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_items_project_status ON scout_items(project_id, status);
-  CREATE INDEX IF NOT EXISTS idx_items_project_created ON scout_items(project_id, created_at);
-  CREATE INDEX IF NOT EXISTS idx_items_assignee ON scout_items(assignee_id);
-
-  CREATE TABLE IF NOT EXISTS scout_item_notes (
-    id TEXT PRIMARY KEY,
-    item_id TEXT NOT NULL REFERENCES scout_items(id) ON DELETE CASCADE,
-    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-    content TEXT NOT NULL,
-    type TEXT NOT NULL DEFAULT 'comment',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_notes_item_created ON scout_item_notes(item_id, created_at);
-
-  CREATE TABLE IF NOT EXISTS audit_log (
-    id TEXT PRIMARY KEY,
-    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-    action TEXT NOT NULL,
-    entity_type TEXT,
-    entity_id TEXT,
-    details TEXT,
-    ip_address TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
-  CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
-
-  CREATE TABLE IF NOT EXISTS webhooks (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    url TEXT NOT NULL,
-    secret TEXT,
-    events TEXT NOT NULL DEFAULT '["item.created","item.status_changed"]',
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_webhooks_project ON webhooks(project_id);
-  CREATE INDEX IF NOT EXISTS idx_webhooks_project_active ON webhooks(project_id, is_active);
-
-  CREATE TABLE IF NOT EXISTS api_keys (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    key_hash TEXT NOT NULL,
-    key_prefix TEXT NOT NULL,
-    last_used_at TEXT,
-    expires_at TEXT,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(key_prefix);
-  CREATE INDEX IF NOT EXISTS idx_api_keys_project ON api_keys(project_id);
-`);
-
-// --- Migrations (safe to re-run, uses IF NOT EXISTS / try-catch) ---
-try {
-  sqlite.exec(`ALTER TABLE scout_items ADD COLUMN metadata TEXT`);
-} catch {
-  // Column already exists — OK
-}
-try {
-  sqlite.exec(`ALTER TABLE scout_items ADD COLUMN priority TEXT DEFAULT 'medium'`);
-} catch {
-  // Column already exists — OK
-}
-try {
-  sqlite.exec(`ALTER TABLE scout_items ADD COLUMN labels TEXT`);
-} catch {
-  // Column already exists — OK
-}
-
 // --- Apply pending drizzle-kit migrations (for future schema changes) ---
 export const db: BetterSQLite3Database<typeof schema> = drizzle(sqlite, { schema });
 
 const migrationsFolder = join(process.cwd(), 'drizzle');
 if (existsSync(migrationsFolder)) {
+  const legacySchema = hasCoreTables(sqlite);
+  if (legacySchema) {
+    ensureSqliteSchema(sqlite, { migrationsFolder, adoptBaseline: true });
+  }
   try {
     migrate(db, { migrationsFolder });
+    ensureSqliteSchema(sqlite);
     logger.debug('Drizzle migrations applied');
   } catch (err) {
-    logger.warn({ err }, 'Drizzle migration failed');
+    logger.error({ err }, 'Drizzle migration failed');
+    throw err;
   }
+} else {
+  ensureSqliteSchema(sqlite);
 }
 
 // --- Auto-seed logic ---

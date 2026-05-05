@@ -1,0 +1,34 @@
+services:
+  scout-agent:
+    build:
+      context: ..
+      dockerfile: orchestrator/Dockerfile
+    container_name: scout-agent
+    restart: unless-stopped
+    environment:
+      # Scout API connection
+      - SCOUT_URL=${SCOUT_URL:-https://scout.kafu.kz}
+      - SCOUT_AGENT_EMAIL=${SCOUT_AGENT_EMAIL:-agent@scout.local}
+      - SCOUT_AGENT_PASSWORD=${SCOUT_AGENT_PASSWORD}
+
+      # AI agent
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+
+      # GitHub (for creating PRs)
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GH_TOKEN=${GITHUB_TOKEN}
+
+      # Polling interval (seconds, 0 = single run)
+      - POLL_INTERVAL=${POLL_INTERVAL:-300}
+      - MAX_ATTEMPTS=${MAX_ATTEMPTS:-3}
+
+    volumes:
+      # Project config
+      - ./agent.yaml:/app/orchestrator/agent.yaml:ro
+      # Persistent workspace (cloned repos survive restarts)
+      - agent-workspace:/workspace
+      # Git config
+      - ${HOME}/.gitconfig:/home/node/.gitconfig:ro
+
+volumes:
+  agent-workspace:

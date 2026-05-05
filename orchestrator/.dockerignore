@@ -1,0 +1,11 @@
+node_modules
+data
+storage
+dashboard/node_modules
+widget/node_modules
+e2e
+test
+demo
+.git
+*.md
+!orchestrator/agent-prompt.md

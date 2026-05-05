@@ -11,13 +11,13 @@ import Labels, { parseLabels } from '../components/Labels';
 import Pagination from '../components/Pagination';
 
 interface Project {
-  id: number;
+  id: string;
   name: string;
   slug: string;
 }
 
 interface Item {
-  id: number;
+  id: string;
   message: string;
   status: string;
   priority: string | null;
@@ -63,7 +63,7 @@ export default function Items() {
   const admin = isAdmin();
   const { t, locale } = useTranslation();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<number | null>(null);
+  const [selectedProject, setSelectedProject] = useState<string>('');
   const [items, setItems] = useState<Item[]>([]);
   const [pagination, setPagination] = useState<PaginationData>({
     page: 1,
@@ -165,7 +165,7 @@ export default function Items() {
   useSSE({ projectId: selectedProject, onEvent: handleSSEEvent });
 
   function handleProjectChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    setSelectedProject(Number(e.target.value));
+    setSelectedProject(e.target.value);
     setPagination((p) => ({ ...p, page: 1 }));
     setStatusFilter('all');
     setSearch('');
@@ -222,7 +222,7 @@ export default function Items() {
           <p className="mt-1 text-sm text-gray-500">{t('items.description')}</p>
         </div>
         <select
-          value={selectedProject ?? ''}
+          value={selectedProject}
           onChange={handleProjectChange}
           className="w-full md:w-auto rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
         >

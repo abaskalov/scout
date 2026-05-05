@@ -1,0 +1,73 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - heading "AutoParts" [level=1] [ref=e3]
+    - navigation [ref=e4]:
+      - link "Каталог" [ref=e5] [cursor=pointer]:
+        - /url: "#"
+      - link "Запчасти" [ref=e6] [cursor=pointer]:
+        - /url: "#"
+      - link "Продавцы" [ref=e7] [cursor=pointer]:
+        - /url: "#"
+      - link "О нас" [ref=e8] [cursor=pointer]:
+        - /url: "#"
+  - generic [ref=e9]:
+    - heading "Найди запчасти для любого авто" [level=2] [ref=e10]
+    - paragraph [ref=e11]: Маркетплейс автозапчастей с доставкой по всему Казахстану
+    - link "Начать поиск" [ref=e12] [cursor=pointer]:
+      - /url: "#"
+  - generic [ref=e13]:
+    - generic [ref=e14]:
+      - 'textbox "Поиск: масляный фильтр Toyota Camry 2020..." [ref=e15]'
+      - button "Найти" [ref=e16] [cursor=pointer]
+    - heading "Популярные запчасти" [level=3] [ref=e17]
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e20]: 🔧
+        - generic [ref=e21]:
+          - generic [ref=e22]: Масляный фильтр Toyota 04152-YZZA1
+          - generic [ref=e23]: Toyota Camry 2018-2024 · Оригинал
+          - generic [ref=e24]: 4 500 ₸
+          - button "Забронировать" [ref=e25] [cursor=pointer]
+      - generic [ref=e26]:
+        - generic [ref=e27]: 🛞
+        - generic [ref=e28]:
+          - generic [ref=e29]: Тормозные колодки Brembo P83024
+          - generic [ref=e30]: Honda Civic 2016-2023 · Аналог
+          - generic [ref=e31]: 12 800 ₸
+          - button "Забронировать" [ref=e32] [cursor=pointer]
+      - generic [ref=e33]:
+        - generic [ref=e34]: 💡
+        - generic [ref=e35]:
+          - generic [ref=e36]: Лампа H7 Philips X-treme Vision
+          - generic [ref=e37]: Универсальная · Оригинал
+          - generic [ref=e38]: 3 200 ₸
+          - button "Забронировать"
+      - generic [ref=e39]:
+        - generic [ref=e40]: ⚙️
+        - generic [ref=e41]:
+          - generic [ref=e42]: Ремень ГРМ Gates 5543XS
+          - generic [ref=e43]: Volkswagen Polo 2015-2022 · Аналог
+          - generic [ref=e44]: 8 900 ₸
+          - button "Забронировать" [ref=e45] [cursor=pointer]
+      - generic [ref=e46]:
+        - generic [ref=e47]: 🔋
+        - generic [ref=e48]:
+          - generic [ref=e49]: Аккумулятор Varta D24 60Ah
+          - generic [ref=e50]: Универсальный · Оригинал
+          - generic [ref=e51]: 28 500 ₸
+          - button "Нет в наличии" [ref=e52] [cursor=pointer]
+      - generic [ref=e53]:
+        - generic [ref=e54]: 🧲
+        - generic [ref=e55]:
+          - generic [ref=e56]: Свечи зажигания NGK BKR6E
+          - generic [ref=e57]: Hyundai Solaris 2017-2023 · Оригинал
+          - generic [ref=e58]: 1 800 ₸
+          - button "Забронировать" [ref=e59] [cursor=pointer]
+  - contentinfo [ref=e60]:
+    - paragraph [ref=e61]: AutoParts © 2026 — Demo Store
+  - generic:
+    - generic [ref=e62]:
+      - img [ref=e114]
+      - text: Bug submitted!
+    - button "Report a bug" [ref=e63] [cursor=pointer]:
+      - img [ref=e64]

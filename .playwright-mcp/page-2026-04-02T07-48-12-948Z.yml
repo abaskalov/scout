@@ -1,0 +1,112 @@
+- generic [ref=e14]:
+  - complementary [ref=e15]:
+    - generic [ref=e16]:
+      - img [ref=e17]
+      - generic [ref=e20]: Scout
+    - navigation [ref=e21]:
+      - link "Issues 27" [ref=e22] [cursor=pointer]:
+        - /url: /items
+        - img [ref=e23]
+        - text: Issues
+        - generic [ref=e27]: "27"
+      - link "Projects" [ref=e28] [cursor=pointer]:
+        - /url: /projects
+        - img [ref=e29]
+        - text: Projects
+      - link "Webhooks" [ref=e31] [cursor=pointer]:
+        - /url: /webhooks
+        - img [ref=e32]
+        - text: Webhooks
+      - link "Users" [ref=e35] [cursor=pointer]:
+        - /url: /users
+        - img [ref=e36]
+        - text: Users
+    - generic [ref=e41]:
+      - generic [ref=e42]: Scout Admin
+      - generic [ref=e43]: admin@scout.local
+      - button "Log out" [ref=e45]
+      - generic [ref=e47]:
+        - button "Русский" [ref=e48]
+        - button "English" [ref=e49]
+        - button "O'zbekcha" [ref=e50]
+  - main [ref=e51]:
+    - generic [ref=e52]:
+      - generic [ref=e53]:
+        - generic [ref=e54]:
+          - heading "Issues" [level=1] [ref=e55]
+          - paragraph [ref=e56]: All bug reports for the project
+        - combobox [ref=e57]:
+          - option "Isolated E2E" [selected]
+          - option "Isolated E2E"
+          - option "My App"
+      - generic [ref=e58]:
+        - textbox "Search by description..." [ref=e60]
+        - combobox [ref=e61]:
+          - option "All priorities" [selected]
+          - option "Critical"
+          - option "High"
+          - option "Medium"
+          - option "Low"
+        - combobox [ref=e62]:
+          - option "All assignees" [selected]
+          - option "Scout Admin"
+          - option "AI Agent"
+          - option "Tester"
+      - generic [ref=e63]:
+        - button "All4" [ref=e64]
+        - button "New4" [ref=e65]
+        - button "In progress" [ref=e66]
+        - button "In review" [ref=e67]
+        - button "Done" [ref=e68]
+        - button "Cancelled" [ref=e69]
+      - table [ref=e71]:
+        - rowgroup [ref=e72]:
+          - row "Message Status Priority Labels Author Assignee Created" [ref=e73]:
+            - columnheader "Message" [ref=e74]
+            - columnheader "Status" [ref=e75]
+            - columnheader "Priority" [ref=e76]
+            - columnheader "Labels" [ref=e77]
+            - columnheader "Author" [ref=e78]
+            - columnheader "Assignee" [ref=e79]
+            - columnheader "Created" [ref=e80]
+        - rowgroup [ref=e81]:
+          - row "E2E widget bug 1773998857250 New Medium Scout Admin — 03/20/2026, 02:27 PM" [ref=e82] [cursor=pointer]:
+            - cell "E2E widget bug 1773998857250" [ref=e83]
+            - cell "New" [ref=e84]:
+              - generic [ref=e85]: New
+            - cell "Medium" [ref=e86]:
+              - generic [ref=e87]: Medium
+            - cell [ref=e88]
+            - cell "Scout Admin" [ref=e89]
+            - cell "—" [ref=e90]
+            - cell "03/20/2026, 02:27 PM" [ref=e91]
+          - row "E2E widget bug 1773998852872 New Medium Scout Admin — 03/20/2026, 02:27 PM" [ref=e92] [cursor=pointer]:
+            - cell "E2E widget bug 1773998852872" [ref=e93]
+            - cell "New" [ref=e94]:
+              - generic [ref=e95]: New
+            - cell "Medium" [ref=e96]:
+              - generic [ref=e97]: Medium
+            - cell [ref=e98]
+            - cell "Scout Admin" [ref=e99]
+            - cell "—" [ref=e100]
+            - cell "03/20/2026, 02:27 PM" [ref=e101]
+          - row "E2E widget bug 1773998849086 New Medium Scout Admin — 03/20/2026, 02:27 PM" [ref=e102] [cursor=pointer]:
+            - cell "E2E widget bug 1773998849086" [ref=e103]
+            - cell "New" [ref=e104]:
+              - generic [ref=e105]: New
+            - cell "Medium" [ref=e106]:
+              - generic [ref=e107]: Medium
+            - cell [ref=e108]
+            - cell "Scout Admin" [ref=e109]
+            - cell "—" [ref=e110]
+            - cell "03/20/2026, 02:27 PM" [ref=e111]
+          - row "secret bug New Medium Scout Admin — 03/20/2026, 02:26 PM" [ref=e112] [cursor=pointer]:
+            - cell "secret bug" [ref=e113]
+            - cell "New" [ref=e114]:
+              - generic [ref=e115]: New
+            - cell "Medium" [ref=e116]:
+              - generic [ref=e117]: Medium
+            - cell [ref=e118]
+            - cell "Scout Admin" [ref=e119]
+            - cell "—" [ref=e120]
+            - cell "03/20/2026, 02:26 PM" [ref=e121]

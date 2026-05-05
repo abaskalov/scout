@@ -22,7 +22,7 @@ Determine which repository is affected based on the bug context:
 
 ## Rules
 
-1. **Read CLAUDE.md** or README in the target repo for project conventions
+1. **Read AGENTS.md** or README in the target repo for project conventions
 2. **Fix ONLY the reported bug** — do not refactor or improve unrelated code
 3. **NEVER** use `as any`, `@ts-ignore`, `@ts-expect-error`
 4. **NEVER** modify or delete tests

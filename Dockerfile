@@ -5,7 +5,7 @@ FROM node:20-alpine AS builder
 RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
 # 1. Copy only dependency manifests (maximizes Docker layer cache)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./

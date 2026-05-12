@@ -53,7 +53,7 @@ async function init(): Promise<void> {
 
   const { apiUrl, projectSlug } = config;
 
-  // --- Cross-domain SSO: fetch token from scout.kafu.kz via iframe ---
+  // --- Cross-domain SSO: fetch token from the configured Scout API via iframe ---
   await initSSO(apiUrl);
 
   // --- Shadow DOM setup ---

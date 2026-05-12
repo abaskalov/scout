@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       # Scout API connection
-      - SCOUT_URL=${SCOUT_URL:-https://scout.kafu.kz}
+      - SCOUT_URL=${SCOUT_URL:-http://host.docker.internal:10009}
       - SCOUT_AGENT_EMAIL=${SCOUT_AGENT_EMAIL:-agent@scout.local}
       - SCOUT_AGENT_PASSWORD=${SCOUT_AGENT_PASSWORD}
 

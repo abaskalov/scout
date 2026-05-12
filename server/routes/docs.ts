@@ -9,7 +9,7 @@ const spec = {
     version: '1.0.0',
     description:
       'Scout — автономная система баг-трекинга с AI-агентом. Все API-эндпоинты используют метод POST с JSON-телом (кроме health, events, docs). Авторизация через Bearer JWT или API Key (`sk_live_...`).',
-    contact: { url: 'https://scout.kafu.kz' },
+    contact: { url: 'https://your-scout.example' },
   },
   servers: [
     { url: '/api/v1', description: 'API v1 (current)' },

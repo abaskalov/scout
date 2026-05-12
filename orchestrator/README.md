@@ -43,7 +43,7 @@ docker compose logs -f scout-agent
 export SCOUT_URL=http://localhost:10009
 export ANTHROPIC_API_KEY=sk-ant-xxx
 export GITHUB_TOKEN=ghp_xxx
-export SCOUT_WORKSPACE=/Users/you/Work/avtozor
+export SCOUT_WORKSPACE=/path/to/workspace
 
 pnpm orchestrator
 ```
@@ -57,9 +57,9 @@ Configuration is loaded from `agent.yaml` with environment variable overrides.
 ### agent.yaml
 
 ```yaml
-scout_url: https://scout.kafu.kz
+scout_url: https://your-scout.example
 agent_email: agent@scout.local
-agent_password: secret
+agent_password: <CHANGE-ME-agent-password>
 workspace: /workspace
 poll_interval: 300
 agent_bin: claude

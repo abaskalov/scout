@@ -130,7 +130,7 @@ All endpoints are `POST` with JSON body. Auth via `Authorization: Bearer <jwt|ap
 
 Base path: `/api/v1/` (or `/api/` for backward compatibility).
 
-Interactive docs: `https://your-scout.com/api/docs`
+Interactive docs: `https://your-scout.example/api/docs`
 
 **Key endpoints:**
 
@@ -147,6 +147,8 @@ Interactive docs: `https://your-scout.com/api/docs`
 ## Deployment
 
 ### Docker Compose with HTTPS
+
+Generic, non-production examples are available in `deploy/`. Keep real production compose files, `.env`, hostnames, SSH aliases, and server paths local and untracked.
 
 ```yaml
 services:

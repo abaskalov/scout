@@ -1,0 +1,12 @@
+services:
+  scout:
+    image: ghcr.io/scout-dev-org/scout:master
+    container_name: scout
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:10009:10009"
+    volumes:
+      - ./data:/app/data
+      - ./storage:/app/storage

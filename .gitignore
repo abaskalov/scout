@@ -3,16 +3,36 @@ dist/
 data/
 storage/
 .env
+.env.*
+!.env.example
 *.db
 *.db-wal
 *.db-shm
 .DS_Store
+
+# Local AI/development agent files
+AGENTS.md
 CLAUDE.md
+.playwright-mcp/
+.opencode.local/
+.mcp.json
+docs/superpowers/
 
 # Test artifacts
 test-results/
 *.png
 
-# Local operator scripts
+# Local operator/deploy files
 scripts/local/
 scripts/*.local.*
+deploy/.env
+deploy/.env.*
+deploy/docker-compose.yml
+deploy/docker-compose.yaml
+deploy/*.local.*
+deploy/*prod*.yml
+deploy/*prod*.yaml
+!deploy/*.example.yml
+!deploy/*.example.yaml
+!deploy/*.example.sh
+!deploy/*.example.env

@@ -25,7 +25,7 @@
     "@hono/node-server": "^1",
     "@hono/zod-validator": "^0.4",
     "bcryptjs": "^2",
-    "better-sqlite3": "^11",
+    "better-sqlite3": "^12.10.0",
     "drizzle-orm": "^0.38",
     "hono": "^4",
     "jsonwebtoken": "^9",

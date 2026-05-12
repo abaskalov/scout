@@ -187,7 +187,6 @@ scout.example.com {
 | `SMTP_USER` | — | SMTP username |
 | `SMTP_PASS` | — | SMTP password |
 | `SMTP_FROM` | — | Sender email address |
-| `SENTRY_DSN` | — | Sentry error tracking |
 | `LOG_LEVEL` | `info` | Pino log level |
 
 ### CI/CD

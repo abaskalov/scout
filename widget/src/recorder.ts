@@ -1,16 +1,15 @@
 /**
  * Session recording — production-grade rrweb configuration.
  *
- * Architecture follows Sentry Replay + PostHog patches:
+ * Architecture follows hardened rrweb recording patterns:
  *
  * 1. rrweb config: slimDOMOptions:'all', sampling, errorHandler, inlineStylesheet
- *    (exact settings from Sentry's packages/replay-internal/integration.ts)
- * 2. iOS mousemove fix from Sentry (disables on iPhone/iPad to prevent main thread blocking)
+ * 2. iOS mousemove fix to prevent main thread blocking
  * 3. Safari dialog:modal runtime patches (from PostHog's @rrweb/record patch)
- * 4. Event throttling: max THROTTLE_LIMIT events per THROTTLE_WINDOW_MS (Sentry uses 300/5s)
- * 5. Mutation limit: stop recording if >10K mutations (Sentry's MUTATION_LIMIT)
- * 6. Buffer size cap: 5MB max (Sentry uses 20MB but we're a lightweight widget)
- * 7. fflate compression before sending (Sentry uses fflate in Web Worker)
+ * 4. Event throttling: max THROTTLE_LIMIT events per THROTTLE_WINDOW_MS
+ * 5. Mutation limit: stop recording if >10K mutations
+ * 6. Buffer size cap: 5MB max for a lightweight widget
+ * 7. fflate compression before sending
  * 8. Graceful degradation: recording failures don't break bug reporting
  */
 
@@ -18,22 +17,22 @@ import type { eventWithTime, recordOptions } from 'rrweb';
 import { record } from 'rrweb';
 import { gzipSync } from 'fflate';
 
-// --- Constants (aligned with Sentry Replay) ---
+// --- Constants ---
 
 /** Rolling buffer duration */
-const BUFFER_DURATION_MS = 60_000;         // Sentry: 60s for buffer mode
+const BUFFER_DURATION_MS = 60_000;
 
 /** Full DOM snapshot interval */
-const CHECKOUT_INTERVAL_MS = 60_000;       // Sentry: 60s
+const CHECKOUT_INTERVAL_MS = 60_000;
 
 /** Stop recording if single mutation batch exceeds this */
-const MUTATION_LIMIT = 10_000;             // Sentry: mutationLimit
+const MUTATION_LIMIT = 10_000;
 
 /** Max buffer size in bytes before forced trim */
-const MAX_BUFFER_SIZE_BYTES = 5_000_000;   // 5MB (Sentry: 20MB)
+const MAX_BUFFER_SIZE_BYTES = 5_000_000;
 
 /** Event throttling: max events per window */
-const THROTTLE_LIMIT = 60;                 // Sentry: 300 events per 5s
+const THROTTLE_LIMIT = 60;
 const THROTTLE_WINDOW_MS = 5_000;
 
 // --- State ---
@@ -52,7 +51,7 @@ const EVENT_TYPE_FULL_SNAPSHOT = 2;
 const EVENT_TYPE_META = 4;
 const EVENT_TYPE_INCREMENTAL_SNAPSHOT = 3;
 
-// --- Runtime patches (PostHog/Sentry approach) ---
+// --- Runtime patches ---
 
 let patchesApplied = false;
 
@@ -95,7 +94,7 @@ function applyRrwebPatches(): void {
   } catch { /* continue without patch */ }
 }
 
-// --- iOS detection (from Sentry) ---
+// --- iOS detection ---
 
 function isIOS(): boolean {
   const ua = navigator?.userAgent ?? '';
@@ -107,19 +106,18 @@ function isIOS(): boolean {
 
 /**
  * Get platform-specific sampling options.
- * Sentry disables mousemove on iOS to prevent main thread blocking.
- * See: https://github.com/getsentry/sentry-javascript/issues/14534
+ * Disable mousemove on iOS to prevent main thread blocking.
  */
 function getPlatformSampling(): recordOptions<eventWithTime>['sampling'] {
   if (isIOS()) {
     return {
-      mousemove: false,    // Disable on iOS (Sentry's fix)
+      mousemove: false,
       scroll: 150,
       input: 'last' as const,
     };
   }
   return {
-    mousemove: 50,         // Throttle to 50ms (20fps) — Sentry/PostHog default
+    mousemove: 50,         // Throttle to 50ms (20fps)
     scroll: 150,           // Throttle scroll events
     input: 'last' as const, // Only last input value per checkout
   };
@@ -200,14 +198,14 @@ export function startRecording(): void {
         if (paused) return;
 
         try {
-          // Throttle non-critical events (Sentry: 300/5s, ours: 60/5s)
+          // Throttle non-critical events.
           if (event.type === EVENT_TYPE_INCREMENTAL_SNAPSHOT && shouldThrottle()) {
             return; // Drop event silently
           }
 
           const size = roughEventSize(event);
 
-          // Buffer size protection (Sentry: 20MB, ours: 5MB)
+          // Buffer size protection.
           if (estimatedBufferSize + size > MAX_BUFFER_SIZE_BYTES) {
             trimBuffer();
             if (estimatedBufferSize + size > MAX_BUFFER_SIZE_BYTES) {
@@ -227,14 +225,14 @@ export function startRecording(): void {
         }
       },
 
-      // --- Privacy (Sentry defaults) ---
-      maskAllInputs: true,                    // Sentry: true (protect passwords)
+      // --- Privacy ---
+      maskAllInputs: true,
       maskInputOptions: { password: true },   // Explicit password masking
 
       // --- Widget exclusion ---
       blockSelector: '#scout-widget-root',
 
-      // --- Payload optimization (Sentry: slimDOMOptions: 'all') ---
+      // --- Payload optimization ---
       slimDOMOptions: 'all',                  // Strips scripts, comments, head meta, etc.
       inlineStylesheet: true,                 // Required for replay fidelity
       inlineImages: false,                    // Too heavy
@@ -250,7 +248,7 @@ export function startRecording(): void {
       recordCrossOriginIframes: false,
       recordCanvas: false,
 
-      // --- Error handling (Sentry approach: tag rrweb errors) ---
+      // --- Error handling ---
       errorHandler: (err: unknown) => {
         try {
           if (err && typeof err === 'object') {
@@ -293,7 +291,7 @@ export function stopRecording(): void {
 
 /**
  * Get recording as gzip-compressed base64 string.
- * Uses fflate (same lib as Sentry) for compression.
+ * Uses fflate for compression.
  * Returns null if recording failed or no events captured.
  */
 export function getRecordingCompressed(): string | null {
@@ -306,7 +304,7 @@ export function getRecordingCompressed(): string | null {
     const json = JSON.stringify(events);
     const encoded = new TextEncoder().encode(json);
 
-    // Compress with fflate gzip (Sentry uses fflate in Web Worker)
+    // Compress with fflate gzip.
     const compressed = gzipSync(encoded, { level: 6 });
 
     // Convert to base64

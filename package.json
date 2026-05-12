@@ -24,7 +24,6 @@
   "dependencies": {
     "@hono/node-server": "^1",
     "@hono/zod-validator": "^0.4",
-    "@sentry/node": "^10.45.0",
     "bcryptjs": "^2",
     "better-sqlite3": "^11",
     "drizzle-orm": "^0.38",

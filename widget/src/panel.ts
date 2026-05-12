@@ -59,7 +59,7 @@ function collectMetadata(): Record<string, string> {
   };
 }
 
-// --- Retry with exponential backoff (Sentry pattern: 3 retries, 1/2/4s) ---
+// --- Retry with exponential backoff (3 retries, 1/2/4s) ---
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY = 1_000;
 

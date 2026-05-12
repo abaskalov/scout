@@ -14,6 +14,7 @@
   <a href="#widget">Widget</a> &middot;
   <a href="#dashboard">Dashboard</a> &middot;
   <a href="#ai-orchestrator">AI Orchestrator</a> &middot;
+  <a href="#agent-skill">Agent Skill</a> &middot;
   <a href="#deployment">Deployment</a> &middot;
   <a href="#api">API</a>
 </p>
@@ -117,6 +118,24 @@ pnpm orchestrator
 Claims `new` bugs → parses recording → creates branch → runs `opencode` → validates (typecheck + lint, up to 3 retries) → commits → opens PR → sets status to `review`.
 
 Configure project-to-repo mapping in `orchestrator/config.ts`. Requires `opencode` and `gh` CLI.
+
+## Agent Skill
+
+Scout also ships an installable agent skill for manual bug-tracker work. It is useful when a coding agent should take a Scout item, triage related items, reproduce the bug, fix it in a local repository, verify the result, and update Scout notes/statuses without running the autonomous orchestrator.
+
+Install globally:
+
+```bash
+npx skills add scout-dev-org/scout --skill scout-manual-workflow --full-depth -g -y
+```
+
+Update later:
+
+```bash
+npx skills update scout-manual-workflow -g -y
+```
+
+See `skills/README.md` for project-local install commands and required `SCOUT_*` environment variables.
 
 ## API
 

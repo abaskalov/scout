@@ -86,6 +86,7 @@ jobs:
           DEPLOY_IMAGE: ${{ vars.DEPLOY_IMAGE || 'scout-local:master' }}
           DEPLOY_SOURCE_PATH: ${{ vars.DEPLOY_SOURCE_PATH }}
           DEPLOY_BACKUP_PATH: ${{ vars.DEPLOY_BACKUP_PATH || 'backups' }}
+          DEPLOY_REPOSITORY_URL: ${{ vars.DEPLOY_REPOSITORY_URL || format('https://github.com/{0}.git', github.repository) }}
         run: |
           set -eu
           test -n "$DEPLOY_PATH"
@@ -94,7 +95,7 @@ jobs:
           test -n "$DEPLOY_SOURCE_PATH"
 
           ssh deploy-target 'sh -s' \
-            "$DEPLOY_REF" "$DEPLOY_PATH" "$DEPLOY_COMPOSE_FILE" "$DEPLOY_SERVICE" "$DEPLOY_IMAGE" "$DEPLOY_SOURCE_PATH" "$DEPLOY_BACKUP_PATH" <<'REMOTE'
+            "$DEPLOY_REF" "$DEPLOY_PATH" "$DEPLOY_COMPOSE_FILE" "$DEPLOY_SERVICE" "$DEPLOY_IMAGE" "$DEPLOY_SOURCE_PATH" "$DEPLOY_BACKUP_PATH" "$DEPLOY_REPOSITORY_URL" <<'REMOTE'
           set -eu
 
           ref="$1"
@@ -104,6 +105,7 @@ jobs:
           image="$5"
           source_path="$6"
           backup_path="$7"
+          repository_url="$8"
 
           cd "$deploy_path"
           docker compose -f "$compose_file" config >/tmp/scout-deploy-compose.yml
@@ -134,7 +136,12 @@ jobs:
           fi
 
           if [ ! -d "$source_path/.git" ]; then
-            git clone https://github.com/scout-dev-org/scout.git "$source_path"
+            git clone "$repository_url" "$source_path"
+          else
+            current_url="$(git -C "$source_path" remote get-url origin)"
+            if [ "$current_url" != "$repository_url" ]; then
+              git -C "$source_path" remote set-url origin "$repository_url"
+            fi
           fi
           git -C "$source_path" fetch --prune origin "$ref"
           git -C "$source_path" checkout "$ref"

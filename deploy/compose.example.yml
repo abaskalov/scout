@@ -1,6 +1,6 @@
 services:
   scout:
-    image: ghcr.io/scout-dev-org/scout:master
+    image: ghcr.io/<your-org>/scout:master
     container_name: scout
     restart: unless-stopped
     env_file:

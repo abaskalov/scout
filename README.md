@@ -10,12 +10,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/scout-dev-org/scout/actions/workflows/ci.yml"><img src="https://github.com/scout-dev-org/scout/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/scout-dev-org/scout/actions/workflows/docker.yml"><img src="https://github.com/scout-dev-org/scout/actions/workflows/docker.yml/badge.svg" alt="Docker" /></a>
-  <a href="https://github.com/scout-dev-org/scout/pkgs/container/scout"><img src="https://img.shields.io/badge/ghcr.io-scout-blue?logo=docker" alt="Docker Image" /></a>
-</p>
-
-<p align="center">
   <a href="#quickstart">Quickstart</a> &middot;
   <a href="#widget">Widget</a> &middot;
   <a href="#dashboard">Dashboard</a> &middot;
@@ -62,7 +56,7 @@ docker run -d \
   -e SCOUT_JWT_SECRET=$(openssl rand -hex 32) \
   -v scout-data:/app/data \
   -v scout-storage:/app/storage \
-  ghcr.io/scout-dev-org/scout:master
+  ghcr.io/<your-org>/scout:master
 ```
 
 Open http://localhost:10009 — login `admin@scout.local` / `admin`.
@@ -72,7 +66,7 @@ Auto-creates admin, AI agent, and demo project on first start. **Change password
 ### From source
 
 ```bash
-git clone https://github.com/scout-dev-org/scout.git && cd scout
+git clone https://github.com/<your-org>/scout.git && cd scout
 pnpm install
 pnpm db:seed     # create DB with test data
 pnpm dev:all     # API + dashboard + widget (hot reload)
@@ -160,7 +154,7 @@ services:
       - caddy_data:/data
 
   scout:
-    image: ghcr.io/scout-dev-org/scout:master
+    image: ghcr.io/<your-org>/scout:master
     environment:
       - SCOUT_JWT_SECRET=${SCOUT_JWT_SECRET}
     volumes:

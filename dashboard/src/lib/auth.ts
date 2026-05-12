@@ -45,6 +45,11 @@ export function canManageItemLinks(): boolean {
   return user?.role === 'admin' || user?.role === 'agent';
 }
 
+export function canManageItemWorkflow(): boolean {
+  const user = getUser();
+  return user?.role === 'admin' || user?.role === 'agent';
+}
+
 export async function login(
   email: string,
   password: string,

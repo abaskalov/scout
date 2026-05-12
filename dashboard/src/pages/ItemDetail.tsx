@@ -4,7 +4,7 @@ import { Fancybox } from '@fancyapps/ui';
 import '@fancyapps/ui/dist/fancybox/fancybox.css';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/date';
-import { canManageItemLinks, isAdmin, storageUrl } from '../lib/auth';
+import { canManageItemLinks, canManageItemWorkflow, isAdmin, storageUrl } from '../lib/auth';
 import { useSSE, type SSEEventType } from '../hooks/useSSE';
 import { useTranslation } from '../i18n';
 import StatusBadge from '../components/StatusBadge';
@@ -116,6 +116,7 @@ export default function ItemDetail() {
   const navigate = useNavigate();
   const admin = isAdmin();
   const canLinkItems = canManageItemLinks();
+  const canManageWorkflow = canManageItemWorkflow();
   const { t, locale } = useTranslation();
   const [item, setItem] = useState<ItemData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -530,7 +531,7 @@ export default function ItemDetail() {
 
           {/* Action buttons — full-width stacked on mobile, inline on desktop */}
           <div className="flex flex-col gap-2 md:flex-row md:flex-shrink-0 md:flex-wrap">
-            {item.status === 'new' && (
+            {item.status === 'new' && canManageWorkflow && (
               <>
                 <button
                   onClick={() => handleAction('claim')}
@@ -539,16 +540,18 @@ export default function ItemDetail() {
                 >
                   {t('items.detail.actions.claim')}
                 </button>
-                <button
-                  onClick={() => handleAction('cancel')}
-                  disabled={actionLoading}
-                  className="w-full md:w-auto rounded-md border border-gray-300 px-3 py-2 md:py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {t('items.detail.actions.cancel')}
-                </button>
+                {admin && (
+                  <button
+                    onClick={() => handleAction('cancel')}
+                    disabled={actionLoading}
+                    className="w-full md:w-auto rounded-md border border-gray-300 px-3 py-2 md:py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {t('items.detail.actions.cancel')}
+                  </button>
+                )}
               </>
             )}
-            {item.status === 'in_progress' && (
+            {item.status === 'in_progress' && canManageWorkflow && (
               <>
                 <button
                   onClick={() =>
@@ -566,16 +569,18 @@ export default function ItemDetail() {
                 >
                   {t('items.detail.actions.done')}
                 </button>
-                <button
-                  onClick={() => handleAction('cancel')}
-                  disabled={actionLoading}
-                  className="w-full md:w-auto rounded-md border border-gray-300 px-3 py-2 md:py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {t('items.detail.actions.cancel')}
-                </button>
+                {admin && (
+                  <button
+                    onClick={() => handleAction('cancel')}
+                    disabled={actionLoading}
+                    className="w-full md:w-auto rounded-md border border-gray-300 px-3 py-2 md:py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {t('items.detail.actions.cancel')}
+                  </button>
+                )}
               </>
             )}
-            {item.status === 'review' && (
+            {item.status === 'review' && canManageWorkflow && (
               <>
                 <button
                   onClick={() =>

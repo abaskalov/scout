@@ -12,7 +12,7 @@ import { createApiKeySchema, listApiKeysSchema, revokeApiKeySchema } from '../li
 import { logAudit, getClientIp } from '../services/audit.js';
 
 const DEFAULT_SCOPES_BY_PURPOSE = {
-  opencode: ['items:read', 'items:comment', 'items:workflow', 'items:triage', 'storage:read'],
+  agent: ['items:read', 'items:comment', 'items:workflow', 'items:triage', 'storage:read'],
   ci: ['items:read', 'items:comment'],
   integration: ['items:read', 'items:create'],
   custom: ['items:read'],

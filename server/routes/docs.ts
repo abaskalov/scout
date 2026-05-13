@@ -227,7 +227,7 @@ const spec = {
           userId: { type: 'string', format: 'uuid' },
           userName: { type: 'string', nullable: true },
           name: { type: 'string' },
-          purpose: { type: 'string', enum: ['opencode', 'ci', 'integration', 'custom'] },
+          purpose: { type: 'string', enum: ['agent', 'ci', 'integration', 'custom'] },
           scopes: { type: 'array', items: { type: 'string' } },
           keyPrefix: { type: 'string', description: 'First 16 characters of the key (e.g. sk_live_a1b2c3d4)' },
           lastUsedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -1521,7 +1521,7 @@ const spec = {
                 properties: {
                   projectId: { type: 'string', format: 'uuid' },
                   name: { type: 'string', minLength: 1, maxLength: 100, description: 'Human-readable name (e.g. "CI/CD", "Slack Bot")' },
-                  purpose: { type: 'string', enum: ['opencode', 'ci', 'integration', 'custom'], default: 'custom' },
+                  purpose: { type: 'string', enum: ['agent', 'ci', 'integration', 'custom'], default: 'custom' },
                   scopes: { type: 'array', items: { type: 'string' }, description: 'Optional explicit scopes. Defaults are chosen from purpose.' },
                   expiresAt: { type: 'string', format: 'date-time', description: 'Optional expiration date. Null = never expires.' },
                 },

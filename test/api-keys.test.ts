@@ -50,14 +50,14 @@ describe('API Keys routes', () => {
     const res = await post('/create', {
       projectId: ctx.projectId,
       name: 'My CI Key',
-      purpose: 'opencode',
+      purpose: 'agent',
     }, ctx.adminToken);
 
     expect(res.status).toBe(201);
     const body = await res.json() as any;
     expect(body.data.key).toBeDefined();
     expect(body.data.name).toBe('My CI Key');
-    expect(body.data.purpose).toBe('opencode');
+    expect(body.data.purpose).toBe('agent');
     expect(body.data.scopes).toEqual(['items:read', 'items:comment', 'items:workflow', 'items:triage', 'storage:read']);
     expect(body.data.projectId).toBe(ctx.projectId);
     expect(body.data.id).toBeDefined();

@@ -36,6 +36,13 @@
       "when": 1778674800000,
       "tag": "0004_remove_agent_role",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1778679300000,
+      "tag": "0005_generic_agent_api_keys",
+      "breakpoints": true
     }
   ]
 }

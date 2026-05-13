@@ -18,7 +18,7 @@ interface Project extends Omit<ProjectRaw, 'allowedOrigins'> {
 interface ApiKeyItem {
   id: string;
   name: string;
-  purpose: 'opencode' | 'ci' | 'integration' | 'custom';
+  purpose: 'agent' | 'ci' | 'integration' | 'custom';
   scopes: string[];
   keyPrefix: string;
   userName: string | null;
@@ -29,7 +29,7 @@ interface ApiKeyItem {
   createdAt: string;
 }
 
-const OPEN_CODE_SCOPES = ['items:read', 'items:comment', 'items:workflow', 'items:triage', 'storage:read'];
+const AGENT_SCOPES = ['items:read', 'items:comment', 'items:workflow', 'items:triage', 'storage:read'];
 
 function parseProject(project: ProjectRaw): Project {
   let allowedOrigins: string[] = [];
@@ -111,7 +111,7 @@ export default function ProjectIntegrations() {
     void loadData();
   }, [id]);
 
-  async function createOpenCodeKey(event: FormEvent) {
+  async function createAgentKey(event: FormEvent) {
     event.preventDefault();
     if (!project) return;
     setSaving(true);
@@ -123,9 +123,9 @@ export default function ProjectIntegrations() {
         : addDays(new Date(), Number(expiresIn)).toISOString();
       const res = await api<{ key: string }>('/api/api-keys/create', {
         projectId: project.id,
-        name: keyName.trim() || `${project.slug} OpenCode`,
-        purpose: 'opencode',
-        scopes: OPEN_CODE_SCOPES,
+        name: keyName.trim() || `${project.slug} agent`,
+        purpose: 'agent',
+        scopes: AGENT_SCOPES,
         expiresAt,
       });
       setCreatedKey(res.key);
@@ -238,8 +238,8 @@ export default function ProjectIntegrations() {
             </div>
           )}
 
-          <form onSubmit={createOpenCodeKey} className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
-            <div className="text-sm font-semibold text-gray-900">{t('integrations.apiKeys.createOpenCode')}</div>
+          <form onSubmit={createAgentKey} className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <div className="text-sm font-semibold text-gray-900">{t('integrations.apiKeys.createAgent')}</div>
             <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_auto]">
               <label className="block">
                 <span className="text-xs font-medium text-gray-600">{t('integrations.apiKeys.name')}</span>
@@ -248,7 +248,7 @@ export default function ProjectIntegrations() {
                   name="api-key-name"
                   value={keyName}
                   onChange={(event) => setKeyName(event.target.value)}
-                  placeholder={`${project.slug} OpenCode`}
+                  placeholder={`${project.slug} agent`}
                   className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                 />
               </label>
@@ -275,7 +275,7 @@ export default function ProjectIntegrations() {
               </button>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {OPEN_CODE_SCOPES.map((scope) => (
+              {AGENT_SCOPES.map((scope) => (
                 <span key={scope} className="rounded bg-white px-2 py-1 text-xs font-mono text-gray-600 ring-1 ring-gray-200">{scope}</span>
               ))}
             </div>

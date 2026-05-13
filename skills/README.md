@@ -38,7 +38,7 @@ npx skills add scout-dev-org/scout --list --full-depth
 
 Required runtime configuration is intentionally not stored in this repository. Set it in your shell, local `.env`, or another private credential store.
 
-Create the key from Scout: `Projects` → target project → `Manage integrations` → `Create OpenCode key`. Scout shows the full key and a ready-to-copy env block once.
+Create the key from Scout: `Projects` → target project → `Manage integrations` → `Create agent key`. Scout shows the full key and a ready-to-copy env block once.
 
 For a shell session, use `export`:
 

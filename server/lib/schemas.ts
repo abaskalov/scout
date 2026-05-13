@@ -154,7 +154,7 @@ export const unlinkItemSchema = z.object({
 });
 
 // === API Keys ===
-const apiKeyPurposeEnum = z.enum(['opencode', 'ci', 'integration', 'custom']);
+const apiKeyPurposeEnum = z.enum(['agent', 'ci', 'integration', 'custom']);
 const apiKeyScopeEnum = z.enum([
   'items:read',
   'items:create',

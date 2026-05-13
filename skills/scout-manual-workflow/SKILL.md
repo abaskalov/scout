@@ -49,11 +49,11 @@ Ask the user only for real blockers:
 Read Scout access from environment variables or an explicitly provided local credential file outside Git:
 
 - `SCOUT_URL`: Scout base URL, for example `https://your-scout.example`.
-- `SCOUT_API_KEY`: project-scoped API key in `sk_live_*` format. Prefer a key created from Scout via `Projects` → target project → `Manage integrations` → `Create OpenCode key`.
+- `SCOUT_API_KEY`: project-scoped API key in `sk_live_*` format. Prefer a key created from Scout via `Projects` → target project → `Manage integrations` → `Create agent key`.
 - `SCOUT_PROJECT_SLUG`: Optional default project slug.
 - `SCOUT_ITEM_ID`: Optional current item id.
 
-OpenCode keys should have only the scopes needed for manual issue work, such as reading items, adding notes, workflow/triage actions, related-item links, and reading storage evidence. Never commit Scout credentials, cookies, JWTs, API keys, `.env.local`, or generated credential files. Do not paste real secrets into documentation, PR bodies, issue text, or durable notes.
+Agent keys should have only the scopes needed for manual issue work, such as reading items, adding notes, workflow/triage actions, related-item links, and reading storage evidence. Never commit Scout credentials, cookies, JWTs, API keys, `.env.local`, or generated credential files. Do not paste real secrets into documentation, PR bodies, issue text, or durable notes.
 
 ## Intake
 

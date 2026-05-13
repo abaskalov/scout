@@ -84,12 +84,12 @@ describe('Webhooks routes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('POST /create — agent cannot create webhook', async () => {
+  it('POST /create — developer member cannot create webhook', async () => {
     const res = await post('/create', {
       projectId: ctx.projectId,
       url: 'https://example.com/webhook',
       events: ['item.created'],
-    }, ctx.agentToken);
+    }, ctx.developerToken);
 
     expect(res.status).toBe(403);
   });
@@ -229,7 +229,7 @@ describe('Webhooks routes', () => {
 
   it('POST /delete — non-admin cannot delete', async () => {
     const webhook = await createTestWebhook();
-    const res = await post('/delete', { id: webhook.id }, ctx.agentToken);
+    const res = await post('/delete', { id: webhook.id }, ctx.developerToken);
     expect(res.status).toBe(403);
   });
 

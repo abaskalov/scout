@@ -44,7 +44,6 @@ function hasApiKeyPermission(apiKey: ApiKey | null | undefined, projectId: strin
 }
 
 export function defaultProjectRoleForUserRole(role: string): ProjectRole {
-  if (role === 'agent') return 'developer';
   return 'reporter';
 }
 
@@ -65,7 +64,7 @@ export function requireRole(...roles: UserRole[]) {
 
 /**
  * Check if a user has access to a specific project via pivot_users_projects.
- * Admin always has access. Member/Agent must have a pivot entry.
+ * Admin always has access. Members must have a pivot entry.
  */
 export function checkProjectAccess(userId: string, role: string, projectId: string, apiKey?: ApiKey | null): boolean {
   if (apiKey && !hasApiKeyPermission(apiKey, projectId, 'view')) return false;

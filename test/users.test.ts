@@ -75,7 +75,7 @@ describe('Users routes', () => {
       email: 'noprojects@test.local',
       password: VALID_PASSWORD,
       name: 'No Projects User',
-      role: 'agent',
+      role: 'member',
       projectRoles: [],
     }, ctx.adminToken);
 
@@ -96,14 +96,14 @@ describe('Users routes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('POST /create — agent cannot create', async () => {
+  it('POST /create — developer member cannot create', async () => {
     const res = await post('/create', {
-      email: 'agentcreate@test.local',
+      email: 'developercreate@test.local',
       password: VALID_PASSWORD,
-      name: 'Agent Create',
+      name: 'Developer Create',
       role: 'member',
       projectRoles: [],
-    }, ctx.agentToken);
+    }, ctx.developerToken);
 
     expect(res.status).toBe(403);
   });
@@ -254,7 +254,7 @@ describe('Users routes', () => {
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    // Seed has 3 users: admin, agent, member
+    // Seed has 3 users: admin, developer member, reporter member
     expect(body.data.items).toHaveLength(3);
     expect(body.data.pagination.total).toBe(3);
     // All users should have projectRoles attached
@@ -281,7 +281,7 @@ describe('Users routes', () => {
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    // Should return: admin (always included) + agent + member (both have pivot)
+    // Should return: admin (always included) + both project members
     expect(body.data.items).toHaveLength(3);
   });
 
@@ -290,8 +290,8 @@ describe('Users routes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('POST /list — agent cannot list', async () => {
-    const res = await post('/list', {}, ctx.agentToken);
+  it('POST /list — developer member cannot list', async () => {
+    const res = await post('/list', {}, ctx.developerToken);
     expect(res.status).toBe(403);
   });
 
@@ -305,7 +305,7 @@ describe('Users routes', () => {
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    expect(body.data.items.map((user: any) => user.id)).toEqual(expect.arrayContaining([ctx.memberId, ctx.agentId]));
+    expect(body.data.items.map((user: any) => user.id)).toEqual(expect.arrayContaining([ctx.memberId, ctx.developerId]));
     expect(body.data.items.some((user: any) => user.id === ctx.adminId)).toBe(false);
   });
 
@@ -343,11 +343,11 @@ describe('Users routes', () => {
       .where(eq(schema.pivotUsersProjects.userId, ctx.memberId))
       .run();
 
-    const res = await post('/get', { id: ctx.agentId }, ctx.memberToken);
+    const res = await post('/get', { id: ctx.developerId }, ctx.memberToken);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    expect(body.data.id).toBe(ctx.agentId);
+    expect(body.data.id).toBe(ctx.developerId);
     expect(body.data.projectRoles).toEqual([{ projectId: ctx.projectId, role: 'developer' }]);
   });
 
@@ -377,12 +377,12 @@ describe('Users routes', () => {
   it('POST /update — admin can update role', async () => {
     const res = await post('/update', {
       id: ctx.memberId,
-      role: 'agent',
+      role: 'admin',
     }, ctx.adminToken);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    expect(body.data.role).toBe('agent');
+    expect(body.data.role).toBe('admin');
   });
 
   it('POST /update — admin can update isActive', async () => {
@@ -473,11 +473,11 @@ describe('Users routes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('POST /update — agent cannot update', async () => {
+  it('POST /update — developer member cannot update', async () => {
     const res = await post('/update', {
       id: ctx.memberId,
-      name: 'Agent Hack',
-    }, ctx.agentToken);
+      name: 'Developer Hack',
+    }, ctx.developerToken);
 
     expect(res.status).toBe(403);
   });
@@ -489,7 +489,7 @@ describe('Users routes', () => {
       .run();
 
     const res = await post('/update', {
-      id: ctx.agentId,
+      id: ctx.developerId,
       projectRoles: [{ projectId: ctx.projectId, role: 'viewer' }],
     }, ctx.memberToken);
 
@@ -505,7 +505,7 @@ describe('Users routes', () => {
       .run();
 
     const res = await post('/update', {
-      id: ctx.agentId,
+      id: ctx.developerId,
       role: 'admin',
     }, ctx.memberToken);
 
@@ -559,8 +559,8 @@ describe('Users routes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('POST /delete — agent cannot delete', async () => {
-    const res = await post('/delete', { id: ctx.memberId }, ctx.agentToken);
+  it('POST /delete — developer member cannot delete', async () => {
+    const res = await post('/delete', { id: ctx.memberId }, ctx.developerToken);
     expect(res.status).toBe(403);
   });
 

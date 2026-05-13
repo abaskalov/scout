@@ -8,7 +8,7 @@ interface UserItem {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'member' | 'agent';
+  role: 'admin' | 'member';
   isActive: boolean;
   projectRoles?: ProjectRoleAssignment[];
   createdAt: string;
@@ -37,7 +37,7 @@ const emptyForm = {
   email: '',
   password: '',
   name: '',
-  role: 'member' as 'admin' | 'member' | 'agent',
+  role: 'member' as 'admin' | 'member',
   isActive: true,
   projectRoles: [] as ProjectRoleAssignment[],
 };
@@ -163,7 +163,7 @@ export default function Users() {
       ...f,
       projectRoles: f.projectRoles.some((projectRole) => projectRole.projectId === pid)
         ? f.projectRoles.filter((x) => x.projectId !== pid)
-        : [...f.projectRoles, { projectId: pid, role: f.role === 'agent' ? 'developer' : 'reporter' }],
+        : [...f.projectRoles, { projectId: pid, role: 'reporter' }],
     }));
   }
 
@@ -179,13 +179,11 @@ export default function Users() {
   const roleBadge: Record<string, string> = {
     admin: 'bg-red-100 text-red-700',
     member: 'bg-blue-100 text-blue-700',
-    agent: 'bg-purple-100 text-purple-700',
   };
 
   const roleKeys: Record<string, string> = {
     admin: 'users.roles.admin',
     member: 'users.roles.member',
-    agent: 'users.roles.agent',
   };
 
   const projectRoleLabels: Record<ProjectRole, string> = {
@@ -422,7 +420,7 @@ export default function Users() {
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    role: e.target.value as 'admin' | 'member' | 'agent',
+                    role: e.target.value as 'admin' | 'member',
                   })
                 }
                 disabled={!admin && !!editingId}
@@ -430,7 +428,6 @@ export default function Users() {
               >
                 {admin && <option value="admin">{t('users.roles.admin')}</option>}
                 <option value="member">{t('users.roles.member')}</option>
-                <option value="agent">{t('users.roles.agent')}</option>
               </select>
             </label>
 

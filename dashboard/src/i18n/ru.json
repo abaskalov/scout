@@ -214,7 +214,6 @@
   "users.form.projectsHint": "Выберите проекты, которые пользователь видит, и его ответственность в каждом.",
   "users.roles.admin": "Админ",
   "users.roles.member": "Участник",
-  "users.roles.agent": "Агент",
   "users.projectRoles.owner": "Владелец",
   "users.projectRoles.manager": "Менеджер",
   "users.projectRoles.developer": "Разработчик",

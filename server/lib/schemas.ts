@@ -52,14 +52,14 @@ export const createUserSchema = z.object({
   email: z.string().email(),
   password: passwordSchema,
   name: z.string().min(1).max(100),
-  role: z.enum(['admin', 'member', 'agent']),
+  role: z.enum(['admin', 'member']),
   projectRoles: z.array(userProjectRoleSchema).default([]),
 });
 
 export const updateUserSchema = z.object({
   id: uuidSchema,
   name: z.string().min(1).max(100).optional(),
-  role: z.enum(['admin', 'member', 'agent']).optional(),
+  role: z.enum(['admin', 'member']).optional(),
   isActive: z.boolean().optional(),
   projectRoles: z.array(userProjectRoleSchema).optional(),
   password: passwordSchema.optional(),

@@ -55,7 +55,7 @@ const spec = {
       },
       UserRole: {
         type: 'string',
-        enum: ['admin', 'member', 'agent'],
+        enum: ['admin', 'member'],
       },
       ProjectRole: {
         type: 'string',

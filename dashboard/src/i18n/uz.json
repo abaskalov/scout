@@ -214,7 +214,6 @@
   "users.form.projectsHint": "Foydalanuvchi ko'ra oladigan loyihalarni va har biridagi mas'uliyatini tanlang.",
   "users.roles.admin": "Admin",
   "users.roles.member": "A'zo",
-  "users.roles.agent": "Agent",
   "users.projectRoles.owner": "Egasi",
   "users.projectRoles.manager": "Menejer",
   "users.projectRoles.developer": "Dasturchi",

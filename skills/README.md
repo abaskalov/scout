@@ -36,14 +36,33 @@ List skills available in this repository without installing:
 npx skills add scout-dev-org/scout --list --full-depth
 ```
 
-Required runtime configuration is intentionally not stored in this repository. Set it in your shell, local `.env`, or another private credential store:
+Required runtime configuration is intentionally not stored in this repository. Set it in your shell, local `.env`, or another private credential store.
 
 Create the key from Scout: `Projects` → target project → `Manage integrations` → `Create OpenCode key`. Scout shows the full key and a ready-to-copy env block once.
+
+For a shell session, use `export`:
 
 ```bash
 export SCOUT_URL="https://your-scout.example"
 export SCOUT_API_KEY="<CHANGE-ME-sk_live-api-key>"
 export SCOUT_PROJECT_SLUG="<CHANGE-ME-project-slug>"
+```
+
+For a dotenv file, omit `export`:
+
+```dotenv
+SCOUT_URL=https://your-scout.example
+SCOUT_API_KEY=<CHANGE-ME-sk_live-api-key>
+SCOUT_PROJECT_SLUG=<CHANGE-ME-project-slug>
+```
+
+If you load a dotenv file with plain shell `source`, export variables before launching the agent:
+
+```bash
+set -a
+source .env
+set +a
+opencode
 ```
 
 Do not commit Scout API keys, cookies, JWTs, or environment files with real credentials.

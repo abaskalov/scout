@@ -214,7 +214,6 @@
   "users.form.projectsHint": "Choose the projects this user can see, then assign their responsibility in each one.",
   "users.roles.admin": "Admin",
   "users.roles.member": "Member",
-  "users.roles.agent": "Agent",
   "users.projectRoles.owner": "Owner",
   "users.projectRoles.manager": "Manager",
   "users.projectRoles.developer": "Developer",

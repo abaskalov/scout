@@ -66,11 +66,11 @@ describe('Projects routes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('POST /create — agent cannot create', async () => {
+  it('POST /create — developer member cannot create', async () => {
     const res = await post('/create', {
-      name: 'Agent Project',
-      slug: 'agent-project',
-    }, ctx.agentToken);
+      name: 'Developer Project',
+      slug: 'developer-project',
+    }, ctx.developerToken);
 
     expect(res.status).toBe(403);
   });
@@ -192,8 +192,8 @@ describe('Projects routes', () => {
     expect(body.data.id).toBe(ctx.projectId);
   });
 
-  it('POST /get — agent with access can get project', async () => {
-    const res = await post('/get', { id: ctx.projectId }, ctx.agentToken);
+  it('POST /get — developer member with access can get project', async () => {
+    const res = await post('/get', { id: ctx.projectId }, ctx.developerToken);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
@@ -269,11 +269,11 @@ describe('Projects routes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('POST /update — agent cannot update', async () => {
+  it('POST /update — developer member cannot update', async () => {
     const res = await post('/update', {
       id: ctx.projectId,
-      name: 'Agent Hack',
-    }, ctx.agentToken);
+      name: 'Developer Hack',
+    }, ctx.developerToken);
 
     expect(res.status).toBe(403);
   });
@@ -328,8 +328,8 @@ describe('Projects routes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('POST /delete — agent cannot delete', async () => {
-    const res = await post('/delete', { id: ctx.projectId }, ctx.agentToken);
+  it('POST /delete — developer member cannot delete', async () => {
+    const res = await post('/delete', { id: ctx.projectId }, ctx.developerToken);
     expect(res.status).toBe(403);
   });
 

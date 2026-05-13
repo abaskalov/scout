@@ -4,7 +4,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'member' | 'agent';
+  role: 'admin' | 'member';
   projectRoles?: Array<{ projectId: string; role: 'owner' | 'manager' | 'developer' | 'reporter' | 'viewer' }>;
   isActive: boolean;
   createdAt: string;

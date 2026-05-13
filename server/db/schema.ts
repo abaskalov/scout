@@ -30,7 +30,7 @@ export const users = sqliteTable('users', {
   email: text('email').unique().notNull(),
   passwordHash: text('password_hash').notNull(),
   name: text('name').notNull(),
-  role: text('role', { enum: ['admin', 'member', 'agent'] }).notNull(),
+  role: text('role', { enum: ['admin', 'member'] }).notNull(),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
   updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),

@@ -79,24 +79,16 @@ if (userCount.cnt === 0) {
 
     const adminEmail = process.env.SCOUT_ADMIN_EMAIL || 'admin@scout.local';
     const adminPassword = process.env.SCOUT_ADMIN_PASSWORD || 'admin';
-    const agentPassword = 'agent';
-
     const adminId = randomUUID();
-    const agentId = randomUUID();
     const projectId = randomUUID();
 
     const adminHash = bcrypt.hashSync(adminPassword, 10);
-    const agentHash = bcrypt.hashSync(agentPassword, 10);
 
     sqlite.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)`)
       .run(adminId, adminEmail, adminHash, 'Scout Admin', 'admin');
-    sqlite.prepare(`INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)`)
-      .run(agentId, 'agent@scout.local', agentHash, 'AI Agent', 'agent');
     sqlite.prepare(`INSERT INTO projects (id, name, slug, allowed_origins) VALUES (?, ?, ?, ?)`)
       .run(projectId, 'My App', 'my-app', '["http://localhost:3000"]');
-    sqlite.prepare(`INSERT INTO pivot_users_projects (user_id, project_id, role) VALUES (?, ?, ?)`)
-      .run(agentId, projectId, 'developer');
 
-    logger.info({ adminEmail }, 'Auto-seeded dev users and project');
+    logger.info({ adminEmail }, 'Auto-seeded dev admin and project');
   }
 }

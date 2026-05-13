@@ -77,11 +77,11 @@ describe('API Keys routes', () => {
     expect(res.status).toBe(403);
   });
 
-  it('POST /create — agent cannot create (403)', async () => {
+  it('POST /create — developer member cannot create (403)', async () => {
     const res = await post('/create', {
       projectId: ctx.projectId,
-      name: 'Agent Key',
-    }, ctx.agentToken);
+      name: 'Developer Key',
+    }, ctx.developerToken);
 
     expect(res.status).toBe(403);
   });
@@ -159,7 +159,7 @@ describe('API Keys routes', () => {
   it('POST /revoke — non-admin cannot revoke (403)', async () => {
     const created = await createTestApiKey();
 
-    const res = await post('/revoke', { id: created.id }, ctx.agentToken);
+    const res = await post('/revoke', { id: created.id }, ctx.developerToken);
     expect(res.status).toBe(403);
   });
 

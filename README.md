@@ -42,7 +42,7 @@ Tester clicks element  →  Widget captures context + screenshot + recording
 | **Dashboard** | React SPA, rrweb session player, items/projects/users/webhooks management, locale switcher |
 | **i18n** | Russian, English, Uzbek (Latin). Dashboard + widget. Server error codes translated on client |
 | **Agent workflows** | Manual agent skill for controlled bug work without background automation |
-| **Auth** | JWT + API keys (`sk_live_*`), system roles (admin/member/agent), project roles (owner/manager/developer/reporter/viewer), cross-domain SSO |
+| **Auth** | JWT + API keys (`sk_live_*`), system roles (admin/member), project roles (owner/manager/developer/reporter/viewer), cross-domain SSO |
 | **Infra** | Single process (API + SPA + widget on one port), SQLite, Docker, publishable GHCR image |
 
 ## Quickstart
@@ -63,7 +63,7 @@ docker run -d \
 
 Open http://localhost:10009 and sign in with the admin credentials from `SCOUT_ADMIN_EMAIL` / `SCOUT_ADMIN_PASSWORD`.
 
-Local development auto-seeds `admin@scout.local` / `admin`, `agent@scout.local` / `agent`, and a demo project when the database is empty. **Never use default credentials outside local development.**
+Local development auto-seeds `admin@scout.local` / `admin` and a demo project when the database is empty. **Never use default credentials outside local development.**
 
 ### From source
 
@@ -118,7 +118,7 @@ Scout has two layers of access control:
 
 | Layer | Values | Purpose |
 |-------|--------|---------|
-| System role | `admin`, `member`, `agent` | Account type and global administration |
+| System role | `admin`, `member` | Account type and global administration |
 | Project role | `owner`, `manager`, `developer`, `reporter`, `viewer` | Per-project permissions |
 
 System `admin` can access everything. Non-admin users get access through `projectRoles` on each project.
@@ -149,7 +149,7 @@ Update later:
 npx skills update scout-manual-workflow -g -y
 ```
 
-Create an OpenCode API key from the dashboard: `Projects` → target project → `Manage integrations` → `Create OpenCode key`. The full `sk_live_*` key is shown once together with a ready-to-copy `SCOUT_*` env block. Store it in a password manager or local ignored credential store, not in the repository.
+Create an OpenCode API key from the dashboard: `Projects` → target project → `Manage integrations` → `Create OpenCode key`. The full `sk_live_*` key is shown once together with a ready-to-copy `SCOUT_*` env block. Store it in a password manager, shell environment, or local ignored `.env`, not in the repository.
 
 See `skills/README.md` for project-local install commands and required `SCOUT_*` environment variables.
 

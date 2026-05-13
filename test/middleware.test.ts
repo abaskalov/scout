@@ -67,7 +67,7 @@ describe('Middleware', () => {
       app = new Hono();
       app.route('/api/items', itemRoutes);
 
-      // Create a second project that member/agent do NOT have pivot access to
+      // Create a second project that project members do NOT have pivot access to
       otherProjectId = randomUUID();
       ctx.db.insert(schema.projects).values({
         id: otherProjectId,
@@ -75,7 +75,7 @@ describe('Middleware', () => {
         slug: 'other-project',
         allowedOrigins: '[]',
       }).run();
-      // Note: NO pivot_users_projects entries for agent/member → they should get 403
+      // Note: NO pivot_users_projects entries for project members → they should get 403
     });
 
     function post(path: string, body: unknown, token: string) {
@@ -99,13 +99,13 @@ describe('Middleware', () => {
       expect(res.status).toBe(403);
     });
 
-    it('agent can access items in their project (200)', async () => {
-      const res = await post('/list', { projectId: ctx.projectId }, ctx.agentToken);
+    it('developer member can access items in their project (200)', async () => {
+      const res = await post('/list', { projectId: ctx.projectId }, ctx.developerToken);
       expect(res.status).toBe(200);
     });
 
-    it('agent CANNOT access items in another project (403)', async () => {
-      const res = await post('/list', { projectId: otherProjectId }, ctx.agentToken);
+    it('developer member CANNOT access items in another project (403)', async () => {
+      const res = await post('/list', { projectId: otherProjectId }, ctx.developerToken);
       expect(res.status).toBe(403);
     });
 
@@ -127,7 +127,7 @@ describe('Middleware', () => {
       expect(res.status).toBe(403);
     });
 
-    it('agent CANNOT claim item from another project (403)', async () => {
+    it('developer member CANNOT claim item from another project (403)', async () => {
       // Admin creates item in other project
       const createRes = await post('/create', {
         projectId: otherProjectId,
@@ -136,8 +136,8 @@ describe('Middleware', () => {
       const createBody = await createRes.json() as any;
       const itemId = createBody.data.id;
 
-      // Agent tries to claim it — should fail
-      const res = await post('/claim', { id: itemId }, ctx.agentToken);
+      // Developer member tries to claim it — should fail
+      const res = await post('/claim', { id: itemId }, ctx.developerToken);
       expect(res.status).toBe(403);
     });
   });

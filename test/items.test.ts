@@ -68,11 +68,11 @@ describe('Items routes', () => {
     expect(res.status).toBe(201);
   });
 
-  it('POST /create — agent cannot create item', async () => {
+  it('POST /create — developer member cannot create item', async () => {
     const res = await post('/create', {
       projectId: ctx.projectId,
-      message: 'Agent should not create',
-    }, ctx.agentToken);
+      message: 'Developer should not create',
+    }, ctx.developerToken);
 
     expect(res.status).toBe(403);
   });
@@ -144,21 +144,21 @@ describe('Items routes', () => {
 
   // === CLAIM ===
 
-  it('POST /claim — agent claims new item', async () => {
+  it('POST /claim — developer member claims new item', async () => {
     const item = await createTestItem();
 
-    const res = await post('/claim', { id: item.id }, ctx.agentToken);
+    const res = await post('/claim', { id: item.id }, ctx.developerToken);
     expect(res.status).toBe(200);
     const body = await res.json() as any;
     expect(body.data.status).toBe('in_progress');
-    expect(body.data.assigneeId).toBe(ctx.agentId);
+    expect(body.data.assigneeId).toBe(ctx.developerId);
   });
 
   it('POST /claim — double claim fails with 409', async () => {
     const item = await createTestItem();
 
-    await post('/claim', { id: item.id }, ctx.agentToken);
-    const res = await post('/claim', { id: item.id }, ctx.agentToken);
+    await post('/claim', { id: item.id }, ctx.developerToken);
+    const res = await post('/claim', { id: item.id }, ctx.developerToken);
     expect(res.status).toBe(409);
   });
 
@@ -172,13 +172,13 @@ describe('Items routes', () => {
 
   it('POST /resolve — from in_progress to done', async () => {
     const item = await createTestItem();
-    await post('/claim', { id: item.id }, ctx.agentToken);
+    await post('/claim', { id: item.id }, ctx.developerToken);
 
     const res = await post('/resolve', {
       id: item.id,
       resolutionNote: 'Fixed the button handler',
       branchName: 'fix/scout-123',
-    }, ctx.agentToken);
+    }, ctx.developerToken);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
@@ -189,7 +189,7 @@ describe('Items routes', () => {
 
   it('POST /resolve — from new fails (invalid transition)', async () => {
     const item = await createTestItem();
-    const res = await post('/resolve', { id: item.id }, ctx.agentToken);
+    const res = await post('/resolve', { id: item.id }, ctx.developerToken);
     expect(res.status).toBe(400);
   });
 
@@ -205,8 +205,8 @@ describe('Items routes', () => {
 
   it('POST /cancel — cannot cancel done item', async () => {
     const item = await createTestItem();
-    await post('/claim', { id: item.id }, ctx.agentToken);
-    await post('/resolve', { id: item.id }, ctx.agentToken);
+    await post('/claim', { id: item.id }, ctx.developerToken);
+    await post('/resolve', { id: item.id }, ctx.developerToken);
 
     const res = await post('/cancel', { id: item.id }, ctx.adminToken);
     expect(res.status).toBe(400);
@@ -230,7 +230,7 @@ describe('Items routes', () => {
 
   // === LINKS ===
 
-  it('POST /link — agent can link related items', async () => {
+  it('POST /link — developer member can link related items', async () => {
     const first = await createTestItem();
     const second = await createTestItem();
 
@@ -238,7 +238,7 @@ describe('Items routes', () => {
       sourceItemId: first.id,
       targetItemId: second.id,
       type: 'duplicate',
-    }, ctx.agentToken);
+    }, ctx.developerToken);
 
     expect(res.status).toBe(201);
 
@@ -257,12 +257,12 @@ describe('Items routes', () => {
       sourceItemId: first.id,
       targetItemId: second.id,
       type: 'related',
-    }, ctx.agentToken);
+    }, ctx.developerToken);
     const secondRes = await post('/link', {
       sourceItemId: second.id,
       targetItemId: first.id,
       type: 'related',
-    }, ctx.agentToken);
+    }, ctx.developerToken);
 
     expect(firstRes.status).toBe(201);
     expect(secondRes.status).toBe(200);
@@ -292,7 +292,7 @@ describe('Items routes', () => {
       sourceItemId: item.id,
       targetItemId: item.id,
       type: 'related',
-    }, ctx.agentToken);
+    }, ctx.developerToken);
 
     expect(res.status).toBe(400);
   });
@@ -317,7 +317,7 @@ describe('Items routes', () => {
     expect(res.status).toBe(400);
   });
 
-  it('POST /unlink — agent can remove link', async () => {
+  it('POST /unlink — developer member can remove link', async () => {
     const first = await createTestItem();
     const second = await createTestItem();
 
@@ -325,10 +325,10 @@ describe('Items routes', () => {
       sourceItemId: first.id,
       targetItemId: second.id,
       type: 'related',
-    }, ctx.agentToken);
+    }, ctx.developerToken);
     const linkBody = await linkRes.json() as any;
 
-    const unlinkRes = await post('/unlink', { id: linkBody.data.id }, ctx.agentToken);
+    const unlinkRes = await post('/unlink', { id: linkBody.data.id }, ctx.developerToken);
     expect(unlinkRes.status).toBe(200);
 
     const getRes = await post('/get', { id: first.id }, ctx.adminToken);
@@ -344,7 +344,7 @@ describe('Items routes', () => {
       sourceItemId: first.id,
       targetItemId: second.id,
       type: 'related',
-    }, ctx.agentToken);
+    }, ctx.developerToken);
     const linkBody = await linkRes.json() as any;
 
     const unlinkRes = await post('/unlink', { id: linkBody.data.id }, ctx.memberToken);
@@ -355,8 +355,8 @@ describe('Items routes', () => {
 
   it('claim + resolve creates auto-notes', async () => {
     const item = await createTestItem();
-    await post('/claim', { id: item.id }, ctx.agentToken);
-    await post('/resolve', { id: item.id }, ctx.agentToken);
+    await post('/claim', { id: item.id }, ctx.developerToken);
+    await post('/resolve', { id: item.id }, ctx.developerToken);
 
     const res = await post('/get', { id: item.id }, ctx.adminToken);
     const body = await res.json() as any;
@@ -415,12 +415,12 @@ describe('Items routes', () => {
 
     const res = await post('/update', {
       id: item.id,
-      assigneeId: ctx.agentId,
+      assigneeId: ctx.developerId,
     }, ctx.adminToken);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    expect(body.data.assigneeId).toBe(ctx.agentId);
+    expect(body.data.assigneeId).toBe(ctx.developerId);
   });
 
   it('POST /update — non-admin cannot update (403)', async () => {
@@ -474,8 +474,8 @@ describe('Items routes', () => {
 
   it('POST /reopen — admin can reopen done item (→ new)', async () => {
     const item = await createTestItem();
-    await post('/claim', { id: item.id }, ctx.agentToken);
-    await post('/resolve', { id: item.id }, ctx.agentToken);
+    await post('/claim', { id: item.id }, ctx.developerToken);
+    await post('/resolve', { id: item.id }, ctx.developerToken);
 
     const res = await post('/reopen', { id: item.id }, ctx.adminToken);
     expect(res.status).toBe(200);
@@ -503,7 +503,7 @@ describe('Items routes', () => {
 
   it('POST /reopen — cannot reopen item in in_progress (400)', async () => {
     const item = await createTestItem();
-    await post('/claim', { id: item.id }, ctx.agentToken);
+    await post('/claim', { id: item.id }, ctx.developerToken);
 
     const res = await post('/reopen', { id: item.id }, ctx.adminToken);
     expect(res.status).toBe(400);
@@ -511,23 +511,23 @@ describe('Items routes', () => {
 
   it('POST /reopen — non-admin cannot reopen (403)', async () => {
     const item = await createTestItem();
-    await post('/claim', { id: item.id }, ctx.agentToken);
-    await post('/resolve', { id: item.id }, ctx.agentToken);
+    await post('/claim', { id: item.id }, ctx.developerToken);
+    await post('/resolve', { id: item.id }, ctx.developerToken);
 
-    const res = await post('/reopen', { id: item.id }, ctx.agentToken);
+    const res = await post('/reopen', { id: item.id }, ctx.developerToken);
     expect(res.status).toBe(403);
   });
 
   // === UPDATE STATUS (generic) ===
 
-  it('POST /update-status — agent can change in_progress → review', async () => {
+  it('POST /update-status — developer member can change in_progress → review', async () => {
     const item = await createTestItem();
-    await post('/claim', { id: item.id }, ctx.agentToken);
+    await post('/claim', { id: item.id }, ctx.developerToken);
 
     const res = await post('/update-status', {
       id: item.id,
       status: 'review',
-    }, ctx.agentToken);
+    }, ctx.developerToken);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
@@ -541,7 +541,7 @@ describe('Items routes', () => {
     const res = await post('/update-status', {
       id: item.id,
       status: 'review',
-    }, ctx.agentToken);
+    }, ctx.developerToken);
 
     expect(res.status).toBe(400);
   });

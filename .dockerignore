@@ -9,6 +9,5 @@ storage
 *.db-shm
 .DS_Store
 test
-orchestrator
 *.png
 *.jpg

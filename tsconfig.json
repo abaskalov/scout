@@ -18,6 +18,6 @@
       "@shared/*": ["./shared/*"]
     }
   },
-  "include": ["server/**/*.ts", "shared/**/*.ts", "orchestrator/**/*.ts"],
+  "include": ["server/**/*.ts", "shared/**/*.ts"],
   "exclude": ["node_modules", "dist", "dashboard", "widget"]
 }

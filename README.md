@@ -14,7 +14,6 @@
   <a href="#widget">Widget</a> &middot;
   <a href="#dashboard">Dashboard</a> &middot;
   <a href="#agent-skill">Agent Skill</a> &middot;
-  <a href="#optional-orchestrator">Optional Orchestrator</a> &middot;
   <a href="#deployment">Deployment</a> &middot;
   <a href="#api">API</a>
 </p>
@@ -42,7 +41,7 @@ Tester clicks element  →  Widget captures context + screenshot + recording
 | **Widget** | Shadow DOM isolation, element picker with instruction banner, html2canvas-pro screenshot with element highlight, rrweb session recording (60s buffer), cross-domain SSO |
 | **Dashboard** | React SPA, rrweb session player, items/projects/users/webhooks management, locale switcher |
 | **i18n** | Russian, English, Uzbek (Latin). Dashboard + widget. Server error codes translated on client |
-| **Agent workflows** | Manual agent skill for controlled bug work; optional orchestrator scaffold for automated polling |
+| **Agent workflows** | Manual agent skill for controlled bug work without background automation |
 | **Auth** | JWT + API keys (`sk_live_*`), system roles (admin/member/agent), project roles (owner/manager/developer/reporter/viewer), cross-domain SSO |
 | **Infra** | Single process (API + SPA + widget on one port), SQLite, Docker, publishable GHCR image |
 
@@ -151,16 +150,6 @@ npx skills update scout-manual-workflow -g -y
 ```
 
 See `skills/README.md` for project-local install commands and required `SCOUT_*` environment variables.
-
-## Optional Orchestrator
-
-The repository contains an experimental orchestrator scaffold in `orchestrator/`. It can poll Scout, claim `new` items, run a configured AI agent binary, and open PRs through `gh`. It is not required for normal Scout usage; the recommended operational path is the manual agent skill above.
-
-```bash
-pnpm orchestrator
-```
-
-Configure project-to-repo mapping in `orchestrator/agent.yaml`. See `orchestrator/README.md` before running it against a real project.
 
 ## API
 

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { isAuthenticated, login } from '../lib/auth';
 import { useTranslation } from '../i18n';
@@ -11,11 +11,9 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Already logged in — redirect
-  if (isAuthenticated()) {
-    navigate('/items', { replace: true });
-    return null;
-  }
+  useEffect(() => {
+    if (isAuthenticated()) navigate('/items', { replace: true });
+  }, [navigate]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -55,6 +53,8 @@ export default function Login() {
             <span className="text-sm font-medium text-gray-700">{t('auth.email')}</span>
             <input
               type="email"
+              name="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -68,6 +68,8 @@ export default function Login() {
             <span className="text-sm font-medium text-gray-700">{t('auth.password')}</span>
             <input
               type="password"
+              name="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required

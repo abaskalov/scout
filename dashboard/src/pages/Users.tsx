@@ -196,6 +196,16 @@ export default function Users() {
     viewer: t('users.projectRoles.viewer'),
   };
 
+  function projectRoleSummary(user: UserItem): string {
+    const roles = user.projectRoles ?? [];
+    if (user.role === 'admin') return t('users.projects.all');
+    if (roles.length === 0) return t('users.projects.none');
+    return roles.map((role) => {
+      const project = projects.find((p) => p.id === role.projectId);
+      return `${project?.name ?? t('users.projects.unknown')} · ${projectRoleLabels[role.role]}`;
+    }).join(', ');
+  }
+
   return (
     <div className="p-4 md:p-6">
       <div className="mb-4 md:mb-6 flex items-center justify-between">
@@ -220,6 +230,7 @@ export default function Users() {
               <th className="px-4 py-3">{t('users.table.name')}</th>
               <th className="px-4 py-3">{t('users.table.email')}</th>
               <th className="px-4 py-3 w-24">{t('users.table.role')}</th>
+              <th className="px-4 py-3">{t('users.table.projects')}</th>
               <th className="px-4 py-3 w-20 text-center">{t('users.table.active')}</th>
               <th className="px-4 py-3 w-28 text-right">{t('users.table.actions')}</th>
             </tr>
@@ -227,13 +238,13 @@ export default function Users() {
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
                   {t('common.loading')}
                 </td>
               </tr>
             ) : users.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
                   {t('common.noData')}
                 </td>
               </tr>
@@ -252,6 +263,9 @@ export default function Users() {
                     >
                       {t(roleKeys[u.role] ?? u.role)}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 max-w-xs truncate" title={projectRoleSummary(u)}>
+                    {projectRoleSummary(u)}
                   </td>
                   <td className="px-4 py-3 text-center">
                     {u.isActive ? (
@@ -299,6 +313,7 @@ export default function Users() {
                 <div className="min-w-0">
                   <div className="font-medium text-gray-800">{u.name}</div>
                   <div className="text-xs text-gray-400 mt-0.5 truncate">{u.email}</div>
+                  <div className="mt-1 text-xs text-gray-500 line-clamp-2">{projectRoleSummary(u)}</div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span

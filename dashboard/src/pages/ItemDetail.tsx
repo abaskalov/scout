@@ -84,6 +84,14 @@ interface RelatedItem {
   };
 }
 
+interface LinkCandidate {
+  id: string;
+  message: string;
+  status: string;
+  priority: string | null;
+  createdAt: string;
+}
+
 interface ParsedMetadata {
   browser?: string;
   os?: string;
@@ -155,6 +163,9 @@ export default function ItemDetail() {
 
   // Related items state
   const [linkTargetId, setLinkTargetId] = useState('');
+  const [linkSearch, setLinkSearch] = useState('');
+  const [linkCandidates, setLinkCandidates] = useState<LinkCandidate[]>([]);
+  const [linkCandidatesLoading, setLinkCandidatesLoading] = useState(false);
   const [linkType, setLinkType] = useState('related');
   const [linkSaving, setLinkSaving] = useState(false);
 
@@ -183,6 +194,42 @@ export default function ItemDetail() {
     loadItem();
     if (admin) loadUsers();
   }, [id]);
+
+  useEffect(() => {
+    if (!item?.permissions.canLinkItems) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setLinkCandidatesLoading(true);
+      try {
+        const res = await api<{ items: LinkCandidate[] }>('/api/items/list', {
+          projectId: item.projectId,
+          perPage: 12,
+          ...(linkSearch.trim() ? { search: linkSearch.trim() } : {}),
+        });
+        if (cancelled) return;
+        const linkedIds = new Set(item.relatedItems.map((link) => link.item.id));
+        const candidates = res.items.filter((candidate) => (
+          candidate.id !== item.id && !linkedIds.has(candidate.id)
+        ));
+        setLinkCandidates(candidates);
+        setLinkTargetId((current) => (
+          current && candidates.some((candidate) => candidate.id === current)
+            ? current
+            : candidates[0]?.id ?? ''
+        ));
+      } catch {
+        if (!cancelled) setLinkCandidates([]);
+      } finally {
+        if (!cancelled) setLinkCandidatesLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [item, linkSearch]);
 
   // SSE: real-time updates for this item
   const handleSSEEvent = useCallback((event: SSEEventType, data: unknown) => {
@@ -356,10 +403,11 @@ export default function ItemDetail() {
     try {
       await api('/api/items/link', {
         sourceItemId: item.id,
-        targetItemId: linkTargetId.trim(),
+        targetItemId: linkTargetId,
         type: linkType,
       });
       setLinkTargetId('');
+      setLinkSearch('');
       setLinkType('related');
       await loadItem();
     } catch (err) {
@@ -455,7 +503,7 @@ export default function ItemDetail() {
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
           <div className="min-w-0">
             {/* Page title: item message (truncated) */}
-            <h1 className="text-lg font-bold text-gray-900 line-clamp-2 break-words mb-2">
+            <h1 className="text-lg font-bold leading-snug text-gray-900 break-words mb-2">
               {item.message}
             </h1>
             <div className="flex flex-wrap items-center gap-2 md:gap-3 text-sm text-gray-500">
@@ -520,20 +568,18 @@ export default function ItemDetail() {
                 </div>
               </div>
             ) : (
-              <div className="mt-2 flex items-start gap-2">
-                <div className="text-sm md:text-base text-gray-800 break-words whitespace-pre-line leading-relaxed">
-                  {item.message}
-                </div>
+              <div className="mt-2 flex items-center gap-2">
                 {item.permissions.canUpdate && !isTerminal && (
                   <button
                     onClick={startEditing}
-                    className="shrink-0 text-xs text-gray-400 hover:text-gray-600"
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                     title={t('items.detail.actions.edit')}
                   >
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                     </svg>
+                    {t('items.detail.actions.edit')}
                   </button>
                 )}
               </div>
@@ -806,33 +852,65 @@ export default function ItemDetail() {
         )}
 
         {item.permissions.canLinkItems && (
-          <form onSubmit={handleLinkItem} className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto] md:items-center">
-            <input
-              type="text"
-              value={linkTargetId}
-              onChange={(e) => setLinkTargetId(e.target.value)}
-              placeholder={t('items.detail.links.itemIdPlaceholder')}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-            />
-            <select
-              value={linkType}
-              onChange={(e) => setLinkType(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-            >
-              <option value="related">{t('items.detail.links.types.related')}</option>
-              <option value="duplicate">{t('items.detail.links.types.duplicate')}</option>
-              <option value="blocks">{t('items.detail.links.types.blocks')}</option>
-              <option value="blocked_by">{t('items.detail.links.types.blocked_by')}</option>
-              <option value="caused_by">{t('items.detail.links.types.caused_by')}</option>
-              <option value="conflicts">{t('items.detail.links.types.conflicts')}</option>
-            </select>
-            <button
-              type="submit"
-              disabled={linkSaving || !linkTargetId.trim()}
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-            >
-              {linkSaving ? t('common.saving') : t('items.detail.links.add')}
-            </button>
+          <form onSubmit={handleLinkItem} className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <div className="mb-2">
+              <label htmlFor="related-item-search" className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                {t('items.detail.links.choose')}
+              </label>
+              <input
+                id="related-item-search"
+                type="search"
+                name="related-item-search"
+                value={linkSearch}
+                onChange={(e) => setLinkSearch(e.target.value)}
+                placeholder={t('items.detail.links.searchPlaceholder')}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto] md:items-center">
+              <select
+                name="related-item-target"
+                aria-label={t('items.detail.links.choose')}
+                value={linkTargetId}
+                onChange={(e) => setLinkTargetId(e.target.value)}
+                disabled={linkCandidatesLoading || linkCandidates.length === 0}
+                className="min-w-0 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500 disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                {linkCandidatesLoading ? (
+                  <option value="">{t('common.loading')}</option>
+                ) : linkCandidates.length === 0 ? (
+                  <option value="">{t('items.detail.links.noCandidates')}</option>
+                ) : (
+                  linkCandidates.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      #{candidate.id.slice(0, 8)} · {candidate.message}
+                    </option>
+                  ))
+                )}
+              </select>
+              <select
+                name="related-item-type"
+                aria-label={t('items.detail.links.type')}
+                value={linkType}
+                onChange={(e) => setLinkType(e.target.value)}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              >
+                <option value="related">{t('items.detail.links.types.related')}</option>
+                <option value="duplicate">{t('items.detail.links.types.duplicate')}</option>
+                <option value="blocks">{t('items.detail.links.types.blocks')}</option>
+                <option value="blocked_by">{t('items.detail.links.types.blocked_by')}</option>
+                <option value="caused_by">{t('items.detail.links.types.caused_by')}</option>
+                <option value="conflicts">{t('items.detail.links.types.conflicts')}</option>
+              </select>
+              <button
+                type="submit"
+                disabled={linkSaving || !linkTargetId.trim()}
+                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {linkSaving ? t('common.saving') : t('items.detail.links.add')}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">{t('items.detail.links.helper')}</p>
           </form>
         )}
       </div>

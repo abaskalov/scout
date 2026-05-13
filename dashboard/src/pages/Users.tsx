@@ -10,7 +10,6 @@ interface UserItem {
   name: string;
   role: 'admin' | 'member' | 'agent';
   isActive: boolean;
-  projectIds?: string[];
   projectRoles?: ProjectRoleAssignment[];
   createdAt: string;
 }
@@ -40,7 +39,6 @@ const emptyForm = {
   name: '',
   role: 'member' as 'admin' | 'member' | 'agent',
   isActive: true,
-  projectIds: [] as string[],
   projectRoles: [] as ProjectRoleAssignment[],
 };
 
@@ -109,8 +107,7 @@ export default function Users() {
       name: u.name,
       role: u.role,
       isActive: u.isActive,
-      projectIds: u.projectIds ?? [],
-      projectRoles: u.projectRoles ?? (u.projectIds ?? []).map((projectId) => ({ projectId, role: u.role === 'agent' ? 'developer' : 'reporter' })),
+      projectRoles: u.projectRoles ?? [],
     });
     setError('');
     setShowModal(true);
@@ -164,10 +161,7 @@ export default function Users() {
   function toggleProject(pid: string) {
     setForm((f) => ({
       ...f,
-      projectIds: f.projectIds.includes(pid)
-        ? f.projectIds.filter((x) => x !== pid)
-        : [...f.projectIds, pid],
-      projectRoles: f.projectIds.includes(pid)
+      projectRoles: f.projectRoles.some((projectRole) => projectRole.projectId === pid)
         ? f.projectRoles.filter((x) => x.projectId !== pid)
         : [...f.projectRoles, { projectId: pid, role: f.role === 'agent' ? 'developer' : 'reporter' }],
     }));
@@ -445,7 +439,7 @@ export default function Users() {
                 </span>
                 <div className="mt-1 max-h-36 space-y-1 overflow-y-auto rounded-md border border-gray-200 p-2">
                   {projects.map((p) => {
-                    const enabled = form.projectIds.includes(p.id);
+                    const enabled = form.projectRoles.some((role) => role.projectId === p.id);
                     const projectRole = form.projectRoles.find((role) => role.projectId === p.id)?.role ?? 'reporter';
                     return (
                       <div key={p.id} className="flex items-center gap-2 text-sm text-gray-700">

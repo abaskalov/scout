@@ -77,6 +77,10 @@ const spec = {
         type: 'string',
         enum: ['comment', 'status_change', 'assignment'],
       },
+      ItemLinkType: {
+        type: 'string',
+        enum: ['related', 'duplicate', 'blocks', 'blocked_by', 'caused_by', 'conflicts'],
+      },
 
       // ── Pagination ──
       Pagination: {
@@ -115,7 +119,6 @@ const spec = {
           {
             type: 'object',
             properties: {
-              projectIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
               projectRoles: { type: 'array', items: { $ref: '#/components/schemas/UserProjectRole' } },
             },
           },
@@ -166,6 +169,30 @@ const spec = {
           resolvedAt: { type: 'string', format: 'date-time', nullable: true },
           createdAt: { type: 'string', format: 'date-time' },
           updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      ItemPermissions: {
+        type: 'object',
+        properties: {
+          canClaim: { type: 'boolean' },
+          canUpdateStatus: { type: 'boolean' },
+          canResolve: { type: 'boolean' },
+          canCancel: { type: 'boolean' },
+          canReopen: { type: 'boolean' },
+          canUpdate: { type: 'boolean' },
+          canDelete: { type: 'boolean' },
+          canComment: { type: 'boolean' },
+          canLinkItems: { type: 'boolean' },
+        },
+      },
+      RelatedItem: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid', description: 'Link id' },
+          type: { $ref: '#/components/schemas/ItemLinkType' },
+          direction: { type: 'string', enum: ['incoming', 'outgoing'] },
+          createdAt: { type: 'string', format: 'date-time' },
+          item: { $ref: '#/components/schemas/Item' },
         },
       },
       ItemNote: {
@@ -377,7 +404,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Создать баг-репорт',
-        description: 'Создаёт новый item в проекте. Roles: member, admin. Rate limit: 20 req/min.',
+        description: 'Создаёт новый item в проекте. Требуется project permission `create_item` (admin/owner/manager/reporter). Rate limit: 20 req/min.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -426,7 +453,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Список items',
-        description: 'Пагинированный список items проекта с фильтрацией. Roles: all (admin, member, agent).',
+        description: 'Пагинированный список items проекта с фильтрацией. Требуется доступ к проекту.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -476,7 +503,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Получить item с заметками',
-        description: 'Возвращает item и все его заметки (notes). Roles: all.',
+        description: 'Возвращает item, заметки, связанные items и permissions текущего пользователя. Требуется доступ к проекту.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -507,6 +534,8 @@ const spec = {
                           type: 'object',
                           properties: {
                             notes: { type: 'array', items: { $ref: '#/components/schemas/ItemNote' } },
+                            relatedItems: { type: 'array', items: { $ref: '#/components/schemas/RelatedItem' } },
+                            permissions: { $ref: '#/components/schemas/ItemPermissions' },
                           },
                         },
                       ],
@@ -524,7 +553,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Количество items по статусам',
-        description: 'Возвращает количество items по каждому статусу для проекта. Roles: all.',
+        description: 'Возвращает количество items по каждому статусу для проекта. Требуется доступ к проекту.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -576,7 +605,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Взять item в работу',
-        description: 'Назначает текущего пользователя исполнителем и переводит статус в in_progress. Roles: agent, admin.',
+        description: 'Назначает текущего пользователя исполнителем и переводит статус в in_progress. Требуется project permission `workflow` (admin/owner/manager/developer).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -597,7 +626,7 @@ const spec = {
             description: 'Item обновлён',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
           },
-          403: { description: 'Нет роли agent/admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -606,7 +635,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Закрыть item (resolve)',
-        description: 'Переводит item в статус done с опциональной заметкой о решении. Roles: agent, admin.',
+        description: 'Переводит item в статус done с опциональной заметкой о решении. Требуется project permission `workflow` (admin/owner/manager/developer).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -630,7 +659,7 @@ const spec = {
             description: 'Item resolved',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
           },
-          403: { description: 'Нет роли agent/admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -639,7 +668,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Отменить item',
-        description: 'Переводит item в статус cancelled. Roles: admin.',
+        description: 'Переводит item в статус cancelled. Требуется project permission `triage`; reporter может отменить свой `new` item.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -660,7 +689,7 @@ const spec = {
             description: 'Item cancelled',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -669,7 +698,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Обновить статус item',
-        description: 'Универсальный эндпоинт для смены статуса item. Roles: agent, admin.',
+        description: 'Универсальный эндпоинт для смены статуса item. Требуется project permission `workflow` (admin/owner/manager/developer).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -694,7 +723,7 @@ const spec = {
             description: 'Статус обновлён',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
           },
-          403: { description: 'Нет роли agent/admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -703,7 +732,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Переоткрыть item',
-        description: 'Возвращает item в статус new (из done или cancelled). Roles: admin.',
+        description: 'Возвращает item в статус new (из done или cancelled). Требуется project permission `triage` (admin/owner/manager).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -724,7 +753,7 @@ const spec = {
             description: 'Item reopened',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -733,7 +762,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Обновить item',
-        description: 'Обновляет поля item (message, priority, labels, assigneeId). Roles: admin.',
+        description: 'Обновляет поля item (message, priority, labels, assigneeId). Требуется project permission `triage` (admin/owner/manager).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -758,7 +787,7 @@ const spec = {
             description: 'Item обновлён',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Item' } } } } },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -767,7 +796,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Удалить item',
-        description: 'Удаляет item и связанные заметки. Roles: admin.',
+        description: 'Удаляет item и связанные заметки. Требуется project permission `triage` (admin/owner/manager).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -792,7 +821,7 @@ const spec = {
               },
             },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -801,7 +830,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Добавить заметку',
-        description: 'Добавляет комментарий к item. Roles: all (admin, member, agent).',
+        description: 'Добавляет комментарий к item. Требуется project permission `comment` (admin/owner/manager/developer/reporter).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -831,13 +860,71 @@ const spec = {
         },
       },
     },
+    '/items/link': {
+      post: {
+        tags: ['Items'],
+        summary: 'Связать items',
+        description: 'Создаёт связь между двумя items одного проекта. Требуется project permission `workflow` (admin/owner/manager/developer).',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['sourceItemId', 'targetItemId', 'type'],
+                properties: {
+                  sourceItemId: { type: 'string', format: 'uuid' },
+                  targetItemId: { type: 'string', format: 'uuid' },
+                  type: { $ref: '#/components/schemas/ItemLinkType' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Связь создана' },
+          200: { description: 'Связь уже существовала' },
+          400: { description: 'Нельзя связать item с самим собой или items из разных проектов', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/unlink': {
+      post: {
+        tags: ['Items'],
+        summary: 'Удалить связь items',
+        description: 'Удаляет связь между items. Требуется project permission `workflow` (admin/owner/manager/developer).',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', format: 'uuid', description: 'Link id from relatedItems[].id' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Связь удалена' },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Связь или item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
 
     // ═══════════════════════ Projects ═══════════════════════
     '/projects/create': {
       post: {
         tags: ['Projects'],
         summary: 'Создать проект',
-        description: 'Создаёт новый проект. Slug должен быть уникальным. Roles: admin.',
+        description: 'Создаёт новый проект. Slug должен быть уникальным. Требуется system admin.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -860,7 +947,7 @@ const spec = {
             description: 'Проект создан',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Project' } } } } },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Только system admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           409: { description: 'Slug уже существует', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -869,7 +956,7 @@ const spec = {
       post: {
         tags: ['Projects'],
         summary: 'Список проектов',
-        description: 'Пагинированный список проектов. Admin видит все, остальные — только назначенные. Roles: all.',
+        description: 'Пагинированный список проектов. System admin видит все, остальные — только назначенные проекты.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -908,7 +995,7 @@ const spec = {
       post: {
         tags: ['Projects'],
         summary: 'Получить проект',
-        description: 'Возвращает данные проекта. Roles: all (с проверкой доступа).',
+        description: 'Возвращает данные проекта. Требуется доступ к проекту.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -938,7 +1025,7 @@ const spec = {
       post: {
         tags: ['Projects'],
         summary: 'Обновить проект',
-        description: 'Обновляет поля проекта. Roles: admin.',
+        description: 'Обновляет поля проекта. Требуется system admin или project permission `manage_project` (owner).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -963,7 +1050,7 @@ const spec = {
             description: 'Проект обновлён',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Project' } } } } },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Проект не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -972,7 +1059,7 @@ const spec = {
       post: {
         tags: ['Projects'],
         summary: 'Удалить проект',
-        description: 'Удаляет проект (только если нет items). Roles: admin.',
+        description: 'Удаляет проект (только если нет items). Требуется system admin.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -997,7 +1084,7 @@ const spec = {
               },
             },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Только system admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Проект не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           422: { description: 'Проект содержит items', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
@@ -1009,7 +1096,7 @@ const spec = {
       post: {
         tags: ['Users'],
         summary: 'Создать пользователя',
-        description: 'Создаёт нового пользователя с назначением на проекты. Roles: system admin или project owner для своих проектов. projectIds поддерживается как legacy shorthand.',
+        description: 'Создаёт нового пользователя с назначением на проекты. Доступ: system admin или project owner для своих проектов.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1023,7 +1110,6 @@ const spec = {
                   password: { type: 'string', minLength: 8, maxLength: 128, description: 'Must contain lowercase, uppercase letter and digit' },
                   name: { type: 'string', minLength: 1, maxLength: 100 },
                   role: { $ref: '#/components/schemas/UserRole' },
-                  projectIds: { type: 'array', items: { type: 'string', format: 'uuid' }, default: [] },
                   projectRoles: { type: 'array', items: { $ref: '#/components/schemas/UserProjectRole' } },
                 },
               },
@@ -1133,7 +1219,6 @@ const spec = {
                   name: { type: 'string', minLength: 1, maxLength: 100 },
                   role: { $ref: '#/components/schemas/UserRole' },
                   isActive: { type: 'boolean' },
-                  projectIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
                   projectRoles: { type: 'array', items: { $ref: '#/components/schemas/UserProjectRole' } },
                   password: { type: 'string', minLength: 8, maxLength: 128, description: 'Must contain lowercase, uppercase letter and digit' },
                 },
@@ -1155,7 +1240,7 @@ const spec = {
       post: {
         tags: ['Users'],
         summary: 'Удалить пользователя',
-        description: 'Удаляет пользователя (нельзя удалить самого себя). Roles: admin.',
+        description: 'Удаляет пользователя (нельзя удалить самого себя). Требуется system admin.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1180,7 +1265,7 @@ const spec = {
               },
             },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Только system admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Пользователь не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           409: { description: 'Нельзя удалить самого себя', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
@@ -1192,7 +1277,7 @@ const spec = {
       post: {
         tags: ['Webhooks'],
         summary: 'Создать вебхук',
-        description: 'Создаёт webhook для проекта. При событии отправляет POST на указанный URL. Roles: admin.',
+        description: 'Создаёт webhook для проекта. Требуется project permission `manage_integrations` (admin/owner).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1220,7 +1305,7 @@ const spec = {
             description: 'Webhook создан',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Webhook' } } } } },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Проект не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -1229,7 +1314,7 @@ const spec = {
       post: {
         tags: ['Webhooks'],
         summary: 'Список вебхуков',
-        description: 'Список вебхуков проекта. Roles: admin.',
+        description: 'Список вебхуков проекта. Требуется project permission `manage_integrations` (admin/owner).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1264,7 +1349,7 @@ const spec = {
               },
             },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -1272,7 +1357,7 @@ const spec = {
       post: {
         tags: ['Webhooks'],
         summary: 'Обновить вебхук',
-        description: 'Обновляет настройки webhook. Roles: admin.',
+        description: 'Обновляет настройки webhook. Требуется project permission `manage_integrations` (admin/owner).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1301,7 +1386,7 @@ const spec = {
             description: 'Webhook обновлён',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/Webhook' } } } } },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Webhook не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -1310,7 +1395,7 @@ const spec = {
       post: {
         tags: ['Webhooks'],
         summary: 'Удалить вебхук',
-        description: 'Удаляет webhook. Roles: admin.',
+        description: 'Удаляет webhook. Требуется project permission `manage_integrations` (admin/owner).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1335,7 +1420,7 @@ const spec = {
               },
             },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Webhook не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -1344,7 +1429,7 @@ const spec = {
       post: {
         tags: ['Webhooks'],
         summary: 'Тест вебхука',
-        description: 'Отправляет тестовый payload на URL вебхука. Roles: admin.',
+        description: 'Отправляет тестовый payload на URL вебхука. Требуется project permission `manage_integrations` (admin/owner).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1381,7 +1466,7 @@ const spec = {
               },
             },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Webhook не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -1392,7 +1477,7 @@ const spec = {
       post: {
         tags: ['API Keys'],
         summary: 'Создать API-ключ',
-        description: 'Генерирует новый API-ключ для проекта. Полный ключ возвращается ТОЛЬКО один раз. Roles: admin.',
+        description: 'Генерирует новый API-ключ для проекта. Полный ключ возвращается ТОЛЬКО один раз. Требуется project permission `manage_integrations` (admin/owner).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1434,7 +1519,7 @@ const spec = {
               },
             },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Проект не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -1443,7 +1528,7 @@ const spec = {
       post: {
         tags: ['API Keys'],
         summary: 'Список API-ключей',
-        description: 'Список API-ключей проекта (без полного ключа, только prefix). Roles: admin.',
+        description: 'Список API-ключей проекта (без полного ключа, только prefix). Требуется project permission `manage_integrations` (admin/owner).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1478,7 +1563,7 @@ const spec = {
               },
             },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -1486,7 +1571,7 @@ const spec = {
       post: {
         tags: ['API Keys'],
         summary: 'Отозвать API-ключ',
-        description: 'Деактивирует API-ключ (isActive = false). Roles: admin.',
+        description: 'Деактивирует API-ключ (isActive = false). Требуется project permission `manage_integrations` (admin/owner).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1511,7 +1596,7 @@ const spec = {
               },
             },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'API-ключ не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },

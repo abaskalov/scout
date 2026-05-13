@@ -38,7 +38,6 @@ function getUserProjectRoles(userId: string) {
 function serializeUser(user: typeof users.$inferSelect, pivots = getUserProjectRoles(user.id)) {
   return {
     ...stripPassword(user),
-    projectIds: pivots.map((p) => p.projectId),
     projectRoles: pivots.map((p) => ({ projectId: p.projectId, role: p.role })),
   };
 }
@@ -196,7 +195,6 @@ export const userRoutes = new Hono()
         data: {
           items: userList.map((u) => ({
             ...stripPassword(u),
-            projectIds: (pivotMap.get(u.id) ?? []).map((p) => p.projectId),
             projectRoles: pivotMap.get(u.id) ?? [],
           })),
           pagination: { page, perPage, total, totalPages: Math.ceil(total / perPage) },

@@ -75,7 +75,7 @@ function saveRecording(base64: string, dir: string): string {
       writeFileSync(filePath, buffer);
     }
   } else {
-    // Raw JSON (legacy or uncompressed)
+    // Raw JSON from uncompressed recordings
     writeFileSync(filePath, buffer);
   }
 

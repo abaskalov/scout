@@ -49,34 +49,22 @@ export const userProjectRoleSchema = z.object({
   role: projectRoleSchema,
 });
 
-function projectIdsToProjectRoles(projectIds: string[] | undefined, fallbackRole: z.infer<typeof projectRoleSchema>) {
-  return projectIds?.map((projectId) => ({ projectId, role: fallbackRole }));
-}
-
 export const createUserSchema = z.object({
   email: z.string().email(),
   password: passwordSchema,
   name: z.string().min(1).max(100),
   role: z.enum(['admin', 'member', 'agent']),
-  projectIds: z.array(uuidSchema).default([]),
-  projectRoles: z.array(userProjectRoleSchema).optional(),
-}).transform((data) => ({
-  ...data,
-  projectRoles: data.projectRoles ?? projectIdsToProjectRoles(data.projectIds, data.role === 'agent' ? 'developer' : 'reporter') ?? [],
-}));
+  projectRoles: z.array(userProjectRoleSchema).default([]),
+});
 
 export const updateUserSchema = z.object({
   id: uuidSchema,
   name: z.string().min(1).max(100).optional(),
   role: z.enum(['admin', 'member', 'agent']).optional(),
   isActive: z.boolean().optional(),
-  projectIds: z.array(uuidSchema).optional(),
   projectRoles: z.array(userProjectRoleSchema).optional(),
   password: passwordSchema.optional(),
-}).transform((data) => ({
-  ...data,
-  projectRoles: data.projectRoles ?? projectIdsToProjectRoles(data.projectIds, data.role === 'agent' ? 'developer' : 'reporter'),
-}));
+});
 
 export const getUserSchema = z.object({ id: uuidSchema });
 export const deleteUserSchema = z.object({ id: uuidSchema });

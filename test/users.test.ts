@@ -57,7 +57,7 @@ describe('Users routes', () => {
       password: VALID_PASSWORD,
       name: 'New User',
       role: 'member',
-      projectIds: [ctx.projectId],
+      projectRoles: [{ projectId: ctx.projectId, role: 'reporter' }],
     }, ctx.adminToken);
 
     expect(res.status).toBe(201);
@@ -65,23 +65,23 @@ describe('Users routes', () => {
     expect(body.data.email).toBe('newuser@test.local');
     expect(body.data.name).toBe('New User');
     expect(body.data.role).toBe('member');
-    expect(body.data.projectIds).toEqual([ctx.projectId]);
+    expect(body.data.projectRoles).toEqual([{ projectId: ctx.projectId, role: 'reporter' }]);
     // Password hash must not leak
     expect(body.data.passwordHash).toBeUndefined();
   });
 
-  it('POST /create — admin can create user with empty projectIds', async () => {
+  it('POST /create — admin can create user with empty projectRoles', async () => {
     const res = await post('/create', {
       email: 'noprojects@test.local',
       password: VALID_PASSWORD,
       name: 'No Projects User',
       role: 'agent',
-      projectIds: [],
+      projectRoles: [],
     }, ctx.adminToken);
 
     expect(res.status).toBe(201);
     const body = await res.json() as any;
-    expect(body.data.projectIds).toEqual([]);
+    expect(body.data.projectRoles).toEqual([]);
   });
 
   it('POST /create — non-admin cannot create', async () => {
@@ -90,7 +90,7 @@ describe('Users routes', () => {
       password: VALID_PASSWORD,
       name: 'Forbidden',
       role: 'member',
-      projectIds: [],
+      projectRoles: [],
     }, ctx.memberToken);
 
     expect(res.status).toBe(403);
@@ -102,7 +102,7 @@ describe('Users routes', () => {
       password: VALID_PASSWORD,
       name: 'Agent Create',
       role: 'member',
-      projectIds: [],
+      projectRoles: [],
     }, ctx.agentToken);
 
     expect(res.status).toBe(403);
@@ -150,7 +150,7 @@ describe('Users routes', () => {
       password: VALID_PASSWORD,
       name: 'Duplicate Admin',
       role: 'member',
-      projectIds: [],
+      projectRoles: [],
     }, ctx.adminToken);
 
     expect(res.status).toBe(409);
@@ -162,7 +162,7 @@ describe('Users routes', () => {
       password: WEAK_PASSWORD_NO_UPPER,
       name: 'Weak User',
       role: 'member',
-      projectIds: [],
+      projectRoles: [],
     }, ctx.adminToken);
 
     expect(res.status).toBe(400);
@@ -174,7 +174,7 @@ describe('Users routes', () => {
       password: WEAK_PASSWORD_NO_LOWER,
       name: 'Weak User',
       role: 'member',
-      projectIds: [],
+      projectRoles: [],
     }, ctx.adminToken);
 
     expect(res.status).toBe(400);
@@ -186,7 +186,7 @@ describe('Users routes', () => {
       password: WEAK_PASSWORD_NO_DIGIT,
       name: 'Weak User',
       role: 'member',
-      projectIds: [],
+      projectRoles: [],
     }, ctx.adminToken);
 
     expect(res.status).toBe(400);
@@ -198,7 +198,7 @@ describe('Users routes', () => {
       password: WEAK_PASSWORD_TOO_SHORT,
       name: 'Weak User',
       role: 'member',
-      projectIds: [],
+      projectRoles: [],
     }, ctx.adminToken);
 
     expect(res.status).toBe(400);
@@ -225,7 +225,7 @@ describe('Users routes', () => {
       password: VALID_PASSWORD,
       name: 'Bad Email',
       role: 'member',
-      projectIds: [],
+      projectRoles: [],
     }, ctx.adminToken);
 
     expect(res.status).toBe(400);
@@ -240,7 +240,7 @@ describe('Users routes', () => {
         password: VALID_PASSWORD,
         name: 'No Auth',
         role: 'member',
-        projectIds: [],
+        projectRoles: [],
       }),
     });
 
@@ -257,10 +257,10 @@ describe('Users routes', () => {
     // Seed has 3 users: admin, agent, member
     expect(body.data.items).toHaveLength(3);
     expect(body.data.pagination.total).toBe(3);
-    // All users should have projectIds attached
+    // All users should have projectRoles attached
     for (const user of body.data.items) {
-      expect(user.projectIds).toBeDefined();
-      expect(Array.isArray(user.projectIds)).toBe(true);
+      expect(user.projectRoles).toBeDefined();
+      expect(Array.isArray(user.projectRoles)).toBe(true);
       // Password hash must not leak
       expect(user.passwordHash).toBeUndefined();
     }
@@ -311,14 +311,14 @@ describe('Users routes', () => {
 
   // === GET ===
 
-  it('POST /get — admin gets user with projectIds', async () => {
+  it('POST /get — admin gets user with projectRoles', async () => {
     const res = await post('/get', { id: ctx.memberId }, ctx.adminToken);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
     expect(body.data.id).toBe(ctx.memberId);
     expect(body.data.email).toBe('member@test.local');
-    expect(body.data.projectIds).toEqual([ctx.projectId]);
+    expect(body.data.projectRoles).toEqual([{ projectId: ctx.projectId, role: 'reporter' }]);
     expect(body.data.passwordHash).toBeUndefined();
   });
 
@@ -329,7 +329,7 @@ describe('Users routes', () => {
     const body = await res.json() as any;
     expect(body.data.id).toBe(ctx.adminId);
     // Admin has no pivot entries in seed data
-    expect(body.data.projectIds).toEqual([]);
+    expect(body.data.projectRoles).toEqual([]);
   });
 
   it('POST /get — non-admin cannot get', async () => {
@@ -412,7 +412,7 @@ describe('Users routes', () => {
     expect(body.data.passwordHash).toBeUndefined();
   });
 
-  it('POST /update — admin can update projectIds (pivot rebuild)', async () => {
+  it('POST /update — admin can update projectRoles (pivot rebuild)', async () => {
     // Create a second project
     const proj2Id = randomUUID();
     ctx.db.insert(schema.projects).values({
@@ -424,26 +424,30 @@ describe('Users routes', () => {
 
     const res = await post('/update', {
       id: ctx.memberId,
-      projectIds: [ctx.projectId, proj2Id],
+      projectRoles: [
+        { projectId: ctx.projectId, role: 'reporter' },
+        { projectId: proj2Id, role: 'viewer' },
+      ],
     }, ctx.adminToken);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    expect(body.data.projectIds).toHaveLength(2);
-    expect(body.data.projectIds).toContain(ctx.projectId);
-    expect(body.data.projectIds).toContain(proj2Id);
+    expect(body.data.projectRoles).toEqual(expect.arrayContaining([
+      { projectId: ctx.projectId, role: 'reporter' },
+      { projectId: proj2Id, role: 'viewer' },
+    ]));
   });
 
   it('POST /update — pivot rebuild removes old entries', async () => {
     // Member currently has access to projectId. Remove it.
     const res = await post('/update', {
       id: ctx.memberId,
-      projectIds: [], // remove all project access
+      projectRoles: [], // remove all project access
     }, ctx.adminToken);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
-    expect(body.data.projectIds).toEqual([]);
+    expect(body.data.projectRoles).toEqual([]);
 
     // Verify in DB
     const pivots = ctx.db.select().from(schema.pivotUsersProjects)

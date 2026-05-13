@@ -25,8 +25,8 @@ export const db: BetterSQLite3Database<typeof schema> = drizzle(sqlite, { schema
 
 const migrationsFolder = join(process.cwd(), 'drizzle');
 if (existsSync(migrationsFolder)) {
-  const legacySchema = hasCoreTables(sqlite);
-  if (legacySchema) {
+  const existingSchema = hasCoreTables(sqlite);
+  if (existingSchema) {
     ensureSqliteSchema(sqlite, { migrationsFolder, adoptBaseline: true, adoptBaselineOnly: true });
   }
   try {

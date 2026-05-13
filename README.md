@@ -40,10 +40,10 @@ Tester clicks element  →  Widget captures context + screenshot + recording
 | Area | Details |
 |------|---------|
 | **Widget** | Shadow DOM isolation, element picker with instruction banner, html2canvas-pro screenshot with element highlight, rrweb session recording (60s buffer), cross-domain SSO |
-| **Dashboard** | React SPA, rrweb session player, items/projects/users/webhooks management, locale switcher |
+| **Dashboard** | React SPA, rrweb session player, items/projects/users/webhooks/API keys management, locale switcher |
 | **i18n** | Russian, English, Uzbek (Latin). Dashboard + widget. Server error codes translated on client |
-| **AI Orchestrator** | Claims bugs, runs opencode, validates, creates PRs, updates status |
-| **Auth** | JWT + API keys (`sk_live_*`), role-based access (admin/member/agent), cross-domain SSO (cookie + iframe + popup) |
+| **AI Orchestrator** | Claims bugs, runs the configured AI agent, validates, creates PRs, updates status |
+| **Auth** | JWT + API keys (`sk_live_*`), system roles (admin/member/agent), project roles (owner/manager/developer/reporter/viewer), cross-domain SSO |
 | **Infra** | Single process (API + SPA + widget on one port), SQLite, Docker, publishable GHCR image |
 
 ## Quickstart
@@ -103,9 +103,9 @@ pnpm dev:all     # API + dashboard + widget (hot reload)
 
 Responsive React SPA served from the same port as the API.
 
-- **Items** — List with status/priority filters, search, pagination. Detail view with screenshot lightbox, rrweb session player, notes timeline, resolve modal
+- **Items** — List with status/priority filters, search, pagination. Detail view with screenshot lightbox, rrweb session player, notes timeline, related items, resolve modal
 - **Projects** — CRUD with allowed origins for CORS/SSO, auto-fix toggle
-- **Users** — CRUD with role assignment, project access control
+- **Users** — CRUD with system roles and per-project role assignment
 - **Webhooks** — Per-project event notifications (Slack-compatible)
 - **Language** — Switcher in sidebar (RU / EN / UZ)
 
@@ -115,9 +115,30 @@ Responsive React SPA served from the same port as the API.
 pnpm orchestrator
 ```
 
-Claims `new` bugs → parses recording → creates branch → runs `opencode` → validates (typecheck + lint, up to 3 retries) → commits → opens PR → sets status to `review`.
+Claims `new` bugs → parses recording → creates branch → runs the configured AI agent → validates (typecheck + lint, up to 3 retries) → commits → opens PR → sets status to `review`.
 
-Configure project-to-repo mapping in `orchestrator/config.ts`. Requires `opencode` and `gh` CLI.
+Configure project-to-repo mapping in `orchestrator/agent.yaml`. Requires the configured AI agent binary and `gh` CLI.
+
+## Roles And Permissions
+
+Scout has two layers of access control:
+
+| Layer | Values | Purpose |
+|-------|--------|---------|
+| System role | `admin`, `member`, `agent` | Account type and global administration |
+| Project role | `owner`, `manager`, `developer`, `reporter`, `viewer` | Per-project permissions |
+
+System `admin` can access everything. Non-admin users get access through `projectRoles` on each project.
+
+| Project role | Main permissions |
+|--------------|------------------|
+| `owner` | Full project management: project settings, members, integrations, item workflow/triage |
+| `manager` | Triage items: update, cancel, reopen, delete, assign, workflow |
+| `developer` | Claim, update workflow status, resolve, comment, link related items |
+| `reporter` | Create items, comment, view, cancel own `new` items |
+| `viewer` | Read-only project access |
+
+User APIs use `projectRoles` for per-project access assignment.
 
 ## Agent Skill
 
@@ -152,9 +173,10 @@ Interactive docs: `https://your-scout.example/api/docs`
 | `/api/auth/login` | Get JWT token |
 | `/api/items/create` | Create bug report |
 | `/api/items/list` | List items (filtered) |
-| `/api/items/get` | Get item with notes |
+| `/api/items/get` | Get item with notes, related items, and current-user permissions |
 | `/api/items/claim` | Assign to self |
 | `/api/items/resolve` | Mark as done |
+| `/api/items/link` | Link related/duplicate/blocking items |
 | `/api/auth/validate` | Validate token/API key |
 
 ## Deployment
@@ -214,7 +236,7 @@ Push to `dev` → typecheck + tests.
 
 Push to `master` → typecheck + tests → Docker build + publish to GHCR.
 
-This repository intentionally does not contain production deploy automation. Deploying the published image to a server is owned by the operator of that server.
+The repository also includes a generic GitHub Actions deploy workflow. It is safe for forks because all production-specific hosts, paths, SSH keys, and health URLs come from GitHub Environment secrets/variables, not from tracked files. Operators may also deploy the published image manually using the examples in `deploy/`.
 
 ### Backup
 

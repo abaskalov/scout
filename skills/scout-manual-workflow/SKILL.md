@@ -188,10 +188,31 @@ Before handoff:
 
 1. Run the narrowest relevant checks first.
 2. Run repo-required checks from `AGENTS.md`, README, package scripts, or CI docs.
-3. For frontend/user-visible changes, verify in a browser against the local app when feasible.
-4. For backend/API changes, verify with tests and a targeted runtime/API check when feasible.
-5. For data/deploy changes, verify with fresh state evidence and safe backups when relevant.
-6. If a check cannot run, document why and what evidence was used instead.
+3. Re-run checks after the final code change, not only before or during the fix.
+4. Inspect the final diff and confirm it is limited to the Scout item's scope.
+5. For frontend/user-visible changes, verify in a browser against the local app when feasible.
+6. For backend/API changes, verify with tests and a targeted runtime/API check when feasible.
+7. For data/deploy changes, verify with fresh state evidence and safe backups when relevant.
+8. If a check cannot run, document why and what evidence was used instead.
+
+## Definition Of Done
+
+Do not present the item as complete until all of these are true:
+
+1. The reported problem or requested improvement is addressed end-to-end, or a precise blocker/question is recorded in Scout.
+2. The final diff was reviewed for unrelated changes, secrets, debug code, broad rewrites, and stale TODOs.
+3. Fresh verification evidence exists after the final edit: commands, browser checks, API checks, or a documented reason why a check cannot run.
+4. Frontend, dashboard, widget, or other user-visible changes have browser verification when feasible.
+5. Scout has a concise completion note with implementation, root cause when relevant, verification, and remaining risks.
+6. The Scout status reflects reality: `review` only when ready for review, `done` only when accepted by the workflow, and no silent "left for later" work.
+
+Final user response must be short and evidence-based:
+
+- Item chosen and why.
+- What changed.
+- Verification run after the final change.
+- Scout updates made.
+- Anything not completed, with the exact blocker. If nothing remains, say so explicitly.
 
 ## Scout API Reference
 

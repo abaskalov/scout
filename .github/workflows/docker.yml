@@ -27,6 +27,7 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - run: pnpm rebuild better-sqlite3
       - run: pnpm typecheck && pnpm test
 
   build-and-push:

@@ -1,6 +1,6 @@
 ---
 name: scout-manual-workflow
-description: Use when the user asks to take a bug, defect, improvement, or task from Scout and handle it manually like a professional engineer working from a bug tracker.
+description: Use when the user asks to take a bug, defect, improvement, or task from Scout and handle it manually like a professional engineer working from a bug tracker. Also use for short commands like "do the next Scout task", "сделай следующую задачу из Скаута", or "возьми задачу из Scout".
 ---
 
 # Scout Manual Workflow
@@ -15,6 +15,8 @@ This is not a daemon workflow. Do not poll Scout, run a background loop, or proc
 
 - Treat the Scout item as the contract, but verify the real behavior before changing code.
 - Own the item end-to-end: triage, reproduce, diagnose, fix, verify, communicate, and hand off.
+- Short user commands such as "сделай следующую задачу из Скаута" are complete instructions: choose the best next actionable Scout item and execute the full workflow autonomously.
+- Do not require the user to spell out prioritization, verification, or Scout update rules; apply this skill's workflow by default.
 - Keep scope tight. Fix the reported bug or requested improvement, not nearby problems.
 - Prefer evidence over assumptions: URL, screenshot, recording, selector, logs, API payloads, repo behavior, and tests.
 - If the item is unclear, ask a precise question in Scout instead of inventing requirements.

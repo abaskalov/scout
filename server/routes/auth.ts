@@ -3,12 +3,21 @@ import { zValidator } from '@hono/zod-validator';
 import { eq, and } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { db } from '../db/client.js';
-import { users, apiKeys } from '../db/schema.js';
+import { users, apiKeys, pivotUsersProjects } from '../db/schema.js';
 import { loginSchema, validateTokenSchema } from '../lib/schemas.js';
 import { signToken, comparePassword, verifyToken } from '../services/auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { UnauthorizedError } from '../lib/errors.js';
 import { logAudit, getClientIp } from '../services/audit.js';
+
+function stripPasswordWithProjectRoles(user: typeof users.$inferSelect) {
+  const { passwordHash: _, ...userWithoutPassword } = user;
+  const projectRoles = db.select({ projectId: pivotUsersProjects.projectId, role: pivotUsersProjects.role })
+    .from(pivotUsersProjects)
+    .where(eq(pivotUsersProjects.userId, user.id))
+    .all();
+  return { ...userWithoutPassword, projectRoles };
+}
 
 export const authRoutes = new Hono()
 
@@ -30,21 +39,18 @@ export const authRoutes = new Hono()
 
     logAudit({ userId: user.id, action: 'login', entityType: 'auth', details: { email }, ipAddress: ip });
     const token = signToken(user);
-    const { passwordHash: _, ...userWithoutPassword } = user;
-    return c.json({ data: { token, user: userWithoutPassword } });
+    return c.json({ data: { token, user: stripPasswordWithProjectRoles(user) } });
   })
 
   .post('/me', authMiddleware, async (c) => {
     const user = c.get('user');
-    const { passwordHash: _, ...userWithoutPassword } = user;
-    return c.json({ data: { user: userWithoutPassword } });
+    return c.json({ data: { user: stripPasswordWithProjectRoles(user) } });
   })
 
   .post('/refresh', authMiddleware, async (c) => {
     const user = c.get('user');
     const token = signToken(user);
-    const { passwordHash: _, ...userWithoutPassword } = user;
-    return c.json({ data: { token, user: userWithoutPassword } });
+    return c.json({ data: { token, user: stripPasswordWithProjectRoles(user) } });
   })
 
   // SSO Validation — external services call this to validate a token/API key
@@ -79,8 +85,7 @@ export const authRoutes = new Hono()
         return c.json({ valid: false });
       }
 
-      const { passwordHash: _, ...userWithoutPassword } = user;
-      return c.json({ valid: true, user: userWithoutPassword });
+      return c.json({ valid: true, user: stripPasswordWithProjectRoles(user) });
     }
 
     // JWT validation
@@ -91,8 +96,7 @@ export const authRoutes = new Hono()
         return c.json({ valid: false });
       }
 
-      const { passwordHash: _, ...userWithoutPassword } = user;
-      return c.json({ valid: true, user: userWithoutPassword });
+      return c.json({ valid: true, user: stripPasswordWithProjectRoles(user) });
     } catch {
       return c.json({ valid: false });
     }

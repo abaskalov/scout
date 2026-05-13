@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { webhooks, projects } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { requireRole } from '../middleware/permissions.js';
+import { requireProjectPermission } from '../middleware/permissions.js';
 import { randomUUID } from 'node:crypto';
 import { NotFoundError } from '../lib/errors.js';
 import {
@@ -16,7 +16,6 @@ import { logAudit, getClientIp } from '../services/audit.js';
 
 export const webhookRoutes = new Hono()
   .use('/*', authMiddleware)
-  .use('/*', requireRole('admin'))
 
   // CREATE
   .post('/create',
@@ -28,6 +27,7 @@ export const webhookRoutes = new Hono()
       // Verify project exists
       const project = db.select().from(projects).where(eq(projects.id, projectId)).get();
       if (!project) throw new NotFoundError('Project', 'PROJECT_NOT_FOUND');
+      requireProjectPermission(user.id, user.role, projectId, 'manage_integrations');
 
       const id = randomUUID();
       db.insert(webhooks).values({
@@ -48,6 +48,8 @@ export const webhookRoutes = new Hono()
     zValidator('json', listWebhooksSchema),
     async (c) => {
       const { projectId } = c.req.valid('json');
+      const user = c.get('user');
+      requireProjectPermission(user.id, user.role, projectId, 'manage_integrations');
 
       const items = db.select().from(webhooks)
         .where(eq(webhooks.projectId, projectId))
@@ -65,6 +67,7 @@ export const webhookRoutes = new Hono()
 
       const existing = db.select().from(webhooks).where(eq(webhooks.id, id)).get();
       if (!existing) throw new NotFoundError('Webhook', 'WEBHOOK_NOT_FOUND');
+      requireProjectPermission(user.id, user.role, existing.projectId, 'manage_integrations');
 
       const updateData: Record<string, unknown> = {
         updatedAt: new Date().toISOString(),
@@ -89,6 +92,7 @@ export const webhookRoutes = new Hono()
 
       const existing = db.select().from(webhooks).where(eq(webhooks.id, id)).get();
       if (!existing) throw new NotFoundError('Webhook', 'WEBHOOK_NOT_FOUND');
+      requireProjectPermission(user.id, user.role, existing.projectId, 'manage_integrations');
 
       db.delete(webhooks).where(eq(webhooks.id, id)).run();
       logAudit({ userId: user.id, action: 'delete_webhook', entityType: 'webhook', entityId: id, ipAddress: getClientIp(c) });
@@ -103,6 +107,8 @@ export const webhookRoutes = new Hono()
 
       const hook = db.select().from(webhooks).where(eq(webhooks.id, id)).get();
       if (!hook) throw new NotFoundError('Webhook', 'WEBHOOK_NOT_FOUND');
+      const user = c.get('user');
+      requireProjectPermission(user.id, user.role, hook.projectId, 'manage_integrations');
 
       const result = await sendTestWebhook(hook.url, hook.secret, hook.projectId);
       return c.json({ data: result });

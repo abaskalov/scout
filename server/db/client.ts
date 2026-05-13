@@ -27,7 +27,7 @@ const migrationsFolder = join(process.cwd(), 'drizzle');
 if (existsSync(migrationsFolder)) {
   const legacySchema = hasCoreTables(sqlite);
   if (legacySchema) {
-    ensureSqliteSchema(sqlite, { migrationsFolder, adoptBaseline: true });
+    ensureSqliteSchema(sqlite, { migrationsFolder, adoptBaseline: true, adoptBaselineOnly: true });
   }
   try {
     migrate(db, { migrationsFolder });
@@ -94,8 +94,8 @@ if (userCount.cnt === 0) {
       .run(agentId, 'agent@scout.local', agentHash, 'AI Agent', 'agent');
     sqlite.prepare(`INSERT INTO projects (id, name, slug, allowed_origins) VALUES (?, ?, ?, ?)`)
       .run(projectId, 'My App', 'my-app', '["http://localhost:3000"]');
-    sqlite.prepare(`INSERT INTO pivot_users_projects (user_id, project_id) VALUES (?, ?)`)
-      .run(agentId, projectId);
+    sqlite.prepare(`INSERT INTO pivot_users_projects (user_id, project_id, role) VALUES (?, ?, ?)`)
+      .run(agentId, projectId, 'developer');
 
     logger.info({ adminEmail }, 'Auto-seeded dev users and project');
   }

@@ -108,6 +108,42 @@ describe('Users routes', () => {
     expect(res.status).toBe(403);
   });
 
+  it('POST /create — project owner can create project member', async () => {
+    ctx.db.update(schema.pivotUsersProjects)
+      .set({ role: 'owner' })
+      .where(eq(schema.pivotUsersProjects.userId, ctx.memberId))
+      .run();
+
+    const res = await post('/create', {
+      email: 'ownercreate@test.local',
+      password: VALID_PASSWORD,
+      name: 'Owner Created',
+      role: 'member',
+      projectRoles: [{ projectId: ctx.projectId, role: 'reporter' }],
+    }, ctx.memberToken);
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as any;
+    expect(body.data.projectRoles).toEqual([{ projectId: ctx.projectId, role: 'reporter' }]);
+  });
+
+  it('POST /create — project owner cannot create system admin', async () => {
+    ctx.db.update(schema.pivotUsersProjects)
+      .set({ role: 'owner' })
+      .where(eq(schema.pivotUsersProjects.userId, ctx.memberId))
+      .run();
+
+    const res = await post('/create', {
+      email: 'owneradmin@test.local',
+      password: VALID_PASSWORD,
+      name: 'Owner Admin',
+      role: 'admin',
+      projectRoles: [{ projectId: ctx.projectId, role: 'owner' }],
+    }, ctx.memberToken);
+
+    expect(res.status).toBe(403);
+  });
+
   it('POST /create — duplicate email fails with 409', async () => {
     const res = await post('/create', {
       email: 'admin@test.local', // already exists from seed
@@ -259,6 +295,20 @@ describe('Users routes', () => {
     expect(res.status).toBe(403);
   });
 
+  it('POST /list — project owner can list project users', async () => {
+    ctx.db.update(schema.pivotUsersProjects)
+      .set({ role: 'owner' })
+      .where(eq(schema.pivotUsersProjects.userId, ctx.memberId))
+      .run();
+
+    const res = await post('/list', {}, ctx.memberToken);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.data.items.map((user: any) => user.id)).toEqual(expect.arrayContaining([ctx.memberId, ctx.agentId]));
+    expect(body.data.items.some((user: any) => user.id === ctx.adminId)).toBe(false);
+  });
+
   // === GET ===
 
   it('POST /get — admin gets user with projectIds', async () => {
@@ -285,6 +335,20 @@ describe('Users routes', () => {
   it('POST /get — non-admin cannot get', async () => {
     const res = await post('/get', { id: ctx.adminId }, ctx.memberToken);
     expect(res.status).toBe(403);
+  });
+
+  it('POST /get — project owner can get project user', async () => {
+    ctx.db.update(schema.pivotUsersProjects)
+      .set({ role: 'owner' })
+      .where(eq(schema.pivotUsersProjects.userId, ctx.memberId))
+      .run();
+
+    const res = await post('/get', { id: ctx.agentId }, ctx.memberToken);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.data.id).toBe(ctx.agentId);
+    expect(body.data.projectRoles).toEqual([{ projectId: ctx.projectId, role: 'developer' }]);
   });
 
   it('POST /get — non-existent returns 404', async () => {
@@ -410,6 +474,36 @@ describe('Users routes', () => {
       id: ctx.memberId,
       name: 'Agent Hack',
     }, ctx.agentToken);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('POST /update — project owner can update project role assignment', async () => {
+    ctx.db.update(schema.pivotUsersProjects)
+      .set({ role: 'owner' })
+      .where(eq(schema.pivotUsersProjects.userId, ctx.memberId))
+      .run();
+
+    const res = await post('/update', {
+      id: ctx.agentId,
+      projectRoles: [{ projectId: ctx.projectId, role: 'viewer' }],
+    }, ctx.memberToken);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.data.projectRoles).toEqual([{ projectId: ctx.projectId, role: 'viewer' }]);
+  });
+
+  it('POST /update — project owner cannot update system fields', async () => {
+    ctx.db.update(schema.pivotUsersProjects)
+      .set({ role: 'owner' })
+      .where(eq(schema.pivotUsersProjects.userId, ctx.memberId))
+      .run();
+
+    const res = await post('/update', {
+      id: ctx.agentId,
+      role: 'admin',
+    }, ctx.memberToken);
 
     expect(res.status).toBe(403);
   });

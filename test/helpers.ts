@@ -50,8 +50,8 @@ export function createTestContext(): TestContext {
   ]).run();
 
   db.insert(schema.pivotUsersProjects).values([
-    { userId: agentId, projectId },
-    { userId: memberId, projectId },
+    { userId: agentId, projectId, role: 'developer' },
+    { userId: memberId, projectId, role: 'reporter' },
   ]).run();
 
   // Generate tokens

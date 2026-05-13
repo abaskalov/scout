@@ -57,6 +57,18 @@ const spec = {
         type: 'string',
         enum: ['admin', 'member', 'agent'],
       },
+      ProjectRole: {
+        type: 'string',
+        enum: ['owner', 'manager', 'developer', 'reporter', 'viewer'],
+      },
+      UserProjectRole: {
+        type: 'object',
+        required: ['projectId', 'role'],
+        properties: {
+          projectId: { type: 'string', format: 'uuid' },
+          role: { $ref: '#/components/schemas/ProjectRole' },
+        },
+      },
       WebhookEvent: {
         type: 'string',
         enum: ['item.created', 'item.status_changed', 'item.assigned', 'item.commented', 'item.deleted'],
@@ -104,6 +116,7 @@ const spec = {
             type: 'object',
             properties: {
               projectIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+              projectRoles: { type: 'array', items: { $ref: '#/components/schemas/UserProjectRole' } },
             },
           },
         ],
@@ -996,7 +1009,7 @@ const spec = {
       post: {
         tags: ['Users'],
         summary: 'Создать пользователя',
-        description: 'Создаёт нового пользователя с назначением на проекты. Roles: admin.',
+        description: 'Создаёт нового пользователя с назначением на проекты. Roles: system admin или project owner для своих проектов. projectIds поддерживается как legacy shorthand.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1011,6 +1024,7 @@ const spec = {
                   name: { type: 'string', minLength: 1, maxLength: 100 },
                   role: { $ref: '#/components/schemas/UserRole' },
                   projectIds: { type: 'array', items: { type: 'string', format: 'uuid' }, default: [] },
+                  projectRoles: { type: 'array', items: { $ref: '#/components/schemas/UserProjectRole' } },
                 },
               },
             },
@@ -1021,7 +1035,7 @@ const spec = {
             description: 'Пользователь создан',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/UserWithProjects' } } } } },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           409: { description: 'Email уже существует', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -1030,7 +1044,7 @@ const spec = {
       post: {
         tags: ['Users'],
         summary: 'Список пользователей',
-        description: 'Пагинированный список пользователей, опционально фильтрация по проекту. Roles: admin.',
+        description: 'Пагинированный список пользователей, опционально фильтрация по проекту. System admin видит всех; project owner видит пользователей управляемых проектов.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1039,7 +1053,7 @@ const spec = {
               schema: {
                 type: 'object',
                 properties: {
-                  projectId: { type: 'string', format: 'uuid', description: 'Фильтр по проекту (включает admin-ов)' },
+                  projectId: { type: 'string', format: 'uuid', description: 'Фильтр по проекту' },
                   page: { type: 'integer', minimum: 1, default: 1 },
                   perPage: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
                 },
@@ -1067,7 +1081,7 @@ const spec = {
               },
             },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -1075,7 +1089,7 @@ const spec = {
       post: {
         tags: ['Users'],
         summary: 'Получить пользователя',
-        description: 'Возвращает данные пользователя с назначенными проектами. Roles: admin.',
+        description: 'Возвращает данные пользователя с назначенными проектами. System admin видит всех; project owner видит пользователей управляемых проектов.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1096,7 +1110,7 @@ const spec = {
             description: 'Данные пользователя',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/UserWithProjects' } } } } },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Пользователь не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
@@ -1105,7 +1119,7 @@ const spec = {
       post: {
         tags: ['Users'],
         summary: 'Обновить пользователя',
-        description: 'Обновляет поля пользователя и/или привязку к проектам. Roles: admin.',
+        description: 'Обновляет поля пользователя и/или привязку к проектам. System admin может менять системные поля; project owner может менять только роли в управляемых проектах.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -1120,6 +1134,7 @@ const spec = {
                   role: { $ref: '#/components/schemas/UserRole' },
                   isActive: { type: 'boolean' },
                   projectIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+                  projectRoles: { type: 'array', items: { $ref: '#/components/schemas/UserProjectRole' } },
                   password: { type: 'string', minLength: 8, maxLength: 128, description: 'Must contain lowercase, uppercase letter and digit' },
                 },
               },
@@ -1131,7 +1146,7 @@ const spec = {
             description: 'Пользователь обновлён',
             content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/UserWithProjects' } } } } },
           },
-          403: { description: 'Только admin', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           404: { description: 'Пользователь не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },

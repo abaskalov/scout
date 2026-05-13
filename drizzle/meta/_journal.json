@@ -15,6 +15,13 @@
       "when": 1778586624251,
       "tag": "0001_green_maggott",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1778601624864,
+      "tag": "0002_graceful_whiplash",
+      "breakpoints": true
     }
   ]
 }

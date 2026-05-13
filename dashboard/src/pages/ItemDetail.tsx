@@ -4,7 +4,7 @@ import { Fancybox } from '@fancyapps/ui';
 import '@fancyapps/ui/dist/fancybox/fancybox.css';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/date';
-import { canManageItemLinks, canManageItemWorkflow, isAdmin, storageUrl } from '../lib/auth';
+import { isAdmin, storageUrl } from '../lib/auth';
 import { useSSE, type SSEEventType } from '../hooks/useSSE';
 import { useTranslation } from '../i18n';
 import StatusBadge from '../components/StatusBadge';
@@ -55,6 +55,19 @@ interface ItemData {
   updatedAt: string;
   notes: Note[];
   relatedItems: RelatedItem[];
+  permissions: ItemPermissions;
+}
+
+interface ItemPermissions {
+  canClaim: boolean;
+  canUpdateStatus: boolean;
+  canResolve: boolean;
+  canCancel: boolean;
+  canReopen: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+  canComment: boolean;
+  canLinkItems: boolean;
 }
 
 interface RelatedItem {
@@ -115,8 +128,6 @@ export default function ItemDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const admin = isAdmin();
-  const canLinkItems = canManageItemLinks();
-  const canManageWorkflow = canManageItemWorkflow();
   const { t, locale } = useTranslation();
   const [item, setItem] = useState<ItemData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -513,7 +524,7 @@ export default function ItemDetail() {
                 <div className="text-sm md:text-base text-gray-800 break-words whitespace-pre-line leading-relaxed">
                   {item.message}
                 </div>
-                {admin && !isTerminal && (
+                {item.permissions.canUpdate && !isTerminal && (
                   <button
                     onClick={startEditing}
                     className="shrink-0 text-xs text-gray-400 hover:text-gray-600"
@@ -531,16 +542,18 @@ export default function ItemDetail() {
 
           {/* Action buttons — full-width stacked on mobile, inline on desktop */}
           <div className="flex flex-col gap-2 md:flex-row md:flex-shrink-0 md:flex-wrap">
-            {item.status === 'new' && canManageWorkflow && (
+            {item.status === 'new' && (item.permissions.canClaim || item.permissions.canCancel) && (
               <>
-                <button
-                  onClick={() => handleAction('claim')}
-                  disabled={actionLoading}
-                  className="w-full md:w-auto rounded-md bg-blue-600 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {t('items.detail.actions.claim')}
-                </button>
-                {admin && (
+                {item.permissions.canClaim && (
+                  <button
+                    onClick={() => handleAction('claim')}
+                    disabled={actionLoading}
+                    className="w-full md:w-auto rounded-md bg-blue-600 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {t('items.detail.actions.claim')}
+                  </button>
+                )}
+                {item.permissions.canCancel && (
                   <button
                     onClick={() => handleAction('cancel')}
                     disabled={actionLoading}
@@ -551,7 +564,7 @@ export default function ItemDetail() {
                 )}
               </>
             )}
-            {item.status === 'in_progress' && canManageWorkflow && (
+            {item.status === 'in_progress' && item.permissions.canUpdateStatus && (
               <>
                 <button
                   onClick={() =>
@@ -569,7 +582,7 @@ export default function ItemDetail() {
                 >
                   {t('items.detail.actions.done')}
                 </button>
-                {admin && (
+                {item.permissions.canCancel && (
                   <button
                     onClick={() => handleAction('cancel')}
                     disabled={actionLoading}
@@ -580,7 +593,7 @@ export default function ItemDetail() {
                 )}
               </>
             )}
-            {item.status === 'review' && canManageWorkflow && (
+            {item.status === 'review' && item.permissions.canUpdateStatus && (
               <>
                 <button
                   onClick={() =>
@@ -600,8 +613,7 @@ export default function ItemDetail() {
                 </button>
               </>
             )}
-            {/* Reopen button for done/cancelled — admin only */}
-            {isTerminal && admin && (
+            {isTerminal && item.permissions.canReopen && (
               <button
                 onClick={handleReopen}
                 disabled={actionLoading}
@@ -610,8 +622,7 @@ export default function ItemDetail() {
                 {t('items.detail.actions.reopen')}
               </button>
             )}
-            {/* Delete button — admin only */}
-            {admin && (
+            {item.permissions.canDelete && (
               <button
                 onClick={handleDelete}
                 disabled={actionLoading}
@@ -637,8 +648,8 @@ export default function ItemDetail() {
         <InfoRow label={t('items.detail.elementInfo.element')} value={item.elementText} />
         <InfoRow label={t('items.detail.elementInfo.resolution')} value={viewportStr} />
         <InfoRow label={t('items.detail.elementInfo.author')} value={item.reporterName} />
-        {/* Assignee — admin gets a dropdown, others see static text */}
-        {admin && teamUsers.length > 0 ? (
+        {/* Assignee — project triagers can assign, others see static text */}
+        {item.permissions.canUpdate && teamUsers.length > 0 ? (
           <div>
             <dt className="text-xs font-medium text-gray-500">{t('items.detail.elementInfo.assignee')}</dt>
             <dd className="mt-0.5">
@@ -778,7 +789,7 @@ export default function ItemDetail() {
                       {link.item.message}
                     </div>
                   </button>
-                  {canLinkItems && (
+                  {item.permissions.canLinkItems && (
                     <button
                       type="button"
                       onClick={() => handleUnlinkItem(link.id)}
@@ -794,7 +805,7 @@ export default function ItemDetail() {
           </div>
         )}
 
-        {canLinkItems && (
+        {item.permissions.canLinkItems && (
           <form onSubmit={handleLinkItem} className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto] md:items-center">
             <input
               type="text"
@@ -869,23 +880,24 @@ export default function ItemDetail() {
           )}
         </div>
 
-        {/* Add note form — full width */}
-        <form onSubmit={handleAddNote} className="mt-4">
-          <textarea
-            value={noteContent}
-            onChange={(e) => setNoteContent(e.target.value)}
-            placeholder={t('items.detail.notes.placeholder')}
-            rows={3}
-            className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-          />
-          <button
-            type="submit"
-            disabled={noteSaving || !noteContent.trim()}
-            className="mt-2 w-full md:w-auto rounded-md bg-gray-900 px-4 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-             {noteSaving ? t('items.detail.notes.sending') : t('items.detail.notes.send')}
-          </button>
-        </form>
+        {item.permissions.canComment && (
+          <form onSubmit={handleAddNote} className="mt-4">
+            <textarea
+              value={noteContent}
+              onChange={(e) => setNoteContent(e.target.value)}
+              placeholder={t('items.detail.notes.placeholder')}
+              rows={3}
+              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+            />
+            <button
+              type="submit"
+              disabled={noteSaving || !noteContent.trim()}
+              className="mt-2 w-full md:w-auto rounded-md bg-gray-900 px-4 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {noteSaving ? t('items.detail.notes.sending') : t('items.detail.notes.send')}
+            </button>
+          </form>
+        )}
       </div>
 
       {/* Resolve modal — full screen on mobile, centered on desktop */}

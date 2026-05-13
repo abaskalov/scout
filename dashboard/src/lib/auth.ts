@@ -1,10 +1,11 @@
 import { api } from './api';
 
 export interface User {
-  id: number;
+  id: string;
   email: string;
   name: string;
   role: 'admin' | 'member' | 'agent';
+  projectRoles?: Array<{ projectId: string; role: 'owner' | 'manager' | 'developer' | 'reporter' | 'viewer' }>;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -40,14 +41,9 @@ export function isAdmin(): boolean {
   return user?.role === 'admin';
 }
 
-export function canManageItemLinks(): boolean {
+export function hasOwnedProjects(): boolean {
   const user = getUser();
-  return user?.role === 'admin' || user?.role === 'agent';
-}
-
-export function canManageItemWorkflow(): boolean {
-  const user = getUser();
-  return user?.role === 'admin' || user?.role === 'agent';
+  return user?.role === 'admin' || user?.projectRoles?.some((project) => project.role === 'owner') === true;
 }
 
 export async function login(

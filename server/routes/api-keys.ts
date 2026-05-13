@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import { db } from '../db/client.js';
 import { apiKeys, projects } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { requireRole } from '../middleware/permissions.js';
+import { requireProjectPermission } from '../middleware/permissions.js';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { NotFoundError } from '../lib/errors.js';
 import { createApiKeySchema, listApiKeysSchema, revokeApiKeySchema } from '../lib/schemas.js';
@@ -13,7 +13,6 @@ import { logAudit, getClientIp } from '../services/audit.js';
 
 export const apiKeyRoutes = new Hono()
   .use('/*', authMiddleware)
-  .use('/*', requireRole('admin'))
 
   // CREATE — generates key, returns ONCE
   .post('/create',
@@ -26,6 +25,7 @@ export const apiKeyRoutes = new Hono()
       if (!project) throw new NotFoundError('Project', 'PROJECT_NOT_FOUND');
 
       const user = c.get('user');
+      requireProjectPermission(user.id, user.role, projectId, 'manage_integrations');
       const id = randomUUID();
 
       // Generate key: sk_live_ + 32 random hex chars
@@ -69,6 +69,8 @@ export const apiKeyRoutes = new Hono()
     zValidator('json', listApiKeysSchema),
     async (c) => {
       const { projectId } = c.req.valid('json');
+      const user = c.get('user');
+      requireProjectPermission(user.id, user.role, projectId, 'manage_integrations');
 
       const keys = db.select({
         id: apiKeys.id,
@@ -95,13 +97,14 @@ export const apiKeyRoutes = new Hono()
 
       const existing = db.select().from(apiKeys).where(eq(apiKeys.id, id)).get();
       if (!existing) throw new NotFoundError('API Key', 'API_KEY_NOT_FOUND');
+      const user = c.get('user');
+      requireProjectPermission(user.id, user.role, existing.projectId, 'manage_integrations');
 
       db.update(apiKeys)
         .set({ isActive: false })
         .where(eq(apiKeys.id, id))
         .run();
 
-      const user = c.get('user');
       logAudit({
         userId: user.id,
         action: 'revoke_api_key',

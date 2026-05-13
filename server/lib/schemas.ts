@@ -42,13 +42,28 @@ const passwordSchema = z.string().min(8).max(128).regex(
   'Пароль должен содержать строчную, заглавную букву и цифру',
 );
 
+export const projectRoleSchema = z.enum(['owner', 'manager', 'developer', 'reporter', 'viewer']);
+
+export const userProjectRoleSchema = z.object({
+  projectId: uuidSchema,
+  role: projectRoleSchema,
+});
+
+function projectIdsToProjectRoles(projectIds: string[] | undefined, fallbackRole: z.infer<typeof projectRoleSchema>) {
+  return projectIds?.map((projectId) => ({ projectId, role: fallbackRole }));
+}
+
 export const createUserSchema = z.object({
   email: z.string().email(),
   password: passwordSchema,
   name: z.string().min(1).max(100),
   role: z.enum(['admin', 'member', 'agent']),
   projectIds: z.array(uuidSchema).default([]),
-});
+  projectRoles: z.array(userProjectRoleSchema).optional(),
+}).transform((data) => ({
+  ...data,
+  projectRoles: data.projectRoles ?? projectIdsToProjectRoles(data.projectIds, data.role === 'agent' ? 'developer' : 'reporter') ?? [],
+}));
 
 export const updateUserSchema = z.object({
   id: uuidSchema,
@@ -56,8 +71,12 @@ export const updateUserSchema = z.object({
   role: z.enum(['admin', 'member', 'agent']).optional(),
   isActive: z.boolean().optional(),
   projectIds: z.array(uuidSchema).optional(),
+  projectRoles: z.array(userProjectRoleSchema).optional(),
   password: passwordSchema.optional(),
-});
+}).transform((data) => ({
+  ...data,
+  projectRoles: data.projectRoles ?? projectIdsToProjectRoles(data.projectIds, data.role === 'agent' ? 'developer' : 'reporter'),
+}));
 
 export const getUserSchema = z.object({ id: uuidSchema });
 export const deleteUserSchema = z.object({ id: uuidSchema });

@@ -4,7 +4,7 @@ import { eq, count, desc, inArray } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { projects, scoutItems, pivotUsersProjects } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { requireRole, checkProjectAccess } from '../middleware/permissions.js';
+import { requireRole, checkProjectAccess, requireProjectPermission } from '../middleware/permissions.js';
 import { randomUUID } from 'node:crypto';
 import { NotFoundError, ConflictError, ValidationError, ForbiddenError } from '../lib/errors.js';
 import {
@@ -116,15 +116,16 @@ export const projectRoutes = new Hono()
       return c.json({ data: project });
     })
 
-  // UPDATE — admin only
+  // UPDATE — system admin or project owner
   .post('/update',
-    requireRole('admin'),
     zValidator('json', updateProjectSchema),
     async (c) => {
       const { id, name, allowedOrigins, autofixEnabled, isActive } = c.req.valid('json');
+      const user = c.get('user');
 
       const existing = db.select().from(projects).where(eq(projects.id, id)).get();
       if (!existing) throw new NotFoundError('Project', 'PROJECT_NOT_FOUND');
+      requireProjectPermission(user.id, user.role, id, 'manage_project');
 
       const updateData: Record<string, unknown> = {
         updatedAt: new Date().toISOString(),
@@ -136,7 +137,6 @@ export const projectRoutes = new Hono()
 
       db.update(projects).set(updateData).where(eq(projects.id, id)).run();
       const project = db.select().from(projects).where(eq(projects.id, id)).get()!;
-      const user = c.get('user');
       logAudit({ userId: user.id, action: 'update_project', entityType: 'project', entityId: id, details: { name, autofixEnabled, isActive }, ipAddress: getClientIp(c) });
       return c.json({ data: project });
     })

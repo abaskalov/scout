@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
-import { getUser, isAdmin, logout } from '../lib/auth';
+import { getUser, hasOwnedProjects, isAdmin, logout } from '../lib/auth';
 import { api } from '../lib/api';
 import { useSSE, type SSEEventType } from '../hooks/useSSE';
 import { useTranslation, LOCALE_LABELS, type Locale } from '../i18n';
@@ -8,6 +8,7 @@ import { useTranslation, LOCALE_LABELS, type Locale } from '../i18n';
 export default function Layout() {
   const user = getUser();
   const admin = isAdmin();
+  const canManageProjects = hasOwnedProjects();
   const [newCount, setNewCount] = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const location = useLocation();
@@ -118,7 +119,7 @@ export default function Layout() {
               </span>
             )}
           </NavLink>
-          {admin && (
+          {canManageProjects && (
             <>
               <NavLink to="/projects" className={linkClass}>
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -243,7 +244,7 @@ export default function Layout() {
           </div>
           {t('nav.items')}
         </NavLink>
-        {admin && (
+          {canManageProjects && (
           <>
             <NavLink to="/projects" className={bottomNavLinkClass}>
               <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

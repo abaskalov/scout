@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
+import { isAdmin } from '../lib/auth';
 import { useTranslation } from '../i18n';
 import Pagination from '../components/Pagination';
 
@@ -10,7 +11,15 @@ interface UserItem {
   role: 'admin' | 'member' | 'agent';
   isActive: boolean;
   projectIds?: string[];
+  projectRoles?: ProjectRoleAssignment[];
   createdAt: string;
+}
+
+type ProjectRole = 'owner' | 'manager' | 'developer' | 'reporter' | 'viewer';
+
+interface ProjectRoleAssignment {
+  projectId: string;
+  role: ProjectRole;
 }
 
 interface Project {
@@ -32,10 +41,12 @@ const emptyForm = {
   role: 'member' as 'admin' | 'member' | 'agent',
   isActive: true,
   projectIds: [] as string[],
+  projectRoles: [] as ProjectRoleAssignment[],
 };
 
 export default function Users() {
   const { t } = useTranslation();
+  const admin = isAdmin();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [pagination, setPagination] = useState<PaginationData>({
@@ -99,6 +110,7 @@ export default function Users() {
       role: u.role,
       isActive: u.isActive,
       projectIds: u.projectIds ?? [],
+      projectRoles: u.projectRoles ?? (u.projectIds ?? []).map((projectId) => ({ projectId, role: u.role === 'agent' ? 'developer' : 'reporter' })),
     });
     setError('');
     setShowModal(true);
@@ -115,7 +127,7 @@ export default function Users() {
           name: form.name,
           role: form.role,
           isActive: form.isActive,
-          projectIds: form.projectIds,
+          projectRoles: form.projectRoles,
         };
         if (form.password) {
           body.password = form.password;
@@ -127,7 +139,7 @@ export default function Users() {
           password: form.password,
           name: form.name,
           role: form.role,
-          projectIds: form.projectIds,
+          projectRoles: form.projectRoles,
         });
       }
       setShowModal(false);
@@ -155,6 +167,18 @@ export default function Users() {
       projectIds: f.projectIds.includes(pid)
         ? f.projectIds.filter((x) => x !== pid)
         : [...f.projectIds, pid],
+      projectRoles: f.projectIds.includes(pid)
+        ? f.projectRoles.filter((x) => x.projectId !== pid)
+        : [...f.projectRoles, { projectId: pid, role: f.role === 'agent' ? 'developer' : 'reporter' }],
+    }));
+  }
+
+  function setProjectRole(projectId: string, role: ProjectRole) {
+    setForm((f) => ({
+      ...f,
+      projectRoles: f.projectRoles.map((projectRole) => (
+        projectRole.projectId === projectId ? { ...projectRole, role } : projectRole
+      )),
     }));
   }
 
@@ -168,6 +192,14 @@ export default function Users() {
     admin: 'users.roles.admin',
     member: 'users.roles.member',
     agent: 'users.roles.agent',
+  };
+
+  const projectRoleLabels: Record<ProjectRole, string> = {
+    owner: t('users.projectRoles.owner'),
+    manager: t('users.projectRoles.manager'),
+    developer: t('users.projectRoles.developer'),
+    reporter: t('users.projectRoles.reporter'),
+    viewer: t('users.projectRoles.viewer'),
   };
 
   return (
@@ -241,12 +273,14 @@ export default function Users() {
                     >
                       {t('common.edit')}
                     </button>
-                    <button
-                      onClick={() => handleDelete(u.id)}
-                      className="ml-3 text-sm text-red-600 hover:underline"
-                    >
-                      {t('common.delete')}
-                    </button>
+                    {admin && (
+                      <button
+                        onClick={() => handleDelete(u.id)}
+                        className="ml-3 text-sm text-red-600 hover:underline"
+                      >
+                        {t('common.delete')}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))
@@ -294,12 +328,14 @@ export default function Users() {
                 >
                   {t('common.edit')}
                 </button>
-                <button
-                  onClick={() => handleDelete(u.id)}
-                  className="text-xs text-red-600 hover:underline"
-                >
-                  {t('common.delete')}
-                </button>
+                {admin && (
+                  <button
+                    onClick={() => handleDelete(u.id)}
+                    className="text-xs text-red-600 hover:underline"
+                  >
+                    {t('common.delete')}
+                  </button>
+                )}
               </div>
             </div>
           ))
@@ -352,20 +388,22 @@ export default function Users() {
               />
             </label>
 
-            <label className="mt-3 block">
-              <span className="text-sm font-medium text-gray-700">
-                {t('users.form.password')}{editingId ? ` (${t('users.form.passwordHint')})` : ''}
-              </span>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                required={!editingId}
-                minLength={6}
-                placeholder={t('users.passwordMinLength')}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              />
-            </label>
+            {admin || !editingId ? (
+              <label className="mt-3 block">
+                <span className="text-sm font-medium text-gray-700">
+                  {t('users.form.password')}{editingId ? ` (${t('users.form.passwordHint')})` : ''}
+                </span>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  required={!editingId}
+                  minLength={8}
+                  placeholder={t('users.passwordMinLength')}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                />
+              </label>
+            ) : null}
 
             <label className="mt-3 block">
               <span className="text-sm font-medium text-gray-700">{t('users.form.role')}</span>
@@ -377,15 +415,16 @@ export default function Users() {
                     role: e.target.value as 'admin' | 'member' | 'agent',
                   })
                 }
+                disabled={!admin && !!editingId}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
               >
-                <option value="admin">{t('users.roles.admin')}</option>
+                {admin && <option value="admin">{t('users.roles.admin')}</option>}
                 <option value="member">{t('users.roles.member')}</option>
                 <option value="agent">{t('users.roles.agent')}</option>
               </select>
             </label>
 
-            {editingId && (
+            {editingId && admin && (
               <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
                 <input
                   type="checkbox"
@@ -405,20 +444,34 @@ export default function Users() {
                   {t('users.form.projects')}
                 </span>
                 <div className="mt-1 max-h-36 space-y-1 overflow-y-auto rounded-md border border-gray-200 p-2">
-                  {projects.map((p) => (
-                    <label
-                      key={p.id}
-                      className="flex items-center gap-2 text-sm text-gray-700"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form.projectIds.includes(p.id)}
-                        onChange={() => toggleProject(p.id)}
-                        className="rounded border-gray-300"
-                      />
-                      {p.name}
-                    </label>
-                  ))}
+                  {projects.map((p) => {
+                    const enabled = form.projectIds.includes(p.id);
+                    const projectRole = form.projectRoles.find((role) => role.projectId === p.id)?.role ?? 'reporter';
+                    return (
+                      <div key={p.id} className="flex items-center gap-2 text-sm text-gray-700">
+                        <label className="flex min-w-0 flex-1 items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={() => toggleProject(p.id)}
+                            className="rounded border-gray-300"
+                          />
+                          <span className="truncate">{p.name}</span>
+                        </label>
+                        {enabled && (
+                          <select
+                            value={projectRole}
+                            onChange={(e) => setProjectRole(p.id, e.target.value as ProjectRole)}
+                            className="rounded border border-gray-300 px-2 py-1 text-xs"
+                          >
+                            {Object.entries(projectRoleLabels).map(([value, label]) => (
+                              <option key={value} value={value}>{label}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

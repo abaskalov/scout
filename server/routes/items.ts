@@ -4,7 +4,7 @@ import { eq, and, desc, count, like, or } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { scoutItems, scoutItemNotes, scoutItemLinks, projects, users, type ScoutItemLink } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { requireRole, checkProjectAccess } from '../middleware/permissions.js';
+import { checkProjectAccess, hasProjectPermission, requireProjectPermission } from '../middleware/permissions.js';
 import { randomUUID } from 'node:crypto';
 import { NotFoundError, ForbiddenError } from '../lib/errors.js';
 import {
@@ -35,6 +35,24 @@ function enrichItem(item: typeof scoutItems.$inferSelect) {
     ...item,
     reporterName: getUserName(item.reporterId),
     assigneeName: getUserName(item.assigneeId),
+  };
+}
+
+function getItemPermissions(item: typeof scoutItems.$inferSelect, user: typeof users.$inferSelect) {
+  const canWorkflow = hasProjectPermission(user.id, user.role, item.projectId, 'workflow');
+  const canTriage = hasProjectPermission(user.id, user.role, item.projectId, 'triage');
+  const canComment = hasProjectPermission(user.id, user.role, item.projectId, 'comment');
+  const canCancelOwnNew = item.status === 'new' && item.reporterId === user.id && canComment;
+  return {
+    canClaim: item.status === 'new' && canWorkflow,
+    canUpdateStatus: canWorkflow,
+    canResolve: canWorkflow,
+    canCancel: canTriage || canCancelOwnNew,
+    canReopen: canTriage,
+    canUpdate: canTriage,
+    canDelete: canTriage,
+    canComment,
+    canLinkItems: canWorkflow,
   };
 }
 
@@ -70,9 +88,8 @@ function normalizeLinkPair(sourceItemId: string, targetItemId: string, type: Sco
 export const itemRoutes = new Hono()
   .use('/*', authMiddleware)
 
-  // CREATE — member, admin
+  // CREATE — project reporter/developer/manager/owner, or system admin
   .post('/create',
-    requireRole('member', 'admin'),
     zValidator('json', createItemSchema),
     async (c) => {
       const data = c.req.valid('json');
@@ -82,10 +99,7 @@ export const itemRoutes = new Hono()
       const project = db.select().from(projects).where(eq(projects.id, data.projectId)).get();
       if (!project) throw new NotFoundError('Project', 'PROJECT_NOT_FOUND');
 
-      // Check project access
-      if (!checkProjectAccess(user.id, user.role, data.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
-      }
+      requireProjectPermission(user.id, user.role, data.projectId, 'create_item');
 
       const item = createItem({ ...data, reporterId: user.id });
       logAudit({ userId: user.id, action: 'create_item', entityType: 'item', entityId: item.id, details: { projectId: data.projectId, priority: data.priority }, ipAddress: getClientIp(c) });
@@ -159,7 +173,7 @@ export const itemRoutes = new Hono()
         userName: getUserName(n.userId),
       }));
 
-      return c.json({ data: { ...enrichItem(item), notes: enrichedNotes, relatedItems: getRelatedItems(id) } });
+      return c.json({ data: { ...enrichItem(item), notes: enrichedNotes, relatedItems: getRelatedItems(id), permissions: getItemPermissions(item, user) } });
     })
 
   // COUNT — all roles
@@ -186,9 +200,8 @@ export const itemRoutes = new Hono()
       return c.json({ data: { counts } });
     })
 
-  // CLAIM — agent, admin
+  // CLAIM — project developer/manager/owner, or system admin
   .post('/claim',
-    requireRole('agent', 'admin'),
     zValidator('json', claimItemSchema),
     async (c) => {
       const { id } = c.req.valid('json');
@@ -197,9 +210,7 @@ export const itemRoutes = new Hono()
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
       if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
-      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
-      }
+      requireProjectPermission(user.id, user.role, existing.projectId, 'workflow');
 
       const item = claimItem(id, user);
       logAudit({ userId: user.id, action: 'claim_item', entityType: 'item', entityId: id, ipAddress: getClientIp(c) });
@@ -208,9 +219,8 @@ export const itemRoutes = new Hono()
       return c.json({ data: item });
     })
 
-  // RESOLVE — agent, admin
+  // RESOLVE — project developer/manager/owner, or system admin
   .post('/resolve',
-    requireRole('agent', 'admin'),
     zValidator('json', resolveItemSchema),
     async (c) => {
       const { id, resolutionNote, branchName, mrUrl } = c.req.valid('json');
@@ -219,9 +229,7 @@ export const itemRoutes = new Hono()
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
       if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
-      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
-      }
+      requireProjectPermission(user.id, user.role, existing.projectId, 'workflow');
 
       const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'new';
       const item = updateItemStatus(id, 'done', user, {
@@ -233,19 +241,19 @@ export const itemRoutes = new Hono()
       return c.json({ data: item });
     })
 
-  // CANCEL — admin only
+  // CANCEL — project manager/owner/system admin, or reporter cancelling own new item
   .post('/cancel',
-    requireRole('admin'),
     zValidator('json', cancelItemSchema),
     async (c) => {
       const { id } = c.req.valid('json');
       const user = c.get('user');
 
       // Check project access via item's projectId
-      const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
+      const existing = db.select().from(scoutItems).where(eq(scoutItems.id, id)).get();
       if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
-      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
+      const canCancelOwnNew = existing.status === 'new' && existing.reporterId === user.id && hasProjectPermission(user.id, user.role, existing.projectId, 'comment');
+      if (!canCancelOwnNew) {
+        requireProjectPermission(user.id, user.role, existing.projectId, 'triage');
       }
 
       const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'new';
@@ -256,9 +264,8 @@ export const itemRoutes = new Hono()
       return c.json({ data: item });
     })
 
-  // UPDATE STATUS — agent, admin (generic)
+  // UPDATE STATUS — project developer/manager/owner, or system admin
   .post('/update-status',
-    requireRole('agent', 'admin'),
     zValidator('json', updateItemStatusSchema),
     async (c) => {
       const { id, status, branchName, mrUrl, attemptCount } = c.req.valid('json');
@@ -267,9 +274,7 @@ export const itemRoutes = new Hono()
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
       if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
-      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
-      }
+      requireProjectPermission(user.id, user.role, existing.projectId, 'workflow');
 
       const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'new';
       const item = updateItemStatus(id, status, user, {
@@ -281,9 +286,8 @@ export const itemRoutes = new Hono()
       return c.json({ data: item });
     })
 
-  // DELETE — admin only
+  // DELETE — project manager/owner, or system admin
   .post('/delete',
-    requireRole('admin'),
     zValidator('json', deleteItemSchema),
     async (c) => {
       const { id } = c.req.valid('json');
@@ -292,9 +296,7 @@ export const itemRoutes = new Hono()
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
       if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
-      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
-      }
+      requireProjectPermission(user.id, user.role, existing.projectId, 'triage');
 
       deleteItem(id);
       logAudit({ userId: user.id, action: 'delete_item', entityType: 'item', entityId: id, ipAddress: getClientIp(c) });
@@ -303,9 +305,8 @@ export const itemRoutes = new Hono()
       return c.json({ data: { ok: true } });
     })
 
-  // UPDATE — admin only
+  // UPDATE — project manager/owner, or system admin
   .post('/update',
-    requireRole('admin'),
     zValidator('json', updateItemSchema),
     async (c) => {
       const data = c.req.valid('json');
@@ -314,9 +315,7 @@ export const itemRoutes = new Hono()
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, data.id)).get();
       if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
-      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
-      }
+      requireProjectPermission(user.id, user.role, existing.projectId, 'triage');
 
       const item = updateItem(data.id, {
         message: data.message,
@@ -329,9 +328,8 @@ export const itemRoutes = new Hono()
       return c.json({ data: enrichItem(item) });
     })
 
-  // REOPEN — admin only
+  // REOPEN — project manager/owner, or system admin
   .post('/reopen',
-    requireRole('admin'),
     zValidator('json', reopenItemSchema),
     async (c) => {
       const { id } = c.req.valid('json');
@@ -340,9 +338,7 @@ export const itemRoutes = new Hono()
       // Check project access via item's projectId
       const existing = db.select({ projectId: scoutItems.projectId }).from(scoutItems).where(eq(scoutItems.id, id)).get();
       if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
-      if (!checkProjectAccess(user.id, user.role, existing.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
-      }
+      requireProjectPermission(user.id, user.role, existing.projectId, 'triage');
 
       const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'done';
       const item = reopenItem(id, user);
@@ -363,10 +359,7 @@ export const itemRoutes = new Hono()
       const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
       if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
 
-      // Check project access via item's projectId
-      if (!checkProjectAccess(user.id, user.role, item.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
-      }
+      requireProjectPermission(user.id, user.role, item.projectId, 'comment');
 
       const id = randomUUID();
       db.insert(scoutItemNotes).values({
@@ -379,9 +372,8 @@ export const itemRoutes = new Hono()
       return c.json({ data: note }, 201);
     })
 
-  // LINK — agent, admin
+  // LINK — project developer/manager/owner, or system admin
   .post('/link',
-    requireRole('agent', 'admin'),
     zValidator('json', linkItemSchema),
     async (c) => {
       const data = c.req.valid('json');
@@ -397,9 +389,7 @@ export const itemRoutes = new Hono()
       if (source.projectId !== target.projectId) {
         return c.json({ error: 'Items must belong to the same project', code: 'VALIDATION_FAILED' }, 400);
       }
-      if (!checkProjectAccess(user.id, user.role, source.projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
-      }
+      requireProjectPermission(user.id, user.role, source.projectId, 'workflow');
 
       const normalized = normalizeLinkPair(data.sourceItemId, data.targetItemId, data.type);
       const existing = db.select().from(scoutItemLinks)
@@ -427,9 +417,8 @@ export const itemRoutes = new Hono()
       return c.json({ data: link }, 201);
     })
 
-  // UNLINK — agent, admin
+  // UNLINK — project developer/manager/owner, or system admin
   .post('/unlink',
-    requireRole('agent', 'admin'),
     zValidator('json', unlinkItemSchema),
     async (c) => {
       const { id } = c.req.valid('json');
@@ -442,9 +431,7 @@ export const itemRoutes = new Hono()
       const target = db.select().from(scoutItems).where(eq(scoutItems.id, link.targetItemId)).get();
       const projectId = source?.projectId ?? target?.projectId;
       if (!projectId) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
-      if (!checkProjectAccess(user.id, user.role, projectId)) {
-        throw new ForbiddenError('Нет доступа к этому проекту', 'NO_PROJECT_ACCESS');
-      }
+      requireProjectPermission(user.id, user.role, projectId, 'workflow');
 
       db.delete(scoutItemLinks).where(eq(scoutItemLinks.id, id)).run();
       logAudit({ userId: user.id, action: 'unlink_item', entityType: 'item', entityId: link.sourceItemId, details: { targetItemId: link.targetItemId, type: link.type }, ipAddress: getClientIp(c) });

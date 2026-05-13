@@ -65,10 +65,11 @@ const TABLE_SPECS: TableSpec[] = [
     createSql: `CREATE TABLE pivot_users_projects (
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'reporter',
       PRIMARY KEY (user_id, project_id)
     )`,
     indexSql: [],
-    copyColumns: ['user_id', 'project_id'],
+    copyColumns: ['user_id', 'project_id', 'role'],
     primaryKey: ['user_id', 'project_id'],
   },
   {
@@ -228,6 +229,10 @@ function getTableColumns(sqlite: DatabaseType, tableName: string): Array<{ name:
   return sqlite.prepare(`PRAGMA table_info(${quoteIdentifier(tableName)})`).all() as Array<{ name: string; pk: number }>;
 }
 
+function columnExists(sqlite: DatabaseType, tableName: string, columnName: string): boolean {
+  return getTableColumns(sqlite, tableName).some((column) => column.name === columnName);
+}
+
 function hasExactPrimaryKey(sqlite: DatabaseType, tableName: string, expected: string[]): boolean {
   const columns = getTableColumns(sqlite, tableName)
     .filter((column) => column.pk > 0)
@@ -324,7 +329,7 @@ function rebuildTable(sqlite: DatabaseType, spec: TableSpec): void {
   }
 }
 
-function getMigrationEntries(migrationsFolder: string): Array<{ when: number; hash: string }> {
+function getMigrationEntries(migrationsFolder: string): Array<{ tag: string; when: number; hash: string }> {
   const journalPath = path.join(migrationsFolder, 'meta', '_journal.json');
   if (!fs.existsSync(journalPath)) return [];
 
@@ -335,10 +340,22 @@ function getMigrationEntries(migrationsFolder: string): Array<{ when: number; ha
   return journal.entries.map((entry) => {
     const sql = fs.readFileSync(path.join(migrationsFolder, `${entry.tag}.sql`), 'utf8');
     return {
+      tag: entry.tag,
       when: entry.when,
       hash: crypto.createHash('sha256').update(sql).digest('hex'),
     };
   });
+}
+
+function migrationRecorded(sqlite: DatabaseType, hash: string): boolean {
+  const row = sqlite.prepare('SELECT COUNT(*) AS count FROM __drizzle_migrations WHERE hash = ?').get(hash) as { count: number };
+  return row.count > 0;
+}
+
+function adoptMigration(sqlite: DatabaseType, entry: { tag: string; when: number; hash: string }): void {
+  if (migrationRecorded(sqlite, entry.hash)) return;
+  sqlite.prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)').run(entry.hash, entry.when);
+  logger.info({ tag: entry.tag, appliedAt: entry.when }, 'Adopted existing SQLite schema change into drizzle migrations');
 }
 
 function ensureBaselineAdopted(sqlite: DatabaseType, migrationsFolder: string): void {
@@ -354,12 +371,20 @@ function ensureBaselineAdopted(sqlite: DatabaseType, migrationsFolder: string): 
     created_at numeric
   )`);
 
-  const appliedCount = (sqlite.prepare('SELECT COUNT(*) AS count FROM __drizzle_migrations').get() as { count: number }).count;
-  if (appliedCount > 0) return;
-
   const baseline = migrationEntries[0]!;
-  sqlite.prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)').run(baseline.hash, baseline.when);
-  logger.info({ appliedAt: baseline.when }, 'Adopted legacy SQLite schema into drizzle migrations baseline');
+  const appliedCount = (sqlite.prepare('SELECT COUNT(*) AS count FROM __drizzle_migrations').get() as { count: number }).count;
+  if (appliedCount === 0) {
+    adoptMigration(sqlite, baseline);
+  }
+
+  for (const entry of migrationEntries) {
+    if (entry.tag === '0001_green_maggott' && tableExists(sqlite, 'scout_item_links')) {
+      adoptMigration(sqlite, entry);
+    }
+    if (entry.tag === '0002_graceful_whiplash' && columnExists(sqlite, 'pivot_users_projects', 'role')) {
+      adoptMigration(sqlite, entry);
+    }
+  }
 }
 
 function ensureForeignKeysHealthy(sqlite: DatabaseType): void {
@@ -371,8 +396,15 @@ function ensureForeignKeysHealthy(sqlite: DatabaseType): void {
 
 export function ensureSqliteSchema(
   sqlite: DatabaseType,
-  options: { migrationsFolder?: string; adoptBaseline?: boolean } = {},
+  options: { migrationsFolder?: string; adoptBaseline?: boolean; adoptBaselineOnly?: boolean } = {},
 ): void {
+  if (options.adoptBaselineOnly) {
+    if (options.adoptBaseline && options.migrationsFolder) {
+      ensureBaselineAdopted(sqlite, options.migrationsFolder);
+    }
+    return;
+  }
+
   for (const spec of TABLE_SPECS) {
     const issues = getValidationIssues(sqlite, spec);
     if (issues.length === 0) continue;

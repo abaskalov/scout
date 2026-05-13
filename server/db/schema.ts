@@ -41,6 +41,9 @@ export const users = sqliteTable('users', {
 export const pivotUsersProjects = sqliteTable('pivot_users_projects', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  role: text('role', {
+    enum: ['owner', 'manager', 'developer', 'reporter', 'viewer'],
+  }).notNull().default('reporter'),
 }, (table) => [
   primaryKey({ columns: [table.userId, table.projectId] }),
 ]);
@@ -159,6 +162,7 @@ export type ApiKey = typeof apiKeys.$inferSelect;
 export type ItemStatus = NonNullable<ScoutItem['status']>;
 export type ItemPriority = NonNullable<ScoutItem['priority']>;
 export type UserRole = NonNullable<User['role']>;
+export type ProjectRole = NonNullable<typeof pivotUsersProjects.$inferSelect['role']>;
 
 export const WEBHOOK_EVENT_TYPES = [
   'item.created',

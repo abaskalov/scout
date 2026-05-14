@@ -46,7 +46,7 @@ Ask the user only for real blockers:
 
 ## Configuration
 
-Read Scout access from environment variables or an explicitly provided local credential file outside Git:
+Read Scout access from environment variables first. If required variables are missing, check the current workspace for a local `.env` file and source it inside the Scout command without printing secret values. This is the default for repos where `.env` is intentionally local and gitignored; do not ask the user for Scout credentials until both exported env vars and the local `.env` fallback have been checked.
 
 - `SCOUT_URL`: Scout base URL, for example `https://your-scout.example`.
 - `SCOUT_API_KEY`: project-scoped API key in `sk_live_*` format. Prefer a key created from Scout via `Projects` → target project → `Manage integrations` → `Create agent key`.
@@ -54,6 +54,16 @@ Read Scout access from environment variables or an explicitly provided local cre
 - `SCOUT_ITEM_ID`: Optional current item id.
 
 Agent keys should have only the scopes needed for manual issue work, such as reading items, adding notes, workflow/triage actions, related-item links, and reading storage evidence. Never commit Scout credentials, cookies, JWTs, API keys, `.env.local`, or generated credential files. Do not paste real secrets into documentation, PR bodies, issue text, or durable notes.
+
+Recommended shell prefix for Scout API calls when working from a repo root:
+
+```bash
+set -a
+[ ! -f ./.env ] || . ./.env
+set +a
+```
+
+Use that prefix only inside the command process. Do not echo `SCOUT_API_KEY`, tokens, cookies, or `.env` contents. It is fine to print `present`/`missing` for variable diagnostics.
 
 ## Intake
 
@@ -246,6 +256,9 @@ All API calls are `POST` JSON unless retrieving storage assets. Authenticate wit
 List projects:
 
 ```bash
+set -a
+[ ! -f ./.env ] || . ./.env
+set +a
 curl -fsS "$SCOUT_URL/api/projects/list" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
@@ -255,6 +268,9 @@ curl -fsS "$SCOUT_URL/api/projects/list" \
 List items for a project:
 
 ```bash
+set -a
+[ ! -f ./.env ] || . ./.env
+set +a
 curl -fsS "$SCOUT_URL/api/items/list" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
@@ -266,6 +282,9 @@ Use additional list calls for `in_progress` and `review` when checking for overl
 Get one item:
 
 ```bash
+set -a
+[ ! -f ./.env ] || . ./.env
+set +a
 curl -fsS "$SCOUT_URL/api/items/get" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
@@ -275,6 +294,9 @@ curl -fsS "$SCOUT_URL/api/items/get" \
 Claim item:
 
 ```bash
+set -a
+[ ! -f ./.env ] || . ./.env
+set +a
 curl -fsS "$SCOUT_URL/api/items/claim" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
@@ -284,6 +306,9 @@ curl -fsS "$SCOUT_URL/api/items/claim" \
 Add note:
 
 ```bash
+set -a
+[ ! -f ./.env ] || . ./.env
+set +a
 curl -fsS "$SCOUT_URL/api/items/add-note" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
@@ -293,6 +318,9 @@ curl -fsS "$SCOUT_URL/api/items/add-note" \
 Link related items:
 
 ```bash
+set -a
+[ ! -f ./.env ] || . ./.env
+set +a
 curl -fsS "$SCOUT_URL/api/items/link" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
@@ -302,6 +330,9 @@ curl -fsS "$SCOUT_URL/api/items/link" \
 Update status:
 
 ```bash
+set -a
+[ ! -f ./.env ] || . ./.env
+set +a
 curl -fsS "$SCOUT_URL/api/items/update-status" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \

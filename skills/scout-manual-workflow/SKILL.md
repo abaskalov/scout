@@ -160,6 +160,15 @@ For bugs, reproduce or collect the nearest practical evidence before fixing:
 
 If reproduction is impossible but the evidence is strong, say so in Scout and make the smallest evidence-backed fix.
 
+## User Journey Verification
+
+For user-visible Scout items, treat the user's reported journey as the acceptance path. Before presenting the item as ready or done, define and execute the shortest end-to-end path that matches the user's role, entry point, starting state, action sequence, navigation/redirects, and final visible outcome.
+
+1. Prefer browser/UI evidence for UI bugs: click, fill, upload, submit, navigate, and inspect the screen as the user would. API, curl, database, and network evidence can support diagnosis, but do not replace the visible flow unless browser verification is infeasible or unsafe.
+2. If the issue is about create, update, delete, search, filters, tabs, redirects, navigation, or browser state, verify the full lifecycle through the UI when feasible: starting state, mutation/action, automatic navigation or refresh behavior, and final screen without manual refreshes or workarounds.
+3. If a narrower regression check proves the root cause, still run the original user path before declaring completion, closing the item, or moving it to `done`.
+4. Record the exact path and result in Scout. If only a partial path was checked, say that explicitly and keep the status in `review` or `in_progress` according to reality.
+
 ## Large Browser Or Regression Items
 
 When a Scout item asks for broad browser coverage, route sweeps, role matrices, query/params matrices, or "check everything", treat the runner as production tooling, not as ad hoc clicking.
@@ -220,7 +229,7 @@ When the user explicitly asks to deploy and close verified work, handle the revi
 1. Deploy only through the repository's canonical deploy path and wait for deploy health checks to pass. If the canonical path fails, stop and report the failed run, command, or check; do not invent a manual fallback unless the user explicitly approves it for that incident.
 2. Discover all `review` items in scope. If the user says "all review tasks", inspect all review items for the relevant Scout project; otherwise limit to items linked to the deployed branch/commit/PR.
 3. For each review item, fetch the full item, notes, evidence, commit/branch/PR fields, related items, and acceptance hints before testing.
-4. Verify on staging, not local: use the deployed staging URL, staging API, browser checks for user-visible work, and targeted API/runtime checks for backend work.
+4. Verify on staging, not local: use the deployed staging URL, staging API, browser checks for user-visible work, and targeted API/runtime checks for backend work. For user-visible work, the staging browser check must cover the acceptance path from User Journey Verification; API/curl evidence is support only.
 5. Keep checks item-specific. Do not replace targeted staging verification with a noisy full sweep unless the item itself requires broad coverage.
 6. If staging verification passes, add a Russian staging note with environment, URL, commit/deploy SHA, exact checks, and result; then move the item to `done`.
 7. If staging verification fails, add a Russian failure note with repro steps, expected/actual behavior, console/network/API evidence, and suspected cause; move the item back to `in_progress` and fix it end-to-end.
@@ -324,7 +333,7 @@ Before handoff:
 2. Run repo-required checks from `AGENTS.md`, README, package scripts, or CI docs.
 3. Re-run checks after the final code change, not only before or during the fix.
 4. Inspect the final diff and confirm it is limited to the Scout item's scope.
-5. For frontend/user-visible changes, verify in a browser against the local app when feasible.
+5. For frontend/user-visible changes, verify in a browser against the local app when feasible, matching the reported user journey instead of only checking the inferred root cause.
 6. For backend/API changes, verify with tests and a targeted runtime/API check when feasible.
 7. For data/deploy changes, verify with fresh state evidence and safe backups when relevant.
 8. If a check cannot run, document why and what evidence was used instead.
@@ -336,7 +345,7 @@ Do not present the item as complete until all of these are true:
 1. The reported problem or requested improvement is addressed end-to-end, or a precise blocker/question is recorded in Scout.
 2. The final diff was reviewed for unrelated changes, secrets, debug code, broad rewrites, and stale TODOs.
 3. Fresh verification evidence exists after the final edit: commands, browser checks, API checks, or a documented reason why a check cannot run.
-4. Frontend, dashboard, widget, or other user-visible changes have browser verification when feasible.
+4. Frontend, dashboard, widget, or other user-visible changes have browser verification of the reported user journey or acceptance path when feasible; API/curl-only evidence is insufficient for UI bugs.
 5. A focused commit exists for completed code changes and references the Scout item, unless explicitly skipped with a documented reason.
 6. Scout has Russian notes covering start, root cause when relevant, completion or blocker, verification, commit/branch/PR, status change, and remaining risks.
 7. The Scout status reflects reality: `in_progress` while working or blocked on clarification, `review` only when committed and ready for deploy/staging verification, `done` only after acceptance or documented staging pass, and no silent "left for later" work.

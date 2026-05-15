@@ -124,6 +124,85 @@ interface AutoNote {
   params?: Record<string, string>;
 }
 
+const NOTE_SECTION_LABELS = [
+  'Итог',
+  'Как понял задачу',
+  'Причина и последствия',
+  'Причина',
+  'Root cause',
+  'Что изменилось',
+  'Решение',
+  'Сделано',
+  'Технические детали',
+  'Deployed images',
+  'Проверка доступности',
+  'Проверка API',
+  'Проверка UI',
+  'Проверка',
+  'Commit/ветка/PR',
+  'Статус и риски',
+  'Статус',
+  'Осталось',
+];
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeNoteContent(content: string): string {
+  let normalized = content.replace(/\r\n?/g, '\n').trim();
+  for (const label of NOTE_SECTION_LABELS) {
+    normalized = normalized.replace(
+      new RegExp(`\\s+(${escapeRegExp(label)}:)`, 'g'),
+      '\n\n$1',
+    );
+  }
+  return normalized.replace(/\n{3,}/g, '\n\n');
+}
+
+function renderInlineText(text: string) {
+  return text.split(/(`[^`]+`)/g).map((part, index) => {
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code key={index} className="rounded bg-gray-100 px-1 py-0.5 font-mono text-[0.85em] text-gray-700">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+}
+
+function renderPlainNoteContent(content: string) {
+  return normalizeNoteContent(content).split(/\n{2,}/).map((block, blockIndex) => {
+    const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
+    const bulletLines = lines
+      .map((line) => line.match(/^[-*•]\s+(.+)$/)?.[1])
+      .filter((line): line is string => Boolean(line));
+
+    if (bulletLines.length === lines.length && bulletLines.length > 0) {
+      return (
+        <ul key={blockIndex} className="list-disc space-y-1 pl-5">
+          {bulletLines.map((line, lineIndex) => (
+            <li key={lineIndex}>{renderInlineText(line)}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    return (
+      <p key={blockIndex}>
+        {lines.map((line, lineIndex) => (
+          <span key={lineIndex}>
+            {lineIndex > 0 && <br />}
+            {renderInlineText(line)}
+          </span>
+        ))}
+      </p>
+    );
+  });
+}
+
 /** Try to parse note content as structured JSON auto-note. */
 function parseAutoNote(content: string): AutoNote | null {
   try {
@@ -443,13 +522,13 @@ export default function ItemDetail() {
     }
   }
 
-  /** Render note content — auto-notes (JSON) get translated, plain text rendered as-is. */
-  function renderNoteContent(content: string): string {
+  /** Render note content — auto-notes (JSON) get translated, plain text gets readable spacing. */
+  function renderNoteContent(content: string) {
     const autoNote = parseAutoNote(content);
     if (autoNote) {
       return t(autoNote.key, autoNote.params);
     }
-    return content;
+    return renderPlainNoteContent(content);
   }
 
   const noteTypeLabels: Record<string, string> = {
@@ -963,9 +1042,9 @@ export default function ItemDetail() {
                   </span>
                   <span>{formatDate(note.createdAt, locale)}</span>
                 </div>
-                <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                <div className="space-y-3 text-sm leading-6 text-gray-800 break-words">
                   {renderNoteContent(note.content)}
-                </p>
+                </div>
               </div>
             ))
           )}

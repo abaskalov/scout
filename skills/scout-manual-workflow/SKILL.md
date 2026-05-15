@@ -240,7 +240,20 @@ Use Scout notes for durable, useful communication:
 - Handoff: link branch/commit/PR and give a plain-language narrative of the task interpretation, cause, consequences, solution approach, verification, and remaining risk.
 - Failure: explain why it cannot be completed and what evidence exists.
 
-Write Scout notes in Russian by default, unless the Scout item or project explicitly uses another language. Notes are for managers, reviewers, and future engineers: make them clear enough to understand what happened without reading the chat or code. For handoff and non-trivial findings, prefer a concise but developed narrative over terse status logs: how you understand the task, why the issue happened or why the change is needed, what it affects, how you solved it at the behavior/product/architecture level, how it was verified, what changed in status, and what remains. Avoid code-level detail unless it is necessary for reproducibility: no line-by-line diffs, helper/function walkthroughs, implementation trivia, noisy command transcripts, huge stack traces, private local paths unless necessary, secrets, speculative claims, or “still working” chatter.
+Write Scout notes in Russian by default, unless the Scout item or project explicitly uses another language. Notes are for managers, reviewers, and future engineers: make them clear enough to understand what happened without reading the chat or code. For handoff and non-trivial findings, prefer a concise but developed narrative over terse status logs.
+
+Make notes readable for a non-technical stakeholder first, then keep technical details as evidence. Use short paragraphs with blank lines between sections. Do not write one dense paragraph that mixes cause, implementation, commands, commits, and status. Start with the user/business meaning, then add the technical facts needed for review or reproducibility.
+
+Recommended note structure for substantial updates:
+
+1. Итог: one or two plain-language sentences about what changed and why it matters to a user or reviewer.
+2. Причина: plain-language cause and impact; mention technical root cause only after the symptom is clear.
+3. Что изменилось: behavior/product/system-level change, not a line-by-line code walkthrough.
+4. Технические детали: compact evidence such as services, contracts, keys, headers, commits, endpoints, or config names that a developer may need.
+5. Проверка: exact commands/browser/API/runtime checks and result.
+6. Статус и риски: status transition, deploy/review state, and what remains.
+
+Use technical terms when they are useful, but explain their consequence in normal language. Avoid implementation trivia, noisy command transcripts, huge stack traces, private local paths unless necessary, secrets, speculative claims, and “still working” chatter.
 
 Minimum useful Scout updates:
 
@@ -259,13 +272,17 @@ Question note format:
 Completion note format:
 
 ```text
-Как понял задачу: <ожидаемый результат и важный контекст>
-Причина и последствия: <корневая причина или основание для улучшения; что ломалось или могло ломаться>
-Решение: <что изменилось для пользователя/системы без деталей кода>
-Проверка: <команды и browser/API/runtime checks>
-Commit/ветка/PR: <branch, commit hash, or PR URL>
-Статус: <куда переведена задача и почему>
-Осталось: <риски, пропущенные проверки или "ничего">
+Итог: <понятный нетехническому читателю результат и зачем это важно>
+
+Причина: <что вызывало проблему и как это проявлялось для пользователя или команды>
+
+Что изменилось: <новое поведение на уровне продукта/системы>
+
+Технические детали: <важные сервисы, контракты, ключи, endpoints, commits, branch/PR; без line-by-line diff>
+
+Проверка: <команды и browser/API/runtime checks с результатом>
+
+Статус и риски: <куда переведена задача, что ждёт review/deploy, что осталось или "рисков не вижу">
 ```
 
 ## Status Handling

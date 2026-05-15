@@ -58,6 +58,9 @@ const STATUS_KEYS: Record<string, string> = {
   cancelled: 'items.statuses.cancelled',
 };
 
+const FORM_CONTROL_CLASS =
+  'h-9 rounded-md border border-gray-300 px-3 text-sm leading-5 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500';
+
 export default function Items() {
   const navigate = useNavigate();
   const admin = isAdmin();
@@ -225,7 +228,7 @@ export default function Items() {
           name="items-project"
           value={selectedProject}
           onChange={handleProjectChange}
-          className="w-full md:w-auto rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+          className={`w-full md:w-auto ${FORM_CONTROL_CLASS}`}
         >
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -243,7 +246,7 @@ export default function Items() {
             value={searchInput}
             onChange={(e) => handleSearchInput(e.target.value)}
             placeholder={t('items.filters.searchPlaceholder')}
-            className="block w-full rounded-md border border-gray-300 pl-3 pr-8 py-1.5 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+            className={`block w-full pr-8 ${FORM_CONTROL_CLASS}`}
           />
           {searchInput && (
             <button
@@ -262,7 +265,7 @@ export default function Items() {
           name="items-priority"
           value={priorityFilter}
           onChange={handlePriorityFilter}
-          className="w-full md:w-44 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+          className={`w-full md:w-44 ${FORM_CONTROL_CLASS}`}
         >
           <option value="">{t('items.filters.allPriorities')}</option>
           <option value="critical">{t('items.priorities.critical')}</option>
@@ -275,7 +278,7 @@ export default function Items() {
             name="items-assignee"
             value={assigneeFilter}
             onChange={handleAssigneeFilter}
-            className="w-full md:w-48 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+            className={`w-full md:w-48 ${FORM_CONTROL_CLASS}`}
           >
             <option value="">{t('items.filters.allAssignees')}</option>
             {teamUsers.map((u) => (

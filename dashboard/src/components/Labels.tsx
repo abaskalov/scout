@@ -41,7 +41,7 @@ export default function Labels({ labels, size = 'sm' }: { labels: string[]; size
       {labels.map((label) => (
         <span
           key={label}
-          className={`inline-block rounded-full ${padding} ${textSize} font-medium ${getLabelColor(label)}`}
+          className={`inline-block whitespace-nowrap rounded-full ${padding} ${textSize} font-medium ${getLabelColor(label)}`}
         >
           {label}
         </span>

@@ -196,6 +196,18 @@ Default local completion flow:
 3. Add a Russian completion note with root cause, changed behavior, verification, commit hash, and remaining risks.
 4. Move the item to `review`, not `done`. `review` means locally fixed and ready for deploy/staging validation.
 
+## Batch Work Before Deploy
+
+When the user wants to complete many Scout items before deploying, keep local work and deployment as separate phases.
+
+1. Process items one at a time through the normal local lifecycle: claim, diagnose, fix, verify locally, commit with Scout reference, add Russian notes, and move to `review`.
+2. Do not deploy after each item unless the user explicitly asks or the item is an urgent hotfix.
+3. Maintain a clear review queue: every item in `review` must have a commit/branch/PR reference, local verification evidence, and a Russian handoff note.
+4. If several items share one root cause, one cohesive commit may reference multiple Scout items. Add notes to each covered item and verify each item's acceptance condition.
+5. If a later local item reveals a regression in an earlier reviewed item before deploy, move the earlier item back to `in_progress`, explain why in Scout, and update the fix before deploy.
+6. When the user asks to deploy after a batch, treat that as a phase change: deploy the accumulated reviewed work, then verify the review queue on staging.
+7. Different cases may need different checks. Choose item-specific staging verification from the item's evidence and changed surface instead of forcing one universal checklist.
+
 ## Deploy And Staging Verification
 
 When the user explicitly asks to deploy and close verified work, handle the review queue after a successful deploy.

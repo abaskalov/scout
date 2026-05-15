@@ -119,13 +119,26 @@ function parseMetadata(raw: string | null): ParsedMetadata | null {
   }
 }
 
+interface AutoNote {
+  key: string;
+  params?: Record<string, string>;
+}
+
 /** Try to parse note content as structured JSON auto-note. */
-function parseAutoNote(content: string): { key: string; params?: Record<string, string> } | null {
+function parseAutoNote(content: string): AutoNote | null {
   try {
     const parsed = JSON.parse(content);
     if (typeof parsed === 'object' && parsed !== null && typeof parsed.key === 'string') {
-      return parsed as { key: string; params?: Record<string, string> };
+      return parsed as AutoNote;
     }
+    if (typeof parsed !== 'object' || parsed === null || typeof parsed.type !== 'string') return null;
+    if (parsed.type === 'status_change' && typeof parsed.from === 'string' && typeof parsed.to === 'string') {
+      return { key: 'notes.statusChange', params: { from: parsed.from, to: parsed.to } };
+    }
+    if (parsed.type === 'assignment') {
+      return { key: 'notes.assigned', params: { name: typeof parsed.userName === 'string' ? parsed.userName : '' } };
+    }
+    if (parsed.type === 'reopen') return { key: 'notes.reopened' };
     return null;
   } catch {
     return null;

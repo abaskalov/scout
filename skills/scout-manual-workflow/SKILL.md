@@ -212,9 +212,9 @@ Minimum useful Scout updates:
 Question note format:
 
 ```text
-Question: <specific decision or missing fact>
-Why it matters: <impact on implementation or verification>
-Suggested default: <safe recommended assumption, if one exists>
+Вопрос: <конкретное решение или недостающий факт>
+Почему важно: <влияние на реализацию или проверку>
+Рекомендованный вариант: <безопасное предположение по умолчанию, если оно есть>
 ```
 
 Completion note format:

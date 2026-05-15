@@ -150,7 +150,7 @@ function escapeRegExp(value: string): string {
 }
 
 function normalizeNoteContent(content: string): string {
-  let normalized = content.replace(/\r\n?/g, '\n').trim();
+  let normalized = content.replace(/\\n/g, '\n').replace(/\r\n?/g, '\n').trim();
   for (const label of NOTE_SECTION_LABELS) {
     normalized = normalized.replace(
       new RegExp(`\\s+(${escapeRegExp(label)}:)`, 'g'),

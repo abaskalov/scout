@@ -189,6 +189,28 @@ For completed code changes from a Scout item, create a focused git commit after 
 4. Do not push unless the user or repo workflow explicitly asks for push.
 5. After the commit succeeds, update Scout with the branch name and commit hash or PR URL. If the commit cannot be created, explain the exact blocker in Scout and do not mark the item ready for review.
 
+Default local completion flow:
+
+1. Run the repo-required local checks and the narrowest relevant runtime/browser checks.
+2. Commit the fix with a Scout item reference.
+3. Add a Russian completion note with root cause, changed behavior, verification, commit hash, and remaining risks.
+4. Move the item to `review`, not `done`. `review` means locally fixed and ready for deploy/staging validation.
+
+## Deploy And Staging Verification
+
+When the user explicitly asks to deploy and close verified work, handle the review queue after a successful deploy.
+
+1. Deploy only through the repository's canonical deploy path and wait for deploy health checks to pass.
+2. Discover all `review` items in scope. If the user says "all review tasks", inspect all review items for the relevant Scout project; otherwise limit to items linked to the deployed branch/commit/PR.
+3. For each review item, fetch the full item, notes, evidence, commit/branch/PR fields, related items, and acceptance hints before testing.
+4. Verify on staging, not local: use the deployed staging URL, staging API, browser checks for user-visible work, and targeted API/runtime checks for backend work.
+5. Keep checks item-specific. Do not replace targeted staging verification with a noisy full sweep unless the item itself requires broad coverage.
+6. If staging verification passes, add a Russian staging note with environment, URL, commit/deploy SHA, exact checks, and result; then move the item to `done`.
+7. If staging verification fails, add a Russian failure note with repro steps, expected/actual behavior, console/network/API evidence, and suspected cause; move the item back to `in_progress` and fix it end-to-end.
+8. After fixing a staging failure, repeat the normal lifecycle: local verification, commit referencing the same Scout item, Scout note, `review`, deploy, staging verification, then `done` only after staging passes.
+9. If verification is blocked by access, missing data, unsafe destructive action, or ambiguous expected behavior, leave the item in `review` or `in_progress` according to reality and record the exact blocker in Scout.
+10. Do not mark unrelated review items as `done` just because the deploy succeeded.
+
 ## Communication In Scout
 
 Use Scout notes for durable, useful communication:
@@ -235,7 +257,7 @@ Use Scout statuses deliberately:
 - `new`: not yet taken or returned for later work.
 - `in_progress`: actively being worked or waiting on a direct clarification after ownership was taken.
 - `review`: fix is ready for human review with fresh verification evidence, a focused commit or PR reference, and a Russian Scout handoff note.
-- `done`: accepted/merged/resolved according to the user's workflow.
+- `done`: accepted/merged/resolved according to the user's workflow; for deploy-driven work, staging verification has passed and is documented in Scout.
 - `cancelled`: not applicable, duplicate, invalid, or intentionally abandoned.
 
 Do not mark `review` or `done` just because code was edited. There must be fresh verification evidence, a clear Scout handoff in Russian, and a commit/branch/PR reference unless a documented blocker or explicit no-commit instruction exists.
@@ -270,7 +292,7 @@ Do not present the item as complete until all of these are true:
 4. Frontend, dashboard, widget, or other user-visible changes have browser verification when feasible.
 5. A focused commit exists for completed code changes and references the Scout item, unless explicitly skipped with a documented reason.
 6. Scout has Russian notes covering start, root cause when relevant, completion or blocker, verification, commit/branch/PR, status change, and remaining risks.
-7. The Scout status reflects reality: `in_progress` while working or blocked on clarification, `review` only when committed and ready for review, `done` only when accepted by the workflow, and no silent "left for later" work.
+7. The Scout status reflects reality: `in_progress` while working or blocked on clarification, `review` only when committed and ready for deploy/staging verification, `done` only after acceptance or documented staging pass, and no silent "left for later" work.
 
 Final user response must be short and evidence-based:
 

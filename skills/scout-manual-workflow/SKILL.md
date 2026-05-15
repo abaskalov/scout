@@ -54,7 +54,6 @@ Read Scout access from environment variables first. If required variables are mi
 - `SCOUT_URL`: Scout base URL, for example `https://your-scout.example`.
 - `SCOUT_API_KEY`: project-scoped API key in `sk_live_*` format. Prefer a key created from Scout via `Projects` → target project → `Manage integrations` → `Create agent key`.
 - `SCOUT_PROJECT_SLUG`: Optional default project slug.
-- `SCOUT_ITEM_ID`: Optional current item id.
 
 Agent keys should have only the scopes needed for manual issue work, such as reading items, adding notes, workflow/triage actions, related-item links, and reading storage evidence. Never commit Scout credentials, cookies, JWTs, API keys, `.env.local`, or generated credential files. Do not paste real secrets into documentation, PR bodies, issue text, or durable notes.
 
@@ -72,7 +71,7 @@ Use that prefix only inside the command process. Do not echo `SCOUT_API_KEY`, to
 
 When the user asks to work from Scout:
 
-1. Identify the item id from the prompt or `SCOUT_ITEM_ID`.
+1. Identify the item id from the prompt.
 2. If no item id is given, use `SCOUT_PROJECT_SLUG` or the user's project name to find the relevant project, then inspect the candidate queue before choosing work.
 3. Fetch the full item before editing code.
 4. Read the item message, status, priority, labels, created date, URL, route, component hints, selector, element text/HTML, screenshot path, session recording path, existing notes, assignee, branch, and PR link.
@@ -264,7 +263,7 @@ Recommended note structure for substantial updates:
 
 Use technical terms when they are useful, but explain their consequence in normal language. Avoid implementation trivia, noisy command transcripts, huge stack traces, private local paths unless necessary, secrets, speculative claims, and “still working” chatter.
 
-When adding long Scout notes through the API, build JSON with a safe encoder such as `jq -n --arg itemId "$SCOUT_ITEM_ID" --arg content "$NOTE" '{itemId:$itemId,content:$content}'` and pass that payload to `curl`. Avoid hand-escaped shell JSON for multi-line notes, backticks, quotes, or non-ASCII text.
+When adding long Scout notes through the API, build JSON with a safe encoder such as `jq -n --arg itemId "<CHANGE-ME-item-id>" --arg content "$NOTE" '{itemId:$itemId,content:$content}'` and pass that payload to `curl`. Avoid hand-escaped shell JSON for multi-line notes, backticks, quotes, or non-ASCII text.
 
 Minimum useful Scout updates:
 
@@ -410,7 +409,7 @@ set +a
 curl -fsS "$SCOUT_URL/api/items/get" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"id\":\"$SCOUT_ITEM_ID\"}"
+  -d '{"id":"<CHANGE-ME-item-id>"}'
 ```
 
 Claim item:
@@ -422,7 +421,7 @@ set +a
 curl -fsS "$SCOUT_URL/api/items/claim" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"id\":\"$SCOUT_ITEM_ID\"}"
+  -d '{"id":"<CHANGE-ME-item-id>"}'
 ```
 
 Add note:
@@ -434,7 +433,7 @@ set +a
 curl -fsS "$SCOUT_URL/api/items/add-note" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"itemId\":\"$SCOUT_ITEM_ID\",\"content\":\"<CHANGE-ME-note>\"}"
+  -d '{"itemId":"<CHANGE-ME-item-id>","content":"<CHANGE-ME-note>"}'
 ```
 
 Link related items:
@@ -446,7 +445,7 @@ set +a
 curl -fsS "$SCOUT_URL/api/items/link" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"sourceItemId\":\"$SCOUT_ITEM_ID\",\"targetItemId\":\"<CHANGE-ME-related-item-id>\",\"type\":\"related\"}"
+  -d '{"sourceItemId":"<CHANGE-ME-item-id>","targetItemId":"<CHANGE-ME-related-item-id>","type":"related"}'
 ```
 
 Update status:
@@ -458,7 +457,7 @@ set +a
 curl -fsS "$SCOUT_URL/api/items/update-status" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"id\":\"$SCOUT_ITEM_ID\",\"status\":\"review\",\"branchName\":\"<CHANGE-ME-branch>\",\"mrUrl\":\"<CHANGE-ME-pr-url>\"}"
+  -d '{"id":"<CHANGE-ME-item-id>","status":"review","branchName":"<CHANGE-ME-branch>","mrUrl":"<CHANGE-ME-pr-url>"}'
 ```
 
 ## Boundaries

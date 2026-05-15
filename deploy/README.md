@@ -16,7 +16,11 @@ Important data safety rule: production `data/` and `storage/` volumes contain th
 
 The repository includes one canonical deploy workflow in `.github/workflows/deploy.yml`. It is safe for a public repository because production-specific values are read from GitHub Environments, Secrets, and Variables, not from tracked files.
 
+Production deploys must be from `master`. Do not deploy production from `dev`; merge or fast-forward `dev` into `master`, push `master`, and use the Deploy workflow with `ref=master`.
+
 The workflow always performs the same sequence: connect over SSH, back up the service mounts, update a server-side source checkout, build a local Docker image on the server, and restart the configured service with `docker compose up -d --remove-orphans`. It never removes volumes.
+
+If the workflow fails, treat that as a blocker to report with the Actions run URL and failing step. Manual SSH deploy is not an automatic fallback; it requires explicit operator approval for that incident.
 
 Configure the `production` environment with these values:
 

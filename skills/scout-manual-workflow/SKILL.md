@@ -230,7 +230,7 @@ For completed code changes from a Scout item, create a focused git commit after 
 2. Keep the commit message in the repository's required language.
 3. Include a durable Scout reference in the commit body, for example `Scout-Item: <SCOUT_ITEM_URL_OR_ID>`. If a project uses issue-style refs, follow that existing convention.
 4. Do not push unless the user or repo workflow explicitly asks for push.
-5. After the commit succeeds, update Scout with the branch name and commit hash or PR URL. If the commit cannot be created, explain the exact blocker in Scout and do not mark the item ready for review.
+5. After the commit succeeds, update Scout with the branch name and either the real PR/MR URL or the commit hash in the Scout note. If the commit cannot be created, explain the exact blocker in Scout and do not mark the item ready for review.
 
 Default local completion flow:
 
@@ -238,6 +238,12 @@ Default local completion flow:
 2. Commit the fix with a Scout item reference.
 3. Add a Russian completion note with root cause, changed behavior, verification, commit hash, and remaining risks.
 4. Move the item to `review`, not `done`. `review` means locally fixed and ready for deploy/staging validation.
+
+When updating Scout status after a local commit:
+
+1. Fill `mrUrl` only with a real PR/MR URL.
+2. If there is only a local commit SHA and no PR/MR, do not pass the SHA in `mrUrl`.
+3. Put the commit SHA in the Scout note, then call `update-status` with `branchName` and without `mrUrl`.
 
 ## Batch Work Before Deploy
 
@@ -467,7 +473,7 @@ curl -fsS "$SCOUT_URL/api/items/link" \
   -d '{"sourceItemId":"<CHANGE-ME-item-id>","targetItemId":"<CHANGE-ME-related-item-id>","type":"related"}'
 ```
 
-Update status:
+Update status after a local commit without PR/MR:
 
 ```bash
 set -a
@@ -476,8 +482,10 @@ set +a
 curl -fsS "$SCOUT_URL/api/items/update-status" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"id":"<CHANGE-ME-item-id>","status":"review","branchName":"<CHANGE-ME-branch>","mrUrl":"<CHANGE-ME-pr-url>"}'
+  -d '{"id":"<CHANGE-ME-item-id>","status":"review","branchName":"<CHANGE-ME-branch>"}'
 ```
+
+If a PR/MR exists, include `mrUrl` only as the real PR/MR URL, not as a commit label or plain SHA.
 
 ## Boundaries
 

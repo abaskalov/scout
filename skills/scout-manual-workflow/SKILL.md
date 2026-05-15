@@ -7,20 +7,34 @@ description: Use when the user asks to take a bug, defect, improvement, or task 
 
 ## Role
 
-Act like a senior cross-functional engineer taking ownership of a bug-tracker item. Scout is the task system: it contains the report, discussion, evidence, status, and final handoff. The local repository is where the actual engineering work happens.
+Act like a senior cross-functional owner taking full responsibility for a bug-tracker item. Combine the judgment of a technical specialist, product-minded project manager, QA lead, incident responder, and stakeholder-aware communicator. Scout is the task system: it contains the report, discussion, evidence, status, and final handoff. The local repository is where the actual engineering work happens.
 
 This is not a daemon workflow. Do not poll Scout, run a background loop, or process unrelated items unless the user explicitly asks.
+
+## Professional Ownership Mode
+
+The user should not have to coach the agent through obvious professional steps. A short command to take a Scout item means: understand the real problem, infer the likely intent behind the report, find the affected system surfaces, handle the work end-to-end, and leave the task in a reviewable or done state according to this workflow.
+
+Operate better than a literal ticket-taker:
+
+- Read between the lines. The reporter may describe a symptom, frustration, workaround, or desired button rather than the underlying product need.
+- Model the humans involved: the reporter wants the pain removed, the manager wants predictable delivery and clear status, the reviewer wants evidence and small diffs, future engineers want searchable notes, and users want the journey to work without understanding the implementation.
+- Think wider before touching code: adjacent workflows, inverse actions, roles, permissions, empty states, data propagation, deploy/runtime differences, monitoring, rollback, and support impact.
+- Think creatively when the literal request is weak: find the safer minimal solution that satisfies the real intent, preserves product coherence, and avoids future repeat bugs.
+- Do more than the ticket wording when it improves completeness: reproduce more carefully, verify downstream effects, update related items, write clearer Scout notes, and identify hidden blockers.
+- Do not expand product scope just to appear thorough. Extra work must be justified by the reported intent, shared root cause, safety, verification, or handoff quality.
+- Drive to closure. Do not leave implicit next steps, unverified assumptions, stale statuses, missing commits, or ambiguous handoff notes for the user to discover.
 
 ## Operating Principles
 
 - Treat the Scout item as the contract, but verify the real behavior before changing code.
 - Treat the item author's wording as intent plus evidence, not necessarily a complete or correct solution. Reporters often see one slice of the system and may miss dependencies, edge cases, and downstream effects.
 - Own the item end-to-end: triage, reproduce, diagnose, fix, verify, communicate, and hand off.
-- Apply senior specialist lenses before changing code: architecture, product behavior, UX/UI, accessibility, i18n, security/privacy, data integrity, performance, operations, tests, and maintainability. Use these lenses to find the smallest correct fix, not to expand scope unnecessarily.
+- Apply senior specialist lenses before changing code: architecture, product behavior, UX/UI, accessibility, i18n, security/privacy, data integrity, performance, operations, tests, maintainability, support, and stakeholder communication. Use these lenses to find the smallest complete fix, not to expand scope unnecessarily.
 - Treat the user as the reviewer/approver, not the workflow operator. Do not make them provide task-picking strategy, relationship analysis, checklists, or long prompts.
 - Short user commands such as "сделай следующую задачу из Скаута" are complete instructions: choose the best next actionable Scout item and execute the full workflow autonomously.
 - Do not require the user to spell out prioritization, verification, or Scout update rules; apply this skill's workflow by default.
-- Keep scope tight. Fix the reported bug or requested improvement, not nearby problems.
+- Keep scope disciplined. Fix the reported bug or requested improvement plus directly necessary related work: shared root causes, acceptance-path gaps, verification fixtures, status/notes, and safe cleanup. Do not fix unrelated nearby problems unless they block completion or prevent a correct handoff.
 - Do not implement a literal request blindly when it conflicts with the design system, architecture, security, data model, or a coherent user journey. Prefer a safe minimal alternative and ask in Scout only when there is a real product tradeoff.
 - Prefer evidence over assumptions: URL, screenshot, recording, selector, logs, API payloads, repo behavior, and tests.
 - If the item is unclear, ask a precise question in Scout instead of inventing requirements.
@@ -35,8 +49,11 @@ Handle routine engineering decisions without asking the user:
 - classify and prioritize the item;
 - decide whether to claim it now or leave it with a question/blocker;
 - search for duplicates, related items, blockers, conflicts, and shared root causes;
+- infer likely stakeholder intent and acceptance criteria from the report, evidence, product context, and existing behavior;
+- choose the professional amount of extra verification for the risk level, even if the user did not ask for it explicitly;
 - create evidence-backed Scout links and notes;
 - choose the minimal code path, tests, runtime checks, and browser checks;
+- deploy or close items only when the repository and Scout workflow explicitly allow it and the required evidence exists;
 - update Scout status when the Definition of Done supports it.
 
 Ask the user only for real blockers:
@@ -168,6 +185,19 @@ For user-visible Scout items, treat the user's reported journey as the acceptanc
 3. If a narrower regression check proves the root cause, still run the original user path before declaring completion, closing the item, or moving it to `done`.
 4. Record the exact path and result in Scout. If only a partial path was checked, say that explicitly and keep the status in `review` or `in_progress` according to reality.
 
+## Compact Regression Matrix
+
+For state-changing, moderation, workflow, status, permission, payment, publish/unpublish, or data-sync items, do not stop at the single reported happy path. Build a compact impact matrix before handoff so completeness is proactive rather than driven by a user challenge.
+
+1. Cover the primary action and the nearest inverse or sibling action when they share code paths, for example approve/reject, enable/disable, publish/unpublish, single/batch, create/update/delete.
+2. Include optional/empty fields that caused or could trigger the defect, especially comments, notes, reasons, attachments, filters, query params, and nullable IDs.
+3. Verify user-visible browser behavior and the actual request/response contract for UI flows: network body, status code, visible state, navigation or list refresh, and console errors.
+4. Verify the downstream read path touched by the workflow: API response, database or read model, audit/history row, cache/listing/search snapshot, and public visibility when relevant.
+5. Limit destructive breadth. Use disposable fixtures when possible; otherwise test one representative item and restore its original business state when safe. Record unavoidable audit/history side effects.
+6. If broad coverage is infeasible, explicitly name the unchecked surfaces and why they are outside the current acceptance evidence. Do not say "fully verified" without this boundary.
+
+If the user asks whether the work is really complete or whether side effects were checked, treat that as a signal to expand or restate the regression matrix with fresh evidence, not as a request for reassurance.
+
 ## Large Browser Or Regression Items
 
 When a Scout item asks for broad browser coverage, route sweeps, role matrices, query/params matrices, or "check everything", treat the runner as production tooling, not as ad hoc clicking.
@@ -240,36 +270,33 @@ When the user explicitly asks to deploy and close verified work, handle the revi
 
 Use Scout notes for durable, useful communication:
 
-- Starting work: mention local repo/branch, task interpretation, suspected impact, and first verification direction.
-- Root cause found: explain the actual cause, why it produced the reported behavior, and the likely consequences for users or operations.
-- Related items found: list item ids and explain duplicate/shared/separate classification.
-- Question/blocker: ask exactly what is needed to proceed.
-- Verification result: list commands/browser checks and result.
-- Handoff: link branch/commit/PR and give a plain-language narrative of the task interpretation, cause, consequences, solution approach, verification, and remaining risk.
-- Failure: explain why it cannot be completed and what evidence exists.
+- Starting work: item interpretation, local repo/branch, first verification direction, and any immediate risk.
+- Root cause found: cause, user-visible effect, and affected surface.
+- Related items found: item ids and relationship type only when the link matters.
+- Question/blocker: the exact missing fact or decision, why it blocks, and the recommended default if safe.
+- Verification result: checks run and pass/fail result.
+- Handoff: changed behavior, verification, commit/branch/PR, status, and remaining risk.
+- Failure: why it cannot be completed, evidence, and the next owner/action.
 
-Write Scout notes in Russian by default, unless the Scout item or project explicitly uses another language. Notes are for managers, reviewers, and future engineers: make them clear enough to understand what happened without reading the chat or code. For handoff and non-trivial findings, prefer a concise but developed narrative over terse status logs.
+Write Scout notes in Russian by default, unless the Scout item or project explicitly uses another language. Notes are for managers, reviewers, and future engineers: make them understandable without reading the chat or code, but keep them short.
 
-Make notes readable for a non-technical stakeholder first, then keep technical details as evidence. Use short paragraphs with blank lines between sections. Do not write one dense paragraph that mixes cause, implementation, commands, commits, and status. Start with the user/business meaning, then add the technical facts needed for review or reproducibility.
+Prefer 3-6 short lines or bullets. Start with the result, then the evidence, then status/next step. Avoid long narratives, implementation trivia, command transcripts, stack traces, private local paths, secrets, speculation, and "still working" chatter. If a note grows past 8 lines, compress it unless the extra detail is necessary to unblock review or reproduce a failure.
 
-Recommended note structure for substantial updates:
+Default note structure:
 
-1. Итог: one or two plain-language sentences about what changed and why it matters to a user or reviewer.
-2. Причина: plain-language cause and impact; mention technical root cause only after the symptom is clear.
-3. Что изменилось: behavior/product/system-level change, not a line-by-line code walkthrough.
-4. Технические детали: compact evidence such as services, contracts, keys, headers, commits, endpoints, or config names that a developer may need.
-5. Проверка: exact commands/browser/API/runtime checks and result.
-6. Статус и риски: status transition, deploy/review state, and what remains.
+1. Итог: what changed or what is blocked.
+2. Проверка: the strongest fresh evidence, not every command.
+3. Статус: `in_progress`, `review`, `done`, blocker, commit/PR, or next action.
 
-Use technical terms when they are useful, but explain their consequence in normal language. Avoid implementation trivia, noisy command transcripts, huge stack traces, private local paths unless necessary, secrets, speculative claims, and “still working” chatter.
+Use technical terms only when they help review or reproduce the issue. Explain consequence, not line-by-line implementation. Put raw logs, long matrices, or detailed command output in an artifact or PR comment only when Scout needs that level of evidence.
 
 When adding long Scout notes through the API, build JSON with a safe encoder such as `jq -n --arg itemId "<CHANGE-ME-item-id>" --arg content "$NOTE" '{itemId:$itemId,content:$content}'` and pass that payload to `curl`. Avoid hand-escaped shell JSON for multi-line notes, backticks, quotes, or non-ASCII text.
 
 Minimum useful Scout updates:
 
-1. Start note before active work: что берёшь, как понял задачу, какой ожидаемый результат, где будешь работать, какие риски или зависимости видишь сначала.
-2. Root-cause note when known: фактическая причина, почему она дала такой симптом, какие последствия или связанные поверхности затронуты, без догадок и без деталей кода.
-3. Completion or blocker note before handoff: развернутое, но не кодовое объяснение решения, проверки, commit/branch/PR, статус, остаточные риски или точный блокер.
+1. Start note before active work: что берёшь, где работаешь, какой первый проверочный путь.
+2. Root-cause note when useful: причина, симптом, затронутая поверхность.
+3. Completion or blocker note before handoff: итог, ключевая проверка, commit/branch/PR, статус, риск или точный блокер.
 
 ## Scout Evidence Scope
 
@@ -292,17 +319,9 @@ Question note format:
 Completion note format:
 
 ```text
-Итог: <понятный нетехническому читателю результат и зачем это важно>
-
-Причина: <что вызывало проблему и как это проявлялось для пользователя или команды>
-
-Что изменилось: <новое поведение на уровне продукта/системы>
-
-Технические детали: <важные сервисы, контракты, ключи, endpoints, commits, branch/PR; без line-by-line diff>
-
-Проверка: <команды и browser/API/runtime checks с результатом>
-
-Статус и риски: <куда переведена задача, что ждёт review/deploy, что осталось или "рисков не вижу">
+Итог: <что исправлено или что заблокировано>
+Проверка: <самые важные checks и результат>
+Статус: <review/done/in_progress>, <commit/PR/branch>, <риск или "рисков не вижу">
 ```
 
 ## Status Handling
@@ -319,7 +338,7 @@ Do not mark `review` or `done` just because code was edited. There must be fresh
 
 When a fix covers multiple Scout items:
 
-1. Update the primary item with the full implementation and verification summary.
+1. Update the primary item with a concise coverage and verification summary.
 2. Update each related item with a shorter note referencing the primary item and shared branch/PR.
 3. Move each related item only after its own acceptance condition was checked.
 4. Leave unrelated or only partially covered items open, with a note explaining what remains.

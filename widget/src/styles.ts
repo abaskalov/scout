@@ -19,31 +19,39 @@ export const WIDGET_STYLES = `
   /* FAB */
   .scout-fab {
     position: fixed;
-    bottom: calc(24px + var(--safe-bottom));
-    right: calc(24px + var(--safe-right));
-    width: 56px;
-    height: 56px;
+    bottom: calc(20px + var(--safe-bottom));
+    right: calc(20px + var(--safe-right));
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     background: #3b82f6;
     color: #fff;
     border: none;
-    cursor: pointer;
+    cursor: grab;
     z-index: 999999;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.32);
+    opacity: 0.82;
+    transition: opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease, top 0.18s ease, right 0.18s ease, bottom 0.18s ease, left 0.18s ease;
     font-size: 0;
     line-height: 0;
     padding: 0;
-    touch-action: manipulation;
+    touch-action: none;
     -webkit-tap-highlight-color: transparent;
   }
 
   .scout-fab:hover {
     transform: scale(1.08);
-    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+    box-shadow: 0 6px 18px rgba(59, 130, 246, 0.42);
+    opacity: 1;
+  }
+
+  .scout-fab.dragging {
+    cursor: grabbing;
+    opacity: 0.9;
+    transition: none;
   }
 
   .scout-fab:active {
@@ -51,8 +59,8 @@ export const WIDGET_STYLES = `
   }
 
   .scout-fab svg {
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     fill: none;
     stroke: #fff;
     stroke-width: 2;

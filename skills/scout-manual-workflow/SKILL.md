@@ -213,16 +213,17 @@ When a Scout item asks for broad browser coverage, route sweeps, role matrices, 
 
 ## Auditing Completed Items
 
-When the user asks to recheck many `done` items, treat this as an audit workflow, not as normal delivery work.
+When the user asks to recheck many `done` items, treat this as an audit workflow, not as normal delivery work. This is the intended post-completion QA loop: items can first be marked `done` after the normal acceptance evidence, then a later audit may revisit all `done` items and return only failed or unconfirmable ones to `in_progress`.
 
 1. Build a durable ledger outside the repo with one row per item: item id, current status, page/route, role, scenario class, evidence checked, result `pass`/`fail`/`blocked`, and next action.
 2. Distinguish evidence levels honestly. Scout notes, existing completion evidence, read-only route sweeps, API checks, and full browser mutation scenarios are not equivalent.
-3. Do not claim every item received full manual acceptance coverage unless each original scenario was actually replayed or a documented equivalent was executed.
-4. For unsafe/destructive flows without disposable fixtures, mark only that item `blocked`; add the exact missing fixture/access/safety condition and reopen it when the acceptance cannot be confirmed.
-5. For confirmed failures, add a Russian QA note with expected/actual behavior, URL, role, reproduction steps, and console/network/API evidence before moving the item out of `done`.
-6. Reopen failed or blocked completed items with `/api/items/reopen` and `"status":"in_progress"`. Do not use `update-status` for `done → in_progress`.
-7. Use small batches with resume state for Scout notes/status updates. After each batch, verify counts from Scout rather than assuming all API calls succeeded.
-8. The final audit report must include total audited, pass, fail, blocked, reopened, new items created, and any items not fully covered with the reason.
+3. Do not treat reopening as undoing the whole completion batch. Passed items stay `done`; only confirmed `fail` or unconfirmed `blocked` items move out of `done`.
+4. Do not claim every item received full manual acceptance coverage unless each original scenario was actually replayed or a documented equivalent was executed.
+5. For unsafe/destructive flows without disposable fixtures, mark only that item `blocked`; add the exact missing fixture/access/safety condition and reopen it when the acceptance cannot be confirmed.
+6. For confirmed failures, add a Russian QA note with expected/actual behavior, URL, role, reproduction steps, and console/network/API evidence before moving the item out of `done`.
+7. Reopen failed or blocked completed items with `/api/items/reopen` and `"status":"in_progress"`. Include `reason` (`audit_failed` or `audit_blocked`) and `auditResult` (`fail` or `blocked`) when available. Do not use `update-status` for `done → in_progress`.
+8. Use small batches with resume state for Scout notes/status updates. After each batch, verify counts from Scout rather than assuming all API calls succeeded.
+9. The final audit report must include total audited, pass, fail, blocked, reopened, new items created, and any items not fully covered with the reason.
 
 ## Implementation
 
@@ -352,6 +353,10 @@ Use Scout statuses deliberately:
 - `review`: fix is ready for human review with fresh verification evidence, a focused commit or PR reference, and a Russian Scout handoff note.
 - `done`: accepted/merged/resolved according to the user's workflow; for deploy-driven work, staging verification has passed and is documented in Scout.
 - `cancelled`: not applicable, duplicate, invalid, or intentionally abandoned.
+
+Do not add `blocked` as a Scout workflow status. In audits, `blocked` is a QA/ledger result meaning acceptance could not be safely confirmed; record the blocker in a note and keep or reopen the item to the appropriate Scout status, usually `in_progress` for previously completed work.
+
+When reporting broad audit counts, separate Scout workflow statuses (`new`, `in_progress`, `review`, `done`, `cancelled`) from QA result statuses (`pass`, `fail`, `blocked`). Do not mix these into one status list.
 
 Do not mark `review` or `done` just because code was edited. There must be fresh verification evidence, a clear Scout handoff in Russian, and a commit/branch/PR reference unless a documented blocker or explicit no-commit instruction exists.
 

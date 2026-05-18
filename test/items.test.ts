@@ -511,6 +511,35 @@ describe('Items routes', () => {
     expect(body.data.assigneeId).toBe(ctx.adminId);
   });
 
+  it('POST /reopen — records audit reason in auto-note', async () => {
+    const item = await createTestItem();
+    await post('/claim', { id: item.id }, ctx.developerToken);
+    await post('/resolve', { id: item.id }, ctx.developerToken);
+
+    const res = await post('/reopen', {
+      id: item.id,
+      status: 'in_progress',
+      reason: 'audit_failed',
+      auditResult: 'fail',
+    }, ctx.adminToken);
+    expect(res.status).toBe(200);
+
+    const getRes = await post('/get', { id: item.id }, ctx.adminToken);
+    const body = await getRes.json() as any;
+    const reopenNote = body.data.notes
+      .map((note: any) => {
+        try { return JSON.parse(note.content); } catch { return null; }
+      })
+      .find((note: any) => note?.type === 'reopen');
+
+    expect(reopenNote).toMatchObject({
+      from: 'done',
+      to: 'in_progress',
+      reason: 'audit_failed',
+      auditResult: 'fail',
+    });
+  });
+
   it('POST /reopen — admin can reopen cancelled item (→ new)', async () => {
     const item = await createTestItem();
     await post('/cancel', { id: item.id }, ctx.adminToken);

@@ -244,7 +244,15 @@ export function updateItem(itemId: string, data: {
   return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
 }
 
-export function reopenItem(itemId: string, user: User, targetStatus: Extract<ItemStatus, 'new' | 'in_progress'> = 'new') {
+export function reopenItem(
+  itemId: string,
+  user: User,
+  targetStatus: Extract<ItemStatus, 'new' | 'in_progress'> = 'new',
+  extra?: {
+    reason?: 'audit_failed' | 'audit_blocked' | 'staging_failed' | 'regression' | 'manual';
+    auditResult?: 'fail' | 'blocked';
+  },
+) {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
   if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
 
@@ -259,7 +267,19 @@ export function reopenItem(itemId: string, user: User, targetStatus: Extract<Ite
       updatedAt: now(),
     }).where(eq(scoutItems.id, itemId)).run();
 
-    addAutoNote(tx, itemId, user.id, JSON.stringify({ type: 'reopen', to: targetStatus }), 'status_change');
+    addAutoNote(
+      tx,
+      itemId,
+      user.id,
+      JSON.stringify({
+        type: 'reopen',
+        from: item.status,
+        to: targetStatus,
+        ...(extra?.reason ? { reason: extra.reason } : {}),
+        ...(extra?.auditResult ? { auditResult: extra.auditResult } : {}),
+      }),
+      'status_change',
+    );
 
     return tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
   });

@@ -138,6 +138,8 @@ export const updateItemSchema = z.object({
 export const reopenItemSchema = z.object({
   id: uuidSchema,
   status: z.enum(['new', 'in_progress']).optional(),
+  reason: z.enum(['audit_failed', 'audit_blocked', 'staging_failed', 'regression', 'manual']).optional(),
+  auditResult: z.enum(['fail', 'blocked']).optional(),
 });
 
 export const addNoteSchema = z.object({

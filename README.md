@@ -171,6 +171,7 @@ Interactive docs: `https://your-scout.example/api/docs`
 | `/api/items/get` | Get item with notes, related items, and current-user permissions |
 | `/api/items/claim` | Assign to self |
 | `/api/items/resolve` | Mark as done |
+| `/api/items/reopen` | Reopen `done`/`cancelled` items to `new` or `in_progress`; optional `reason`/`auditResult` records why |
 | `/api/items/link` | Link related/duplicate/blocking items |
 | `/api/auth/validate` | Validate token/API key |
 

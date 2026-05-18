@@ -217,7 +217,20 @@ function parseAutoNote(content: string): AutoNote | null {
     if (parsed.type === 'assignment') {
       return { key: 'notes.assigned', params: { name: typeof parsed.userName === 'string' ? parsed.userName : '' } };
     }
-    if (parsed.type === 'reopen') return { key: 'notes.reopened' };
+    if (parsed.type === 'reopen') {
+      if (typeof parsed.from !== 'string' || typeof parsed.to !== 'string') return { key: 'notes.reopened' };
+      const details = [parsed.reason, parsed.auditResult]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .join(', ');
+      return {
+        key: 'notes.reopenedDetailed',
+        params: {
+          from: parsed.from,
+          to: parsed.to,
+          details,
+        },
+      };
+    }
     return null;
   } catch {
     return null;
@@ -410,7 +423,10 @@ export default function ItemDetail() {
     if (!item) return;
     setActionLoading(true);
     try {
-      await api('/api/items/reopen', { id: item.id });
+      await api('/api/items/reopen', {
+        id: item.id,
+        ...(item.status === 'done' ? { status: 'in_progress', reason: 'manual' } : {}),
+      });
       await loadItem();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('validation.requestError'));
@@ -757,7 +773,7 @@ export default function ItemDetail() {
                 disabled={actionLoading}
                 className="w-full md:w-auto rounded-md bg-yellow-500 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-50"
               >
-                {t('items.detail.actions.reopen')}
+                {item.status === 'done' ? t('items.detail.actions.returnToWork') : t('items.detail.actions.reopen')}
               </button>
             )}
             {item.permissions.canDelete && (

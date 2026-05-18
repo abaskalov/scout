@@ -290,6 +290,7 @@
   "notes.statusChange": "Статус: {from} → {to}",
   "notes.assigned": "Назначено: {name}",
   "notes.reopened": "Переоткрыт",
+  "notes.reopenedDetailed": "Переоткрыт: {from} → {to} ({details})",
 
   "validation.passwordField": "Пароль",
   "validation.emailField": "Эл. почта",

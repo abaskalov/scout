@@ -290,6 +290,7 @@
   "notes.statusChange": "Status: {from} → {to}",
   "notes.assigned": "Assigned: {name}",
   "notes.reopened": "Reopened",
+  "notes.reopenedDetailed": "Reopened: {from} → {to} ({details})",
 
   "validation.passwordField": "Password",
   "validation.emailField": "Email",

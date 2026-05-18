@@ -778,6 +778,8 @@ const spec = {
                 properties: {
                   id: { type: 'string', format: 'uuid' },
                   status: { type: 'string', enum: ['new', 'in_progress'], description: 'Optional target status. Defaults to new. Use in_progress to reopen and assign the item to the caller.' },
+                  reason: { type: 'string', enum: ['audit_failed', 'audit_blocked', 'staging_failed', 'regression', 'manual'], description: 'Optional reopen reason for structured history and audit logs.' },
+                  auditResult: { type: 'string', enum: ['fail', 'blocked'], description: 'Optional completed-item audit result that caused the reopen.' },
                 },
               },
             },

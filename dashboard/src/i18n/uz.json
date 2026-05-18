@@ -290,6 +290,7 @@
   "notes.statusChange": "Holat: {from} → {to}",
   "notes.assigned": "Tayinlangan: {name}",
   "notes.reopened": "Qayta ochilgan",
+  "notes.reopenedDetailed": "Qayta ochilgan: {from} → {to} ({details})",
 
   "validation.passwordField": "Parol",
   "validation.emailField": "Elektron pochta",

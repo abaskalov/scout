@@ -499,6 +499,18 @@ describe('Items routes', () => {
     expect(body.data.assigneeId).toBeNull();
   });
 
+  it('POST /reopen — admin can reopen done item directly to in_progress', async () => {
+    const item = await createTestItem();
+    await post('/claim', { id: item.id }, ctx.developerToken);
+    await post('/resolve', { id: item.id }, ctx.developerToken);
+
+    const res = await post('/reopen', { id: item.id, status: 'in_progress' }, ctx.adminToken);
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.data.status).toBe('in_progress');
+    expect(body.data.assigneeId).toBe(ctx.adminId);
+  });
+
   it('POST /reopen — admin can reopen cancelled item (→ new)', async () => {
     const item = await createTestItem();
     await post('/cancel', { id: item.id }, ctx.adminToken);

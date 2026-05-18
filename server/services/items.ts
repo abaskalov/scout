@@ -244,7 +244,7 @@ export function updateItem(itemId: string, data: {
   return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
 }
 
-export function reopenItem(itemId: string, user: User) {
+export function reopenItem(itemId: string, user: User, targetStatus: Extract<ItemStatus, 'new' | 'in_progress'> = 'new') {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
   if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
 
@@ -252,14 +252,14 @@ export function reopenItem(itemId: string, user: User) {
 
   return db.transaction((tx) => {
     tx.update(scoutItems).set({
-      status: 'new',
-      assigneeId: null,
+      status: targetStatus,
+      assigneeId: targetStatus === 'in_progress' ? user.id : null,
       resolvedById: null,
       resolvedAt: null,
       updatedAt: now(),
     }).where(eq(scoutItems.id, itemId)).run();
 
-    addAutoNote(tx, itemId, user.id, JSON.stringify({ type: 'reopen' }), 'status_change');
+    addAutoNote(tx, itemId, user.id, JSON.stringify({ type: 'reopen', to: targetStatus }), 'status_change');
 
     return tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
   });

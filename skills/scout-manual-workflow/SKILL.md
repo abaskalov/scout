@@ -211,6 +211,19 @@ When a Scout item asks for broad browser coverage, route sweeps, role matrices, 
 7. Do not execute destructive or mass-write form actions without explicit permission and disposable local fixtures. Mark only those cases blocked; do not let them block read-only route coverage.
 8. If browser tooling itself fails, diagnose the runner separately from the application and say which evidence is invalidated.
 
+## Auditing Completed Items
+
+When the user asks to recheck many `done` items, treat this as an audit workflow, not as normal delivery work.
+
+1. Build a durable ledger outside the repo with one row per item: item id, current status, page/route, role, scenario class, evidence checked, result `pass`/`fail`/`blocked`, and next action.
+2. Distinguish evidence levels honestly. Scout notes, existing completion evidence, read-only route sweeps, API checks, and full browser mutation scenarios are not equivalent.
+3. Do not claim every item received full manual acceptance coverage unless each original scenario was actually replayed or a documented equivalent was executed.
+4. For unsafe/destructive flows without disposable fixtures, mark only that item `blocked`; add the exact missing fixture/access/safety condition and reopen it when the acceptance cannot be confirmed.
+5. For confirmed failures, add a Russian QA note with expected/actual behavior, URL, role, reproduction steps, and console/network/API evidence before moving the item out of `done`.
+6. Reopen failed or blocked completed items with `/api/items/reopen` and `"status":"in_progress"`. Do not use `update-status` for `done → in_progress`.
+7. Use small batches with resume state for Scout notes/status updates. After each batch, verify counts from Scout rather than assuming all API calls succeeded.
+8. The final audit report must include total audited, pass, fail, blocked, reopened, new items created, and any items not fully covered with the reason.
+
 ## Implementation
 
 1. Work in the current local repository unless the user explicitly points elsewhere.
@@ -341,6 +354,8 @@ Use Scout statuses deliberately:
 - `cancelled`: not applicable, duplicate, invalid, or intentionally abandoned.
 
 Do not mark `review` or `done` just because code was edited. There must be fresh verification evidence, a clear Scout handoff in Russian, and a commit/branch/PR reference unless a documented blocker or explicit no-commit instruction exists.
+
+When reopening a completed or cancelled item after audit, failed staging verification, or regression discovery, do not call `update-status` directly from `done`/`cancelled` to `in_progress`. Use `/api/items/reopen` instead. To return the item straight to active work, pass `"status":"in_progress"`; otherwise omit `status` to reopen it as `new`. Add the failure/blocker note before or immediately after reopening so the reopened item is self-explanatory.
 
 When a fix covers multiple Scout items:
 
@@ -486,6 +501,18 @@ curl -fsS "$SCOUT_URL/api/items/update-status" \
 ```
 
 If a PR/MR exists, include `mrUrl` only as the real PR/MR URL, not as a commit label or plain SHA.
+
+Reopen a `done` or `cancelled` item after failed audit/verification:
+
+```bash
+set -a
+[ ! -f ./.env ] || . ./.env
+set +a
+curl -fsS "$SCOUT_URL/api/items/reopen" \
+  -H "Authorization: Bearer $SCOUT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"<CHANGE-ME-item-id>","status":"in_progress"}'
+```
 
 ## Boundaries
 

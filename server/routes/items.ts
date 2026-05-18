@@ -333,7 +333,7 @@ export const itemRoutes = new Hono()
   .post('/reopen',
     zValidator('json', reopenItemSchema),
     async (c) => {
-      const { id } = c.req.valid('json');
+      const { id, status } = c.req.valid('json');
       const user = c.get('user');
 
       // Check project access via item's projectId
@@ -342,10 +342,11 @@ export const itemRoutes = new Hono()
       requireProjectPermission(user.id, user.role, existing.projectId, 'triage', c.get('apiKey'));
 
       const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'done';
-      const item = reopenItem(id, user);
+      const newStatus: 'new' | 'in_progress' = status ?? 'new';
+      const item = reopenItem(id, user, newStatus);
       logAudit({ userId: user.id, action: 'reopen_item', entityType: 'item', entityId: id, ipAddress: getClientIp(c) });
-      dispatchWebhooks(existing.projectId, 'item.status_changed', { item, oldStatus, newStatus: 'new' }).catch(() => {});
-      eventBus.publish({ type: 'item.status_changed', projectId: existing.projectId, payload: { item, oldStatus, newStatus: 'new' } });
+      dispatchWebhooks(existing.projectId, 'item.status_changed', { item, oldStatus, newStatus }).catch(() => {});
+      eventBus.publish({ type: 'item.status_changed', projectId: existing.projectId, payload: { item, oldStatus, newStatus } });
       return c.json({ data: enrichItem(item) });
     })
 

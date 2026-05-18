@@ -135,7 +135,10 @@ export const updateItemSchema = z.object({
   labels: z.array(z.string().max(50)).max(10).optional(),
 });
 
-export const reopenItemSchema = z.object({ id: uuidSchema });
+export const reopenItemSchema = z.object({
+  id: uuidSchema,
+  status: z.enum(['new', 'in_progress']).optional(),
+});
 
 export const addNoteSchema = z.object({
   itemId: uuidSchema,

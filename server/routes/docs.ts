@@ -766,7 +766,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Переоткрыть item',
-        description: 'Возвращает item в статус new (из done или cancelled). Требуется project permission `triage` (admin/owner/manager).',
+        description: 'Возвращает item из done/cancelled в статус new или сразу in_progress. Требуется project permission `triage` (admin/owner/manager).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -777,6 +777,7 @@ const spec = {
                 required: ['id'],
                 properties: {
                   id: { type: 'string', format: 'uuid' },
+                  status: { type: 'string', enum: ['new', 'in_progress'], description: 'Optional target status. Defaults to new. Use in_progress to reopen and assign the item to the caller.' },
                 },
               },
             },

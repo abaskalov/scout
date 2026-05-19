@@ -45,6 +45,31 @@ describe('Items routes', () => {
     return body.data;
   }
 
+  function testEvidence(overrides: Record<string, string> = {}) {
+    return {
+      kind: 'handoff',
+      environment: 'local',
+      scenario: 'Automated test scenario',
+      action: 'Ran the status transition through the API',
+      visibleResult: 'The API returned the expected item status',
+      ...overrides,
+    };
+  }
+
+  async function resolveTestItem(
+    itemId: string,
+    token = ctx.developerToken,
+    extra: Record<string, unknown> = {},
+  ) {
+    const res = await post('/resolve', {
+      id: itemId,
+      evidence: testEvidence({ scenario: 'Resolve setup evidence' }),
+      ...extra,
+    }, token);
+    expect(res.status).toBe(200);
+    return res;
+  }
+
   // === CREATE ===
 
   it('POST /create — admin can create item', async () => {
@@ -138,6 +163,8 @@ describe('Items routes', () => {
     expect(body.data.id).toBe(item.id);
     expect(body.data.notes).toBeDefined();
     expect(Array.isArray(body.data.notes)).toBe(true);
+    expect(body.data.evidence).toBeDefined();
+    expect(Array.isArray(body.data.evidence)).toBe(true);
   });
 
   it('POST /get — non-existent returns 404', async () => {
@@ -193,6 +220,7 @@ describe('Items routes', () => {
       id: item.id,
       resolutionNote: 'Fixed the button handler',
       branchName: 'fix/scout-123',
+      evidence: testEvidence({ scenario: 'Resolve item from in_progress' }),
     }, ctx.developerToken);
 
     expect(res.status).toBe(200);
@@ -221,7 +249,7 @@ describe('Items routes', () => {
   it('POST /cancel — cannot cancel done item', async () => {
     const item = await createTestItem();
     await post('/claim', { id: item.id }, ctx.developerToken);
-    await post('/resolve', { id: item.id }, ctx.developerToken);
+    await resolveTestItem(item.id);
 
     const res = await post('/cancel', { id: item.id }, ctx.adminToken);
     expect(res.status).toBe(400);
@@ -371,7 +399,7 @@ describe('Items routes', () => {
   it('claim + resolve creates auto-notes', async () => {
     const item = await createTestItem();
     await post('/claim', { id: item.id }, ctx.developerToken);
-    await post('/resolve', { id: item.id }, ctx.developerToken);
+    await resolveTestItem(item.id);
 
     const res = await post('/get', { id: item.id }, ctx.adminToken);
     const body = await res.json() as any;
@@ -490,7 +518,7 @@ describe('Items routes', () => {
   it('POST /reopen — admin can reopen done item (→ new)', async () => {
     const item = await createTestItem();
     await post('/claim', { id: item.id }, ctx.developerToken);
-    await post('/resolve', { id: item.id }, ctx.developerToken);
+    await resolveTestItem(item.id);
 
     const res = await post('/reopen', { id: item.id }, ctx.adminToken);
     expect(res.status).toBe(200);
@@ -502,7 +530,7 @@ describe('Items routes', () => {
   it('POST /reopen — admin can reopen done item directly to in_progress', async () => {
     const item = await createTestItem();
     await post('/claim', { id: item.id }, ctx.developerToken);
-    await post('/resolve', { id: item.id }, ctx.developerToken);
+    await resolveTestItem(item.id);
 
     const res = await post('/reopen', { id: item.id, status: 'in_progress' }, ctx.adminToken);
     expect(res.status).toBe(200);
@@ -514,7 +542,7 @@ describe('Items routes', () => {
   it('POST /reopen — records audit reason in auto-note', async () => {
     const item = await createTestItem();
     await post('/claim', { id: item.id }, ctx.developerToken);
-    await post('/resolve', { id: item.id }, ctx.developerToken);
+    await resolveTestItem(item.id);
 
     const res = await post('/reopen', {
       id: item.id,
@@ -568,7 +596,7 @@ describe('Items routes', () => {
   it('POST /reopen — non-admin cannot reopen (403)', async () => {
     const item = await createTestItem();
     await post('/claim', { id: item.id }, ctx.developerToken);
-    await post('/resolve', { id: item.id }, ctx.developerToken);
+    await resolveTestItem(item.id);
 
     const res = await post('/reopen', { id: item.id }, ctx.developerToken);
     expect(res.status).toBe(403);
@@ -583,11 +611,24 @@ describe('Items routes', () => {
     const res = await post('/update-status', {
       id: item.id,
       status: 'review',
+      evidence: testEvidence({ scenario: 'Move item to review' }),
     }, ctx.developerToken);
 
     expect(res.status).toBe(200);
     const body = await res.json() as any;
     expect(body.data.status).toBe('review');
+  });
+
+  it('POST /update-status — review requires evidence', async () => {
+    const item = await createTestItem();
+    await post('/claim', { id: item.id }, ctx.developerToken);
+
+    const res = await post('/update-status', {
+      id: item.id,
+      status: 'review',
+    }, ctx.developerToken);
+
+    expect(res.status).toBe(400);
   });
 
   it('POST /update-status — invalid transition returns 400', async () => {

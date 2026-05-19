@@ -206,6 +206,33 @@ const spec = {
           createdAt: { type: 'string', format: 'date-time' },
         },
       },
+      ItemEvidence: {
+        type: 'object',
+        required: ['environment', 'scenario', 'action', 'visibleResult'],
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          itemId: { type: 'string', format: 'uuid' },
+          userId: { type: 'string', format: 'uuid', nullable: true },
+          userName: { type: 'string', nullable: true },
+          kind: { type: 'string', enum: ['handoff', 'verification', 'audit', 'blocker'], default: 'handoff' },
+          environment: { type: 'string', maxLength: 100 },
+          role: { type: 'string', maxLength: 100, nullable: true },
+          url: { type: 'string', maxLength: 1000, nullable: true },
+          scenario: { type: 'string', maxLength: 2000 },
+          action: { type: 'string', maxLength: 2000 },
+          visibleResult: { type: 'string', maxLength: 2000 },
+          consoleResult: { type: 'string', maxLength: 2000, nullable: true },
+          networkResult: { type: 'string', maxLength: 2000, nullable: true },
+          apiResult: { type: 'string', maxLength: 2000, nullable: true },
+          dbResult: { type: 'string', maxLength: 2000, nullable: true },
+          fixture: { type: 'string', maxLength: 1000, nullable: true },
+          cleanupResult: { type: 'string', maxLength: 2000, nullable: true },
+          commitSha: { type: 'string', maxLength: 100, nullable: true },
+          deploySha: { type: 'string', maxLength: 100, nullable: true },
+          risks: { type: 'string', maxLength: 2000, nullable: true },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
       Webhook: {
         type: 'object',
         properties: {
@@ -448,7 +475,7 @@ const spec = {
                 required: ['projectId', 'message'],
                 properties: {
                   projectId: { type: 'string', format: 'uuid' },
-                  message: { type: 'string', minLength: 3, maxLength: 5000 },
+                  message: { type: 'string', minLength: 3 },
                   priority: { $ref: '#/components/schemas/ItemPriority', default: 'medium' },
                   labels: { type: 'array', items: { type: 'string', maxLength: 50 }, maxItems: 10 },
                   pageUrl: { type: 'string', maxLength: 500, nullable: true },
@@ -536,8 +563,8 @@ const spec = {
     '/items/get': {
       post: {
         tags: ['Items'],
-        summary: 'Получить item с заметками',
-        description: 'Возвращает item, заметки, связанные items и permissions текущего пользователя. Требуется доступ к проекту.',
+        summary: 'Получить item с заметками и evidence',
+        description: 'Возвращает item, заметки, structured evidence, связанные items и permissions текущего пользователя. Требуется доступ к проекту.',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -568,6 +595,7 @@ const spec = {
                           type: 'object',
                           properties: {
                             notes: { type: 'array', items: { $ref: '#/components/schemas/ItemNote' } },
+                            evidence: { type: 'array', items: { $ref: '#/components/schemas/ItemEvidence' } },
                             relatedItems: { type: 'array', items: { $ref: '#/components/schemas/RelatedItem' } },
                             permissions: { $ref: '#/components/schemas/ItemPermissions' },
                           },
@@ -669,7 +697,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Закрыть item (resolve)',
-        description: 'Переводит item в статус done с опциональной заметкой о решении. Требуется project permission `workflow` (admin/owner/manager/developer).',
+        description: 'Переводит item в статус done. Для done/review требуется свежий structured evidence record или evidence в этом запросе. Требуется project permission `workflow` (admin/owner/manager/developer).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -683,6 +711,7 @@ const spec = {
                   resolutionNote: { type: 'string', maxLength: 5000 },
                   branchName: { type: 'string', maxLength: 255 },
                   mrUrl: { type: 'string', format: 'uri', maxLength: 500 },
+                  evidence: { $ref: '#/components/schemas/ItemEvidence' },
                 },
               },
             },
@@ -732,7 +761,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Обновить статус item',
-        description: 'Универсальный эндпоинт для смены статуса item. Требуется project permission `workflow` (admin/owner/manager/developer).',
+        description: 'Универсальный эндпоинт для смены статуса item. Переходы в review/done требуют свежий structured evidence record или evidence в этом запросе. Требуется project permission `workflow` (admin/owner/manager/developer).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -747,6 +776,7 @@ const spec = {
                   branchName: { type: 'string', maxLength: 255 },
                   mrUrl: { type: 'string', format: 'uri', maxLength: 500 },
                   attemptCount: { type: 'integer', minimum: 0 },
+                  evidence: { $ref: '#/components/schemas/ItemEvidence' },
                 },
               },
             },
@@ -810,7 +840,7 @@ const spec = {
                 required: ['id'],
                 properties: {
                   id: { type: 'string', format: 'uuid' },
-                  message: { type: 'string', minLength: 3, maxLength: 5000 },
+                  message: { type: 'string', minLength: 3 },
                   assigneeId: { type: 'string', format: 'uuid', nullable: true },
                   priority: { $ref: '#/components/schemas/ItemPriority' },
                   labels: { type: 'array', items: { type: 'string', maxLength: 50 }, maxItems: 10 },
@@ -859,6 +889,40 @@ const spec = {
             },
           },
           403: { description: 'Недостаточно прав', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/items/add-evidence': {
+      post: {
+        tags: ['Items'],
+        summary: 'Добавить structured evidence',
+        description: 'Добавляет проверочное evidence к item. Используется как gate для переходов в review/done. Требуется project permission `comment`.',
+        security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                allOf: [
+                  { $ref: '#/components/schemas/ItemEvidence' },
+                  {
+                    type: 'object',
+                    required: ['itemId'],
+                    properties: {
+                      itemId: { type: 'string', format: 'uuid' },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Evidence создан',
+            content: { 'application/json': { schema: { type: 'object', properties: { data: { $ref: '#/components/schemas/ItemEvidence' } } } } },
+          },
           404: { description: 'Item не найден', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },

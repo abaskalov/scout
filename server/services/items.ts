@@ -1,5 +1,5 @@
 import { db } from '../db/client.js';
-import { scoutItems, scoutItemNotes, type User, type ItemStatus, type ItemPriority } from '../db/schema.js';
+import { scoutItems, scoutItemNotes, scoutItemEvidence, type User, type ItemStatus, type ItemPriority } from '../db/schema.js';
 import { eq, and, isNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
@@ -23,6 +23,25 @@ const VALID_TRANSITIONS: Record<ItemStatus, ItemStatus[]> = {
   cancelled: ['new'],
 };
 
+type ItemEvidenceInput = {
+  kind?: 'handoff' | 'verification' | 'audit' | 'blocker';
+  environment: string;
+  role?: string;
+  url?: string;
+  scenario: string;
+  action: string;
+  visibleResult: string;
+  consoleResult?: string;
+  networkResult?: string;
+  apiResult?: string;
+  dbResult?: string;
+  fixture?: string;
+  cleanupResult?: string;
+  commitSha?: string;
+  deploySha?: string;
+  risks?: string;
+};
+
 function now(): string {
   return new Date().toISOString();
 }
@@ -41,6 +60,64 @@ function addAutoNote(
     content,
     type,
   }).run();
+}
+
+function addEvidence(
+  tx: DbOrTx,
+  itemId: string,
+  userId: string,
+  evidence: ItemEvidenceInput,
+): string {
+  const id = randomUUID();
+  tx.insert(scoutItemEvidence).values({
+    id,
+    itemId,
+    userId,
+    kind: evidence.kind ?? 'handoff',
+    environment: evidence.environment,
+    role: evidence.role,
+    url: evidence.url,
+    scenario: evidence.scenario,
+    action: evidence.action,
+    visibleResult: evidence.visibleResult,
+    consoleResult: evidence.consoleResult,
+    networkResult: evidence.networkResult,
+    apiResult: evidence.apiResult,
+    dbResult: evidence.dbResult,
+    fixture: evidence.fixture,
+    cleanupResult: evidence.cleanupResult,
+    commitSha: evidence.commitSha,
+    deploySha: evidence.deploySha,
+    risks: evidence.risks,
+    createdAt: now(),
+  }).run();
+  return id;
+}
+
+function hasFreshEvidence(itemId: string, itemUpdatedAt: string): boolean {
+  const updatedAt = Date.parse(itemUpdatedAt);
+  if (Number.isNaN(updatedAt)) return false;
+
+  const evidence = db.select({ createdAt: scoutItemEvidence.createdAt })
+    .from(scoutItemEvidence)
+    .where(eq(scoutItemEvidence.itemId, itemId))
+    .all();
+
+  return evidence.some((entry) => {
+    const createdAt = Date.parse(entry.createdAt);
+    return !Number.isNaN(createdAt) && createdAt >= updatedAt;
+  });
+}
+
+function requireHandoffEvidence(
+  item: typeof scoutItems.$inferSelect,
+  newStatus: ItemStatus,
+  evidence?: ItemEvidenceInput,
+): void {
+  if (newStatus !== 'review' && newStatus !== 'done') return;
+  if (evidence) return;
+  if (hasFreshEvidence(item.id, item.updatedAt)) return;
+  throw new ValidationError('Fresh structured evidence is required before moving item to review or done', 'EVIDENCE_REQUIRED');
 }
 
 function saveFile(base64: string, dir: string, ext: string): string {
@@ -195,12 +272,14 @@ export function updateItemStatus(
     mrUrl?: string;
     attemptCount?: number;
     resolutionNote?: string;
+    evidence?: ItemEvidenceInput;
   },
 ) {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
   if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
 
   validateTransition(item.status as ItemStatus, newStatus);
+  requireHandoffEvidence(item, newStatus, extra?.evidence);
 
   return db.transaction((tx) => {
     const updateData: Record<string, unknown> = {
@@ -219,9 +298,20 @@ export function updateItemStatus(
     }
 
     tx.update(scoutItems).set(updateData).where(eq(scoutItems.id, itemId)).run();
+    if (extra?.evidence) addEvidence(tx, itemId, user.id, extra.evidence);
     addAutoNote(tx, itemId, user.id, JSON.stringify({ type: 'status_change', from: item.status, to: newStatus }), 'status_change');
 
     return tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
+  });
+}
+
+export function addItemEvidence(itemId: string, user: User, evidence: ItemEvidenceInput) {
+  const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
+  if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
+
+  return db.transaction((tx) => {
+    const evidenceId = addEvidence(tx, itemId, user.id, evidence);
+    return tx.select().from(scoutItemEvidence).where(eq(scoutItemEvidence.id, evidenceId)).get()!;
   });
 }
 

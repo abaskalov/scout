@@ -98,6 +98,34 @@ export const scoutItemNotes = sqliteTable('scout_item_notes', {
   index('idx_notes_item_created').on(table.itemId, table.createdAt),
 ]);
 
+// === Scout Item Evidence ===
+export const scoutItemEvidence = sqliteTable('scout_item_evidence', {
+  id: text('id').primaryKey(),
+  itemId: text('item_id').notNull().references(() => scoutItems.id, { onDelete: 'cascade' }),
+  userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+  kind: text('kind', {
+    enum: ['handoff', 'verification', 'audit', 'blocker'],
+  }).notNull().default('handoff'),
+  environment: text('environment').notNull(),
+  role: text('role'),
+  url: text('url'),
+  scenario: text('scenario').notNull(),
+  action: text('action').notNull(),
+  visibleResult: text('visible_result').notNull(),
+  consoleResult: text('console_result'),
+  networkResult: text('network_result'),
+  apiResult: text('api_result'),
+  dbResult: text('db_result'),
+  fixture: text('fixture'),
+  cleanupResult: text('cleanup_result'),
+  commitSha: text('commit_sha'),
+  deploySha: text('deploy_sha'),
+  risks: text('risks'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+}, (table) => [
+  index('idx_evidence_item_created').on(table.itemId, table.createdAt),
+]);
+
 // === Scout Item Links ===
 export const scoutItemLinks = sqliteTable('scout_item_links', {
   id: text('id').primaryKey(),
@@ -157,6 +185,7 @@ export type NewUser = typeof users.$inferInsert;
 export type ScoutItem = typeof scoutItems.$inferSelect;
 export type NewScoutItem = typeof scoutItems.$inferInsert;
 export type ScoutItemNote = typeof scoutItemNotes.$inferSelect;
+export type ScoutItemEvidence = typeof scoutItemEvidence.$inferSelect;
 export type ScoutItemLink = typeof scoutItemLinks.$inferSelect;
 export type AuditLogEntry = typeof auditLog.$inferSelect;
 export type Webhook = typeof webhooks.$inferSelect;

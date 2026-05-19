@@ -185,6 +185,31 @@ For user-visible Scout items, treat the user's reported journey as the acceptanc
 3. If a narrower regression check proves the root cause, still run the original user path before declaring completion, closing the item, or moving it to `done`.
 4. Record the exact path and result in Scout. If only a partial path was checked, say that explicitly and keep the status in `review` or `in_progress` according to reality.
 
+## Structured Evidence Gate
+
+Scout supports structured evidence records. Treat them as the handoff contract, not as optional decoration. A free-form note can explain context, but it does not replace the evidence record required for status gates.
+
+Before moving an item to `review` or `done`, create or submit evidence with:
+
+1. `environment`: local, staging, production, or another explicit runtime.
+2. `url`: the exact checked URL when the item has a web surface.
+3. `role`: the role/user context without secrets.
+4. `scenario`: the acceptance path derived from the Scout item.
+5. `action`: the actual browser/API/user action performed.
+6. `visibleResult`: the observed user-visible result, or the runtime result for non-UI work.
+7. `consoleResult` and `networkResult` for frontend/admin/widget work.
+8. `apiResult`, `dbResult`, or read-model evidence for backend/data/state-changing work.
+9. `fixture` and `cleanupResult` when disposable staging data was used.
+10. `commitSha`, `deploySha`, and `risks` when relevant.
+
+Rules:
+
+1. Do not move user-visible work to `review` or `done` with only `200 OK`, route-smoke, old notes, or code reasoning.
+2. For mutation workflows, evidence must include the action and post-condition: UI state, list/detail/read path, network/API response, and DB/read-model/audit trail where relevant.
+3. For `done`, evidence must match the deployed or accepted environment. Local evidence alone normally supports `review`, not `done`.
+4. If acceptance cannot be safely checked, create `blocker` evidence or a blocker note and keep/reopen the item according to reality. Do not convert blocked work to pass.
+5. When using the API, either call `/api/items/add-evidence` before the status change or include the `evidence` object in `/api/items/update-status` or `/api/items/resolve`.
+
 ## Compact Regression Matrix
 
 For state-changing, moderation, workflow, status, permission, payment, publish/unpublish, or data-sync items, do not stop at the single reported happy path. Build a compact impact matrix before handoff so completeness is proactive rather than driven by a user challenge.
@@ -250,7 +275,7 @@ Default local completion flow:
 
 1. Run the repo-required local checks and the narrowest relevant runtime/browser checks.
 2. Commit the fix with a Scout item reference.
-3. Add a Russian completion note with root cause, changed behavior, verification, commit hash, and remaining risks.
+3. Add structured evidence for the checked path, then a Russian completion note with root cause, changed behavior, verification, commit hash, and remaining risks.
 4. Move the item to `review`, not `done`. `review` means locally fixed and ready for deploy/staging validation.
 
 When updating Scout status after a local commit:
@@ -391,7 +416,7 @@ Do not present the item as complete until all of these are true:
 3. Fresh verification evidence exists after the final edit: commands, browser checks, API checks, or a documented reason why a check cannot run.
 4. Frontend, dashboard, widget, or other user-visible changes have browser verification of the reported user journey or acceptance path when feasible; API/curl-only evidence is insufficient for UI bugs.
 5. A focused commit exists for completed code changes and references the Scout item, unless explicitly skipped with a documented reason.
-6. Scout has Russian notes covering start, root cause when relevant, completion or blocker, verification, commit/branch/PR, status change, and remaining risks.
+6. Scout has structured evidence plus Russian notes covering start, root cause when relevant, completion or blocker, verification, commit/branch/PR, status change, and remaining risks.
 7. The Scout status reflects reality: `in_progress` while working or blocked on clarification, `review` only when committed and ready for deploy/staging verification, `done` only after acceptance or documented staging pass, and no silent "left for later" work.
 
 Final user response must be short and evidence-based:
@@ -481,6 +506,29 @@ curl -fsS "$SCOUT_URL/api/items/add-note" \
   -d '{"itemId":"<CHANGE-ME-item-id>","content":"<CHANGE-ME-note>"}'
 ```
 
+Add structured evidence before a status change:
+
+```bash
+set -a
+[ ! -f ./.env ] || . ./.env
+set +a
+jq -n \
+  --arg itemId "<CHANGE-ME-item-id>" \
+  --arg environment "staging" \
+  --arg role "admin" \
+  --arg url "<CHANGE-ME-checked-url>" \
+  --arg scenario "<CHANGE-ME-acceptance-scenario>" \
+  --arg action "<CHANGE-ME-action-performed>" \
+  --arg visibleResult "<CHANGE-ME-observed-result>" \
+  --arg consoleResult "<CHANGE-ME-console-result>" \
+  --arg networkResult "<CHANGE-ME-network-result>" \
+  '{itemId:$itemId,kind:"handoff",environment:$environment,role:$role,url:$url,scenario:$scenario,action:$action,visibleResult:$visibleResult,consoleResult:$consoleResult,networkResult:$networkResult}' \
+| curl -fsS "$SCOUT_URL/api/items/add-evidence" \
+  -H "Authorization: Bearer $SCOUT_API_KEY" \
+  -H "Content-Type: application/json" \
+  --data-binary @-
+```
+
 Link related items:
 
 ```bash
@@ -502,7 +550,7 @@ set +a
 curl -fsS "$SCOUT_URL/api/items/update-status" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"id":"<CHANGE-ME-item-id>","status":"review","branchName":"<CHANGE-ME-branch>"}'
+  -d '{"id":"<CHANGE-ME-item-id>","status":"review","branchName":"<CHANGE-ME-branch>","evidence":{"kind":"handoff","environment":"local","scenario":"<CHANGE-ME-scenario>","action":"<CHANGE-ME-action>","visibleResult":"<CHANGE-ME-result>","consoleResult":"<CHANGE-ME-console>","networkResult":"<CHANGE-ME-network>","commitSha":"<CHANGE-ME-commit>"}}'
 ```
 
 If a PR/MR exists, include `mrUrl` only as the real PR/MR URL, not as a commit label or plain SHA.

@@ -8,6 +8,25 @@ const paginationSchema = z.object({
 
 const uuidSchema = z.string().uuid();
 
+const itemEvidenceSchema = z.object({
+  kind: z.enum(['handoff', 'verification', 'audit', 'blocker']).default('handoff'),
+  environment: z.string().min(1).max(100),
+  role: z.string().max(100).optional(),
+  url: z.string().max(1000).optional(),
+  scenario: z.string().min(1).max(2000),
+  action: z.string().min(1).max(2000),
+  visibleResult: z.string().min(1).max(2000),
+  consoleResult: z.string().max(2000).optional(),
+  networkResult: z.string().max(2000).optional(),
+  apiResult: z.string().max(2000).optional(),
+  dbResult: z.string().max(2000).optional(),
+  fixture: z.string().max(1000).optional(),
+  cleanupResult: z.string().max(2000).optional(),
+  commitSha: z.string().max(100).optional(),
+  deploySha: z.string().max(100).optional(),
+  risks: z.string().max(2000).optional(),
+});
+
 // === Auth ===
 export const loginSchema = z.object({
   email: z.string().email(),
@@ -74,7 +93,7 @@ export const listUsersSchema = paginationSchema.extend({
 // === Items ===
 export const createItemSchema = z.object({
   projectId: uuidSchema,
-  message: z.string().min(3).max(5000),
+  message: z.string().min(3),
   priority: z.enum(['critical', 'high', 'medium', 'low']).default('medium'),
   labels: z.array(z.string().max(50)).max(10).optional(),
   pageUrl: z.string().max(500).nullish(),
@@ -113,6 +132,7 @@ export const resolveItemSchema = z.object({
   resolutionNote: z.string().max(5000).optional(),
   branchName: z.string().max(255).optional(),
   mrUrl: z.string().url().max(500).optional(),
+  evidence: itemEvidenceSchema.optional(),
 });
 
 export const cancelItemSchema = z.object({ id: uuidSchema });
@@ -123,13 +143,14 @@ export const updateItemStatusSchema = z.object({
   branchName: z.string().max(255).optional(),
   mrUrl: z.string().url().max(500).optional(),
   attemptCount: z.number().int().min(0).optional(),
+  evidence: itemEvidenceSchema.optional(),
 });
 
 export const deleteItemSchema = z.object({ id: uuidSchema });
 
 export const updateItemSchema = z.object({
   id: uuidSchema,
-  message: z.string().min(3).max(5000).optional(),
+  message: z.string().min(3).optional(),
   assigneeId: uuidSchema.nullish(),
   priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
   labels: z.array(z.string().max(50)).max(10).optional(),
@@ -145,6 +166,10 @@ export const reopenItemSchema = z.object({
 export const addNoteSchema = z.object({
   itemId: uuidSchema,
   content: z.string().min(1).max(5000),
+});
+
+export const addEvidenceSchema = itemEvidenceSchema.extend({
+  itemId: uuidSchema,
 });
 
 export const itemLinkTypeSchema = z.enum(['related', 'duplicate', 'blocks', 'blocked_by', 'caused_by', 'conflicts']);

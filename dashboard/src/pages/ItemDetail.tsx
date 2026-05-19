@@ -20,6 +20,49 @@ interface Note {
   createdAt: string;
 }
 
+interface EvidenceRecord {
+  id: string;
+  kind: 'handoff' | 'verification' | 'audit' | 'blocker';
+  environment: string;
+  role: string | null;
+  url: string | null;
+  scenario: string;
+  action: string;
+  visibleResult: string;
+  consoleResult: string | null;
+  networkResult: string | null;
+  apiResult: string | null;
+  dbResult: string | null;
+  fixture: string | null;
+  cleanupResult: string | null;
+  commitSha: string | null;
+  deploySha: string | null;
+  risks: string | null;
+  userName: string | null;
+  createdAt: string;
+}
+
+type HandoffStatus = 'review' | 'done';
+
+type EvidenceDraft = {
+  kind: 'handoff' | 'verification' | 'audit' | 'blocker';
+  environment: string;
+  role: string;
+  url: string;
+  scenario: string;
+  action: string;
+  visibleResult: string;
+  consoleResult: string;
+  networkResult: string;
+  apiResult: string;
+  dbResult: string;
+  fixture: string;
+  cleanupResult: string;
+  commitSha: string;
+  deploySha: string;
+  risks: string;
+};
+
 interface UserListItem {
   id: string;
   name: string;
@@ -54,6 +97,7 @@ interface ItemData {
   createdAt: string;
   updatedAt: string;
   notes: Note[];
+  evidence: EvidenceRecord[];
   relatedItems: RelatedItem[];
   permissions: ItemPermissions;
 }
@@ -107,6 +151,27 @@ const noteTypeColors: Record<string, string> = {
   ai: 'bg-purple-100 text-purple-700',
   resolution: 'bg-green-100 text-green-700',
 };
+
+const initialEvidenceDraft: EvidenceDraft = {
+  kind: 'handoff',
+  environment: '',
+  role: '',
+  url: '',
+  scenario: '',
+  action: '',
+  visibleResult: '',
+  consoleResult: '',
+  networkResult: '',
+  apiResult: '',
+  dbResult: '',
+  fixture: '',
+  cleanupResult: '',
+  commitSha: '',
+  deploySha: '',
+  risks: '',
+};
+
+const evidenceRequiredFields: Array<keyof EvidenceDraft> = ['environment', 'scenario', 'action', 'visibleResult'];
 
 function parseMetadata(raw: string | null): ParsedMetadata | null {
   if (!raw) return null;
@@ -249,11 +314,13 @@ export default function ItemDetail() {
   const [noteSaving, setNoteSaving] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Resolve modal state
-  const [showResolveModal, setShowResolveModal] = useState(false);
+  // Review/done handoff modal state
+  const [showHandoffModal, setShowHandoffModal] = useState(false);
+  const [handoffStatus, setHandoffStatus] = useState<HandoffStatus>('done');
   const [resolutionNote, setResolutionNote] = useState('');
   const [branchName, setBranchName] = useState('');
   const [mrUrl, setMrUrl] = useState('');
+  const [evidenceDraft, setEvidenceDraft] = useState<EvidenceDraft>(initialEvidenceDraft);
 
   // Edit mode state
   const [editing, setEditing] = useState(false);
@@ -384,20 +451,56 @@ export default function ItemDetail() {
     }
   }
 
-  async function handleResolve() {
+  function openHandoffModal(status: HandoffStatus) {
     if (!item) return;
+    setHandoffStatus(status);
+    setEvidenceDraft({
+      ...initialEvidenceDraft,
+      url: item.pageUrl ?? '',
+    });
+    setShowHandoffModal(true);
+  }
+
+  function updateEvidenceField(field: keyof EvidenceDraft, value: string) {
+    setEvidenceDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function buildEvidencePayload() {
+    const entries = Object.entries(evidenceDraft)
+      .map(([key, value]) => [key, value.trim()] as const)
+      .filter(([, value]) => value.length > 0);
+    return Object.fromEntries(entries);
+  }
+
+  const evidenceReady = evidenceRequiredFields.every((field) => evidenceDraft[field].trim().length > 0);
+
+  async function handleHandoff() {
+    if (!item || !evidenceReady) return;
     setActionLoading(true);
     try {
-      await api('/api/items/resolve', {
-        id: item.id,
-        resolutionNote: resolutionNote || undefined,
-        branchName: branchName || undefined,
-        mrUrl: mrUrl || undefined,
-      });
-      setShowResolveModal(false);
+      const evidence = buildEvidencePayload();
+      if (handoffStatus === 'done') {
+        await api('/api/items/resolve', {
+          id: item.id,
+          resolutionNote: resolutionNote || undefined,
+          branchName: branchName || undefined,
+          mrUrl: mrUrl || undefined,
+          evidence,
+        });
+      } else {
+        await api('/api/items/update-status', {
+          id: item.id,
+          status: 'review',
+          branchName: branchName || undefined,
+          mrUrl: mrUrl || undefined,
+          evidence,
+        });
+      }
+      setShowHandoffModal(false);
       setResolutionNote('');
       setBranchName('');
       setMrUrl('');
+      setEvidenceDraft(initialEvidenceDraft);
       await loadItem();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('validation.requestError'));
@@ -722,7 +825,7 @@ export default function ItemDetail() {
               <>
                 <button
                   onClick={() =>
-                    handleAction('update-status', { status: 'review' })
+                    openHandoffModal('review')
                   }
                   disabled={actionLoading}
                   className="w-full md:w-auto rounded-md bg-purple-600 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
@@ -730,7 +833,7 @@ export default function ItemDetail() {
                   {t('items.detail.actions.review')}
                 </button>
                 <button
-                  onClick={() => setShowResolveModal(true)}
+                  onClick={() => openHandoffModal('done')}
                   disabled={actionLoading}
                   className="w-full md:w-auto rounded-md bg-green-600 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
                 >
@@ -759,7 +862,7 @@ export default function ItemDetail() {
                   {t('items.detail.actions.returnToWork')}
                 </button>
                 <button
-                  onClick={() => setShowResolveModal(true)}
+                  onClick={() => openHandoffModal('done')}
                   disabled={actionLoading}
                   className="w-full md:w-auto rounded-md bg-green-600 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
                 >
@@ -909,6 +1012,49 @@ export default function ItemDetail() {
           </div>
         </div>
       )}
+
+      {/* Structured evidence */}
+      <div className="mb-4 md:mb-6 rounded-lg border border-gray-200 bg-white p-3 md:p-4">
+        <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-sm font-medium text-gray-800">{t('items.detail.evidence.title')}</h3>
+            <p className="text-xs text-gray-500">{t('items.detail.evidence.description')}</p>
+          </div>
+        </div>
+        {item.evidence.length === 0 ? (
+          <p className="text-sm text-gray-400">{t('items.detail.evidence.empty')}</p>
+        ) : (
+          <div className="space-y-3">
+            {item.evidence.map((entry) => (
+              <div key={entry.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                  <span className="rounded-full bg-gray-200 px-2 py-0.5 font-medium text-gray-700">
+                    {t(`items.detail.evidence.kinds.${entry.kind}`)}
+                  </span>
+                  <span>{entry.environment}</span>
+                  {entry.role && <span>{entry.role}</span>}
+                  <span>{entry.userName ?? 'System'}</span>
+                  <span>{formatDate(entry.createdAt, locale)}</span>
+                </div>
+                <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
+                  <InfoRow label={t('items.detail.evidence.scenario')} value={entry.scenario} />
+                  <InfoRow label={t('items.detail.evidence.action')} value={entry.action} />
+                  <InfoRow label={t('items.detail.evidence.visibleResult')} value={entry.visibleResult} />
+                  <InfoRow label={t('items.detail.evidence.networkResult')} value={entry.networkResult} />
+                  <InfoRow label={t('items.detail.evidence.consoleResult')} value={entry.consoleResult} />
+                  <InfoRow label={t('items.detail.evidence.apiResult')} value={entry.apiResult} />
+                  <InfoRow label={t('items.detail.evidence.dbResult')} value={entry.dbResult} />
+                  <InfoRow label={t('items.detail.evidence.fixture')} value={entry.fixture} />
+                  <InfoRow label={t('items.detail.evidence.cleanupResult')} value={entry.cleanupResult} />
+                  <InfoRow label={t('items.detail.evidence.commitSha')} value={entry.commitSha} mono />
+                  <InfoRow label={t('items.detail.evidence.deploySha')} value={entry.deploySha} mono />
+                  <InfoRow label={t('items.detail.evidence.risks')} value={entry.risks} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Related items */}
       <div className="mb-4 md:mb-6 rounded-lg border border-gray-200 bg-white p-3 md:p-4">
@@ -1086,59 +1232,133 @@ export default function ItemDetail() {
         )}
       </div>
 
-      {/* Resolve modal — full screen on mobile, centered on desktop */}
-      {showResolveModal && (
+      {/* Review/done handoff modal — full screen on mobile, centered on desktop */}
+      {showHandoffModal && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40">
-          <div className="w-full md:max-w-md rounded-t-xl md:rounded-lg border border-gray-200 bg-white p-5 md:p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="w-full md:max-w-2xl rounded-t-xl md:rounded-lg border border-gray-200 bg-white p-5 md:p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <h3 className="mb-4 text-lg font-semibold text-gray-900">
-              {t('items.detail.resolve.title')}
+              {handoffStatus === 'done' ? t('items.detail.resolve.title') : t('items.detail.review.title')}
             </h3>
-            <label className="block">
-              <span className="text-sm font-medium text-gray-700">
-                {t('items.detail.resolve.note')}
-              </span>
-              <textarea
-                value={resolutionNote}
-                onChange={(e) => setResolutionNote(e.target.value)}
-                rows={3}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              />
-            </label>
+            <p className="mb-4 text-sm text-gray-500">{t('items.detail.evidence.requiredHint')}</p>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">{t('items.detail.evidence.environment')} *</span>
+                <input
+                  type="text"
+                  value={evidenceDraft.environment}
+                  onChange={(e) => updateEvidenceField('environment', e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="staging"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">{t('items.detail.evidence.role')}</span>
+                <input
+                  type="text"
+                  value={evidenceDraft.role}
+                  onChange={(e) => updateEvidenceField('role', e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="admin / dealer / reporter"
+                />
+              </label>
+            </div>
             <label className="mt-3 block">
-              <span className="text-sm font-medium text-gray-700">
-                {t('items.detail.resolve.branch')}
-              </span>
+              <span className="text-sm font-medium text-gray-700">{t('items.detail.evidence.url')}</span>
               <input
                 type="text"
-                value={branchName}
-                onChange={(e) => setBranchName(e.target.value)}
+                value={evidenceDraft.url}
+                onChange={(e) => updateEvidenceField('url', e.target.value)}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                placeholder="fix/issue-123"
               />
             </label>
             <label className="mt-3 block">
-              <span className="text-sm font-medium text-gray-700">{t('items.detail.resolve.mrUrl')}</span>
-              <input
-                type="url"
-                value={mrUrl}
-                onChange={(e) => setMrUrl(e.target.value)}
+              <span className="text-sm font-medium text-gray-700">{t('items.detail.evidence.scenario')} *</span>
+              <textarea
+                value={evidenceDraft.scenario}
+                onChange={(e) => updateEvidenceField('scenario', e.target.value)}
+                rows={2}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                placeholder="https://gitlab.com/..."
               />
             </label>
+            <label className="mt-3 block">
+              <span className="text-sm font-medium text-gray-700">{t('items.detail.evidence.action')} *</span>
+              <textarea
+                value={evidenceDraft.action}
+                onChange={(e) => updateEvidenceField('action', e.target.value)}
+                rows={2}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="mt-3 block">
+              <span className="text-sm font-medium text-gray-700">{t('items.detail.evidence.visibleResult')} *</span>
+              <textarea
+                value={evidenceDraft.visibleResult}
+                onChange={(e) => updateEvidenceField('visibleResult', e.target.value)}
+                rows={2}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {(['consoleResult', 'networkResult', 'apiResult', 'dbResult', 'fixture', 'cleanupResult', 'commitSha', 'deploySha', 'risks'] as Array<keyof EvidenceDraft>).map((field) => (
+                <label key={field} className="block">
+                  <span className="text-sm font-medium text-gray-700">{t(`items.detail.evidence.${field}`)}</span>
+                  <textarea
+                    value={evidenceDraft[field]}
+                    onChange={(e) => updateEvidenceField(field, e.target.value)}
+                    rows={field === 'risks' ? 2 : 1}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">{t('items.detail.resolve.branch')}</span>
+                <input
+                  type="text"
+                  value={branchName}
+                  onChange={(e) => setBranchName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="fix/issue-123"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">{t('items.detail.resolve.mrUrl')}</span>
+                <input
+                  type="url"
+                  value={mrUrl}
+                  onChange={(e) => setMrUrl(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="https://gitlab.com/..."
+                />
+              </label>
+            </div>
+            {handoffStatus === 'done' && (
+              <label className="mt-3 block">
+                <span className="text-sm font-medium text-gray-700">
+                  {t('items.detail.resolve.note')}
+                </span>
+                <textarea
+                  value={resolutionNote}
+                  onChange={(e) => setResolutionNote(e.target.value)}
+                  rows={3}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                />
+              </label>
+            )}
             <div className="mt-5 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
               <button
-                onClick={() => setShowResolveModal(false)}
+                onClick={() => setShowHandoffModal(false)}
                 className="w-full md:w-auto rounded-md border border-gray-300 px-4 py-2 md:py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 {t('common.cancel')}
               </button>
               <button
-                onClick={handleResolve}
-                disabled={actionLoading}
+                onClick={handleHandoff}
+                disabled={actionLoading || !evidenceReady}
                 className="w-full md:w-auto rounded-md bg-green-600 px-4 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
               >
-                {actionLoading ? t('items.detail.resolve.saving') : t('items.detail.resolve.submit')}
+                {actionLoading ? t('items.detail.resolve.saving') : (handoffStatus === 'done' ? t('items.detail.resolve.submit') : t('items.detail.review.submit'))}
               </button>
             </div>
           </div>

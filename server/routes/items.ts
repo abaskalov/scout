@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { eq, and, desc, count, like, or, inArray } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { scoutItems, scoutItemNotes, scoutItemLinks, projects, users, type ApiKey, type ScoutItemLink } from '../db/schema.js';
+import { scoutItems, scoutItemNotes, scoutItemEvidence, scoutItemLinks, projects, users, type ApiKey, type ScoutItemLink } from '../db/schema.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { checkProjectAccess, hasProjectPermission, requireProjectPermission } from '../middleware/permissions.js';
 import { randomUUID } from 'node:crypto';
@@ -10,11 +10,11 @@ import { NotFoundError, ForbiddenError } from '../lib/errors.js';
 import {
   createItemSchema, listItemsSchema, getItemSchema,
   countItemsSchema, claimItemSchema, resolveItemSchema,
-  cancelItemSchema, updateItemStatusSchema, addNoteSchema,
+  cancelItemSchema, updateItemStatusSchema, addNoteSchema, addEvidenceSchema,
   deleteItemSchema, updateItemSchema, reopenItemSchema,
   linkItemSchema, unlinkItemSchema,
 } from '../lib/schemas.js';
-import { createItem, claimItem, updateItemStatus, deleteItem, updateItem, reopenItem } from '../services/items.js';
+import { createItem, claimItem, updateItemStatus, deleteItem, updateItem, reopenItem, addItemEvidence } from '../services/items.js';
 import { logAudit, getClientIp } from '../services/audit.js';
 import { dispatchWebhooks } from '../services/webhooks.js';
 import { eventBus } from '../lib/event-bus.js';
@@ -74,6 +74,17 @@ function getRelatedItems(itemId: string) {
       item: enrichItem(related),
     };
   }).filter((link): link is NonNullable<typeof link> => link !== null);
+}
+
+function getItemEvidence(itemId: string) {
+  return db.select().from(scoutItemEvidence)
+    .where(eq(scoutItemEvidence.itemId, itemId))
+    .orderBy(desc(scoutItemEvidence.createdAt))
+    .all()
+    .map((entry) => ({
+      ...entry,
+      userName: getUserName(entry.userId),
+    }));
 }
 
 function normalizeLinkPair(sourceItemId: string, targetItemId: string, type: ScoutItemLink['type']) {
@@ -174,7 +185,15 @@ export const itemRoutes = new Hono()
         userName: getUserName(n.userId),
       }));
 
-      return c.json({ data: { ...enrichItem(item), notes: enrichedNotes, relatedItems: getRelatedItems(id), permissions: getItemPermissions(item, user, c.get('apiKey')) } });
+      return c.json({
+        data: {
+          ...enrichItem(item),
+          notes: enrichedNotes,
+          evidence: getItemEvidence(id),
+          relatedItems: getRelatedItems(id),
+          permissions: getItemPermissions(item, user, c.get('apiKey')),
+        },
+      });
     })
 
   // COUNT — all roles
@@ -224,7 +243,7 @@ export const itemRoutes = new Hono()
   .post('/resolve',
     zValidator('json', resolveItemSchema),
     async (c) => {
-      const { id, resolutionNote, branchName, mrUrl } = c.req.valid('json');
+      const { id, resolutionNote, branchName, mrUrl, evidence } = c.req.valid('json');
       const user = c.get('user');
 
       // Check project access via item's projectId
@@ -234,7 +253,7 @@ export const itemRoutes = new Hono()
 
       const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'new';
       const item = updateItemStatus(id, 'done', user, {
-        resolutionNote, branchName, mrUrl,
+        resolutionNote, branchName, mrUrl, evidence,
       });
       logAudit({ userId: user.id, action: 'resolve_item', entityType: 'item', entityId: id, details: { branchName, mrUrl }, ipAddress: getClientIp(c) });
       dispatchWebhooks(existing.projectId, 'item.status_changed', { item, oldStatus, newStatus: 'done' }).catch(() => {});
@@ -269,7 +288,7 @@ export const itemRoutes = new Hono()
   .post('/update-status',
     zValidator('json', updateItemStatusSchema),
     async (c) => {
-      const { id, status, branchName, mrUrl, attemptCount } = c.req.valid('json');
+      const { id, status, branchName, mrUrl, attemptCount, evidence } = c.req.valid('json');
       const user = c.get('user');
 
       // Check project access via item's projectId
@@ -279,7 +298,7 @@ export const itemRoutes = new Hono()
 
       const oldStatus = db.select({ status: scoutItems.status }).from(scoutItems).where(eq(scoutItems.id, id)).get()?.status ?? 'new';
       const item = updateItemStatus(id, status, user, {
-        branchName, mrUrl, attemptCount,
+        branchName, mrUrl, attemptCount, evidence,
       });
       logAudit({ userId: user.id, action: 'update_status', entityType: 'item', entityId: id, details: { status }, ipAddress: getClientIp(c) });
       dispatchWebhooks(existing.projectId, 'item.status_changed', { item, oldStatus, newStatus: status }).catch(() => {});
@@ -348,6 +367,22 @@ export const itemRoutes = new Hono()
       dispatchWebhooks(existing.projectId, 'item.status_changed', { item, oldStatus, newStatus }).catch(() => {});
       eventBus.publish({ type: 'item.status_changed', projectId: existing.projectId, payload: { item, oldStatus, newStatus } });
       return c.json({ data: enrichItem(item) });
+    })
+
+  // ADD EVIDENCE — all roles with comment access
+  .post('/add-evidence',
+    zValidator('json', addEvidenceSchema),
+    async (c) => {
+      const { itemId, ...evidence } = c.req.valid('json');
+      const user = c.get('user');
+
+      const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
+      if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
+      requireProjectPermission(user.id, user.role, item.projectId, 'comment', c.get('apiKey'));
+
+      const record = addItemEvidence(itemId, user, evidence);
+      logAudit({ userId: user.id, action: 'add_evidence', entityType: 'item', entityId: itemId, details: { kind: evidence.kind, environment: evidence.environment }, ipAddress: getClientIp(c) });
+      return c.json({ data: { ...record, userName: getUserName(record.userId) } }, 201);
     })
 
   // ADD NOTE — all roles

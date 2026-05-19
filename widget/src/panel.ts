@@ -191,15 +191,14 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   const textarea = document.createElement('textarea');
   textarea.placeholder = t('panel.placeholder');
   textarea.setAttribute('minlength', '3');
-  textarea.setAttribute('maxlength', '5000');
 
   const charCount = document.createElement('div');
   charCount.className = 'scout-char-count';
-  charCount.textContent = '0 / 5000';
+  charCount.textContent = '0';
 
   textarea.addEventListener('input', () => {
     const len = textarea.value.length;
-    charCount.textContent = `${len} / 5000`;
+    charCount.textContent = `${len}`;
     if (len >= 3) {
       textarea.classList.remove('error');
     }
@@ -378,7 +377,7 @@ export function showPanel(
   elements.textDisplay.textContent = picked.elementText || t('panel.noText');
   elements.textarea.value = '';
   elements.textarea.classList.remove('error');
-  elements.charCount.textContent = '0 / 5000';
+  elements.charCount.textContent = '0';
   elements.prioritySelect.value = 'medium';
   elements.screenshotCheckbox.checked = true;
   elements.submitBtn.disabled = false;

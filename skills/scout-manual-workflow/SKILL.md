@@ -9,7 +9,19 @@ description: Use when the user asks to take a bug, defect, improvement, or task 
 
 Act like a senior cross-functional owner taking full responsibility for a bug-tracker item. Combine the judgment of a technical specialist, product-minded project manager, QA lead, incident responder, and stakeholder-aware communicator. Scout is the task system: it contains the report, discussion, evidence, status, and final handoff. The local repository is where the actual engineering work happens.
 
+This skill is an execution contract for an AI coding agent, not a human runbook. Treat every instruction as an action to perform with tools, API calls, browser checks, git commands, and Scout updates. Do not merely describe the workflow to the user when the user asked to handle a Scout item.
+
 This is not a daemon workflow. Do not poll Scout, run a background loop, or process unrelated items unless the user explicitly asks.
+
+## Agent Execution Contract
+
+When this skill is active, OpenCode is the operator of the Scout item lifecycle.
+
+1. Perform discovery, code changes, verification, Scout notes, evidence records, and status updates yourself when access exists.
+2. Ask the user only for missing access, destructive approval, or a real product decision. Do not ask for routine status, verification, or handoff choices that this skill defines.
+3. Before every Scout status change, evaluate the status preconditions in `Status Transition Algorithm`. If a precondition is false, do not change the status; add a concise blocker or progress note instead.
+4. Prefer one atomic Scout status API call that includes the `evidence` object when moving to `review` or `done`. Use `/api/items/add-evidence` before the status call only when the evidence must exist independently before the transition.
+5. Keep user-facing chat short. Durable operational detail belongs in Scout notes and structured evidence, not in chat.
 
 ## Professional Ownership Mode
 
@@ -371,21 +383,37 @@ Completion note format:
 
 ## Status Handling
 
-Use Scout statuses deliberately:
+Statuses are a state machine for the agent. Do not choose a status by sentiment. Choose it by the preconditions below.
 
-- `new`: not yet taken or returned for later work.
-- `in_progress`: actively being worked or waiting on a direct clarification after ownership was taken.
-- `review`: fix is ready for human review with fresh verification evidence, a focused commit or PR reference, and a Russian Scout handoff note.
-- `done`: accepted/merged/resolved according to the user's workflow; for deploy-driven work, staging verification has passed and is documented in Scout.
-- `cancelled`: not applicable, duplicate, invalid, or intentionally abandoned.
+Status meanings:
+
+- `new`: not owned by the agent now, or reopened for later triage.
+- `in_progress`: the agent owns the item and is actively working, investigating, fixing, or waiting on a direct blocker after taking ownership.
+- `review`: local work is complete and reviewable: final local verification is fresh, a focused commit or PR reference exists, structured evidence exists, and a Russian handoff note exists.
+- `done`: target-environment acceptance passed: staging/production/deployed verification or explicit user acceptance exists, structured evidence exists for that environment, and a Russian completion note exists.
+- `cancelled`: the agent determined the item is duplicate, invalid, not applicable, intentionally abandoned, or outside scope, and recorded why in Scout.
+
+Status transition algorithm for OpenCode:
+
+1. `new` -> `in_progress`: If the item is actionable and the agent is starting now, call `/api/items/claim`. Add or keep a short start note. Do not claim items that are unclear, blocked before ownership, or owned by someone else unless instructed.
+2. `in_progress` -> `review`: Use only after the fix is implemented, final local checks passed, browser/runtime checks passed when relevant, final diff was reviewed, and a commit or PR reference exists unless explicitly skipped. Add inline `evidence` in `/api/items/update-status` with `status:"review"`, then add the Russian handoff note if not already added.
+3. `review` -> `done`: Use only after canonical deploy or accepted target-environment verification passed. Add inline `evidence` in `/api/items/resolve` with deployed/staging/production environment, URL when applicable, deploy/commit SHA when relevant, and the observed result. Add a Russian completion note with the target environment and remaining risks.
+4. `in_progress` -> `done`: Avoid by default. Use only for non-deploy work, explicit user acceptance, or work already verified on the target environment. The same `done` evidence requirements apply. If local-only verification is the strongest evidence, move to `review`, not `done`.
+5. `review` -> `in_progress`: If staging/user/reviewer verification fails or the review evidence is incomplete, add a failure note, then call `/api/items/update-status` with `status:"in_progress"` when the current status is `review`.
+6. `done` or `cancelled` -> `new`/`in_progress`: Never use `/api/items/update-status` for this. Call `/api/items/reopen`; pass `status:"in_progress"` only when the agent is immediately taking ownership, otherwise omit `status` to reopen as `new`. Add the failure/blocker note before or immediately after reopening.
+7. Any status -> `cancelled`: Use only when the item should not be implemented. Add a Russian note explaining duplicate/invalid/out-of-scope/not-reproducible rationale and link related items when relevant, then call `/api/items/cancel` if the API transition is valid.
+
+Hard rules for the agent:
+
+- Never mark `review` or `done` because code was edited, tests passed once, or deploy succeeded by itself.
+- Never mark `done` from local evidence alone unless the task has no deployed/user-visible runtime or the user explicitly accepted the result.
+- Never move an item to `review` or `done` without structured evidence. Prefer passing `evidence` in the same status API call.
+- If a required precondition is missing, keep the item in the current honest status and add a blocker/progress note. Do not invent evidence to satisfy the gate.
+- If multiple items are covered by one fix, transition each item independently only after its own acceptance condition and evidence are satisfied.
 
 Do not add `blocked` as a Scout workflow status. In audits, `blocked` is a QA/ledger result meaning acceptance could not be safely confirmed; record the blocker in a note and keep or reopen the item to the appropriate Scout status, usually `in_progress` for previously completed work.
 
 When reporting broad audit counts, separate Scout workflow statuses (`new`, `in_progress`, `review`, `done`, `cancelled`) from QA result statuses (`pass`, `fail`, `blocked`). Do not mix these into one status list.
-
-Do not mark `review` or `done` just because code was edited. There must be fresh verification evidence, a clear Scout handoff in Russian, and a commit/branch/PR reference unless a documented blocker or explicit no-commit instruction exists.
-
-When reopening a completed or cancelled item after audit, failed staging verification, or regression discovery, do not call `update-status` directly from `done`/`cancelled` to `in_progress`. Use `/api/items/reopen` instead. To return the item straight to active work, pass `"status":"in_progress"`; otherwise omit `status` to reopen it as `new`. Add the failure/blocker note before or immediately after reopening so the reopened item is self-explanatory.
 
 When a fix covers multiple Scout items:
 

@@ -5,7 +5,7 @@ subtask: false
 
 Load and follow the `scout-manual-workflow` skill.
 
-Goal: handle exactly one Scout item and drive it to the furthest honest final state: `done` when target-environment verification or user acceptance is possible, otherwise `review` or `in_progress` with exact evidence and blocker notes.
+Goal: handle exactly one Scout item and drive it to the furthest honest final state: `done` when target-environment verification or user acceptance is possible, otherwise `review`, `testing`, or `in_progress` with exact evidence and blocker notes.
 
 No arguments are required. If `$ARGUMENTS` is present, treat it only as a hint such as an item id, item URL, project, or short scope. If it is empty, use `SCOUT_PROJECT_SLUG` or the available Scout project context and choose the best next actionable item.
 
@@ -14,7 +14,7 @@ Required behavior:
 2. Reconstruct live reality first when resuming: git status, branch, diffs, Scout notes/evidence, deploy state, and any obvious local artifacts.
 3. Fetch the full item before editing code: message, status, priority, labels, URL, screenshot/recording, notes, evidence, assignee, branch, PR/MR, related items, and permissions.
 4. Claim or move to `in_progress` only when actually starting implementation or active verification.
-5. If the item is already in `review`, verify the accepted target environment. Move it to `done` only with fresh target-environment evidence; if verification fails, record the failure and fix it end-to-end when safe.
+5. If the item is already in `review` or `testing`, verify the accepted target environment. Move it to `done` only with fresh target-environment evidence; if verification fails, record the failure and fix it end-to-end when safe.
 6. If implementation is needed, diagnose root cause, make the smallest correct change, and verify with fresh evidence matched to the changed surface.
 7. For user-visible work, verify the reported acceptance path in a browser when feasible.
 8. Commit focused code changes unless the item is analysis-only, blocked, already fixed, or the user explicitly forbids commits.

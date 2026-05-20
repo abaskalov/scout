@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { api } from '../lib/api';
 import { formatDate, formatDateShort } from '../lib/date';
 import { isAdmin } from '../lib/auth';
@@ -65,23 +65,42 @@ const STATUS_KEYS: Record<string, string> = {
   cancelled: 'items.statuses.cancelled',
 };
 
+const PRIORITIES = ['critical', 'high', 'medium', 'low'] as const;
+
 const FORM_CONTROL_CLASS =
   'h-9 rounded-md border border-gray-300 px-3 text-sm leading-5 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500';
 
+function getInitialStatus(params: URLSearchParams) {
+  const status = params.get('status');
+  return status && STATUSES.includes(status as (typeof STATUSES)[number]) ? status : 'all';
+}
+
+function getInitialPriority(params: URLSearchParams) {
+  const priority = params.get('priority');
+  return priority && PRIORITIES.includes(priority as (typeof PRIORITIES)[number]) ? priority : '';
+}
+
+function getInitialPage(params: URLSearchParams) {
+  const page = Number(params.get('page'));
+  return Number.isInteger(page) && page > 0 ? page : 1;
+}
+
 export default function Items() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentSearchParams = searchParams.toString();
   const admin = isAdmin();
   const { t, locale } = useTranslation();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>(() => getStoredSelectedProjectId());
+  const [selectedProject, setSelectedProject] = useState<string>(() => searchParams.get('project') ?? getStoredSelectedProjectId());
   const [items, setItems] = useState<Item[]>([]);
   const [pagination, setPagination] = useState<PaginationData>({
-    page: 1,
+    page: getInitialPage(searchParams),
     perPage: 20,
     total: 0,
     totalPages: 1,
   });
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(() => getInitialStatus(searchParams));
   const [counts, setCounts] = useState<Counts>({
     new: 0,
     in_progress: 0,
@@ -93,16 +112,16 @@ export default function Items() {
   const [loading, setLoading] = useState(true);
 
   // Search state
-  const [search, setSearch] = useState('');
-  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [searchInput, setSearchInput] = useState(() => searchParams.get('q') ?? '');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Priority filter state
-  const [priorityFilter, setPriorityFilter] = useState<string>('');
+  const [priorityFilter, setPriorityFilter] = useState<string>(() => getInitialPriority(searchParams));
 
   // Assignee filter state
   const [teamUsers, setTeamUsers] = useState<UserListItem[]>([]);
-  const [assigneeFilter, setAssigneeFilter] = useState<string>('');
+  const [assigneeFilter, setAssigneeFilter] = useState<string>(() => searchParams.get('assignee') ?? '');
 
   // Load projects
   useEffect(() => {
@@ -117,6 +136,23 @@ export default function Items() {
       },
     ).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!selectedProject) return;
+
+    const next = new URLSearchParams();
+    next.set('project', selectedProject);
+    if (statusFilter !== 'all') next.set('status', statusFilter);
+    if (pagination.page > 1) next.set('page', String(pagination.page));
+    if (search) next.set('q', search);
+    if (priorityFilter) next.set('priority', priorityFilter);
+    if (assigneeFilter) next.set('assignee', assigneeFilter);
+
+    const nextString = next.toString();
+    if (nextString !== currentSearchParams) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [selectedProject, statusFilter, pagination.page, search, priorityFilter, assigneeFilter, currentSearchParams, setSearchParams]);
 
   // Load users for assignee filter (admin only)
   useEffect(() => {
@@ -218,6 +254,10 @@ export default function Items() {
   function handleAssigneeFilter(e: React.ChangeEvent<HTMLSelectElement>) {
     setAssigneeFilter(e.target.value);
     setPagination((p) => ({ ...p, page: 1 }));
+  }
+
+  function itemPath(itemId: string) {
+    return `/items/${itemId}`;
   }
 
   const totalAll =
@@ -356,11 +396,17 @@ export default function Items() {
               items.map((item) => (
                 <tr
                   key={item.id}
-                  onClick={() => navigate(`/items/${item.id}`)}
+                  onClick={() => navigate(itemPath(item.id))}
                   className="cursor-pointer hover:bg-gray-50 transition-colors"
                 >
                   <td className="px-4 py-3 max-w-md truncate text-gray-800">
-                    {item.message}
+                    <Link
+                      to={itemPath(item.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="block truncate hover:text-gray-950 hover:underline"
+                    >
+                      {item.message}
+                    </Link>
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={item.status} />
@@ -399,13 +445,17 @@ export default function Items() {
           items.map((item) => (
             <div
               key={item.id}
-              onClick={() => navigate(`/items/${item.id}`)}
+              onClick={() => navigate(itemPath(item.id))}
               className="cursor-pointer rounded-lg border border-gray-200 bg-white p-3 active:bg-gray-50 transition-colors"
             >
               <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium text-gray-800 line-clamp-2">
+                <Link
+                  to={itemPath(item.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-sm font-medium text-gray-800 line-clamp-2 hover:text-gray-950 hover:underline"
+                >
                   {item.message}
-                </p>
+                </Link>
                 <div className="flex shrink-0 items-center gap-1.5">
                   <PriorityBadge priority={item.priority} />
                   <StatusBadge status={item.status} />

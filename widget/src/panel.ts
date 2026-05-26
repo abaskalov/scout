@@ -7,13 +7,20 @@ import { t } from './i18n';
 interface PanelElements {
   backdrop: HTMLDivElement;
   panel: HTMLDivElement;
+  title: HTMLHeadingElement;
+  elementInfo: HTMLDivElement;
   selectorDisplay: HTMLDivElement;
   textDisplay: HTMLDivElement;
+  labelText: HTMLSpanElement;
   textarea: HTMLTextAreaElement;
   charCount: HTMLSpanElement;
+  priorityField: HTMLDivElement;
   prioritySelect: HTMLSelectElement;
+  screenshotLabel: HTMLLabelElement;
   screenshotCheckbox: HTMLInputElement;
+  recordingLabel: HTMLLabelElement;
   recordingCheckbox: HTMLInputElement;
+  modeSwitchBtn: HTMLButtonElement;
   submitBtn: HTMLButtonElement;
   cancelBtn: HTMLButtonElement;
   progressStatus: HTMLDivElement;
@@ -22,10 +29,12 @@ interface PanelElements {
 
 export interface PanelCallbacks {
   onClose: () => void;
-  onSubmitSuccess: () => void;
+  onSubmitSuccess: (mode: PanelMode) => void;
   onSubmitError: (msg: string) => void;
   onLogout: () => void;
 }
+
+type PanelMode = 'bug' | 'note';
 
 /**
  * Auto-capture environment metadata (Marker.io/Usersnap pattern).
@@ -181,8 +190,9 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   field.className = 'scout-field';
 
   const label = document.createElement('label');
-  label.textContent = '';
-  label.appendChild(document.createTextNode(t('panel.describe') + ' '));
+  const labelText = document.createElement('span');
+  labelText.textContent = t('panel.describe') + ' ';
+  label.appendChild(labelText);
   const requiredSpan = document.createElement('span');
   requiredSpan.className = 'scout-required';
   requiredSpan.textContent = t('panel.required');
@@ -207,6 +217,11 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   field.appendChild(label);
   field.appendChild(textarea);
   field.appendChild(charCount);
+
+  const modeSwitchBtn = document.createElement('button');
+  modeSwitchBtn.type = 'button';
+  modeSwitchBtn.className = 'scout-mode-switch';
+  modeSwitchBtn.textContent = t('panel.noteSwitch');
 
   // Priority selector
   const priorityField = document.createElement('div');
@@ -263,6 +278,7 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
 
   body.appendChild(elementInfo);
   body.appendChild(field);
+  body.appendChild(modeSwitchBtn);
   body.appendChild(priorityField);
   body.appendChild(screenshotLabel);
   body.appendChild(recordingLabel);
@@ -302,13 +318,20 @@ export function createPanel(shadow: ShadowRoot): PanelElements {
   return {
     backdrop,
     panel,
+    title,
+    elementInfo,
     selectorDisplay,
     textDisplay,
+    labelText,
     textarea,
     charCount,
+    priorityField,
     prioritySelect,
+    screenshotLabel,
     screenshotCheckbox,
+    recordingLabel,
     recordingCheckbox,
+    modeSwitchBtn,
     submitBtn,
     cancelBtn,
     progressStatus,
@@ -381,7 +404,6 @@ export function showPanel(
   elements.prioritySelect.value = 'medium';
   elements.screenshotCheckbox.checked = true;
   elements.submitBtn.disabled = false;
-  elements.submitBtn.textContent = t('panel.submit');
   elements.cancelBtn.disabled = false;
 
   // Recording checkbox: only enable if recording is available
@@ -398,6 +420,7 @@ export function showPanel(
   }
   elements.progressStatus.classList.add('hidden');
   elements.progressStatus.textContent = '';
+  setPanelMode(elements, picked.itemType === 'note' ? 'note' : 'bug');
 
   elements.backdrop.style.display = '';
   elements.backdrop.classList.remove('hidden');
@@ -441,6 +464,21 @@ function showScreenshotPreview(elements: PanelElements, base64: string): void {
   elements.screenshotPreview.classList.remove('hidden');
 }
 
+function setPanelMode(elements: PanelElements, mode: PanelMode): void {
+  elements.panel.dataset.mode = mode;
+  const isNote = mode === 'note';
+  elements.title.textContent = isNote ? t('panel.noteTitle') : t('panel.title');
+  elements.labelText.textContent = (isNote ? t('panel.noteDescribe') : t('panel.describe')) + ' ';
+  elements.textarea.placeholder = isNote ? t('panel.notePlaceholder') : t('panel.placeholder');
+  elements.submitBtn.textContent = isNote ? t('panel.noteSubmit') : t('panel.submit');
+  elements.elementInfo.classList.toggle('hidden', isNote);
+  elements.priorityField.classList.toggle('hidden', isNote);
+  elements.screenshotLabel.classList.toggle('hidden', isNote);
+  elements.recordingLabel.classList.toggle('hidden', isNote);
+  elements.screenshotPreview.classList.toggle('hidden', isNote || elements.screenshotPreview.childElementCount === 0);
+  elements.modeSwitchBtn.textContent = isNote ? t('panel.bugSwitch') : t('panel.noteSwitch');
+}
+
 /**
  * Wire up submit and cancel events for the panel.
  */
@@ -476,9 +514,26 @@ export function attachPanelEvents(
     });
   }
 
+  elements.modeSwitchBtn.addEventListener('click', () => {
+    const mode = elements.panel.dataset.mode === 'note' ? 'note' : 'bug';
+    if (mode === 'bug') {
+      setPanelMode(elements, 'note');
+      return;
+    }
+
+    const p = picked();
+    if (p?.cssSelector) {
+      setPanelMode(elements, 'bug');
+    } else {
+      hidePanel(elements);
+      callbacks.onClose();
+    }
+  });
+
   elements.submitBtn.addEventListener('click', async () => {
     const p = picked();
     if (!p) return;
+    const mode: PanelMode = elements.panel.dataset.mode === 'note' ? 'note' : 'bug';
 
     const message = elements.textarea.value.trim();
     if (message.length < 3) {
@@ -505,13 +560,13 @@ export function attachPanelEvents(
       const projectId = await resolveProjectId(apiUrl, projectSlug);
 
       // Step 2: Use pre-captured screenshot (if checkbox is still checked)
-      const screenshot = elements.screenshotCheckbox.checked
+      const screenshot = mode === 'bug' && elements.screenshotCheckbox.checked
         ? getPreScreenshot() ?? undefined
         : undefined;
 
       // Step 3: Serialize + compress recording (fflate gzip)
       let sessionRecording: string | undefined;
-      if (elements.recordingCheckbox.checked) {
+      if (mode === 'bug' && elements.recordingCheckbox.checked) {
         setProgress(elements, t('panel.compressing'));
         elements.submitBtn.textContent = t('panel.recording_progress');
 
@@ -530,12 +585,14 @@ export function attachPanelEvents(
 
       const body = {
         projectId,
+        itemType: mode,
+        source: 'widget',
         message,
-        priority: elements.prioritySelect.value,
+        priority: mode === 'bug' ? elements.prioritySelect.value : 'medium',
         pageUrl: p.pageUrl,
-        cssSelector: p.cssSelector,
-        elementText: p.elementText,
-        elementHtml: p.elementHtml,
+        cssSelector: mode === 'bug' ? p.cssSelector : undefined,
+        elementText: mode === 'bug' ? p.elementText : undefined,
+        elementHtml: mode === 'bug' ? p.elementHtml : undefined,
         viewportWidth: p.viewportWidth,
         viewportHeight: p.viewportHeight,
         screenshot,
@@ -569,14 +626,14 @@ export function attachPanelEvents(
       }
 
       // Success
-      resetBuffer();
+      if (mode === 'bug') resetBuffer();
       hidePanel(elements);
-      callbacks.onSubmitSuccess();
+      callbacks.onSubmitSuccess(mode);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t('error.unknown');
       elements.submitBtn.disabled = false;
       elements.cancelBtn.disabled = false;
-      elements.submitBtn.textContent = t('panel.submit');
+      elements.submitBtn.textContent = mode === 'note' ? t('panel.noteSubmit') : t('panel.submit');
       elements.progressStatus.classList.add('hidden');
       callbacks.onSubmitError(msg);
     }

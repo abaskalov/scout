@@ -1,5 +1,5 @@
 import { db } from '../db/client.js';
-import { scoutItems, scoutItemNotes, scoutItemEvidence, type User, type ItemStatus, type ItemPriority } from '../db/schema.js';
+import { scoutItems, scoutItemNotes, scoutItemEvidence, type User, type ItemStatus, type ItemPriority, type ItemType, type ItemSource } from '../db/schema.js';
 import { eq, and, isNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
@@ -52,7 +52,7 @@ function addAutoNote(
   itemId: string,
   userId: string,
   content: string,
-  type: 'status_change' | 'assignment',
+  type: 'status_change' | 'assignment' | 'type_change',
 ): void {
   tx.insert(scoutItemNotes).values({
     id: randomUUID(),
@@ -174,6 +174,8 @@ export function validateTransition(from: ItemStatus, to: ItemStatus): void {
 
 export function createItem(data: {
   projectId: string;
+  itemType?: ItemType;
+  source?: ItemSource;
   message: string;
   reporterId: string;
   priority?: ItemPriority;
@@ -208,6 +210,8 @@ export function createItem(data: {
       tx.insert(scoutItems).values({
         id,
         projectId: data.projectId,
+        itemType: data.itemType ?? 'bug',
+        source: data.source ?? 'widget',
         message: data.message,
         priority: data.priority ?? 'medium',
         labels: data.labels ? JSON.stringify(data.labels) : null,
@@ -236,6 +240,12 @@ export function createItem(data: {
 }
 
 export function claimItem(itemId: string, user: User) {
+  const existing = db.select({ itemType: scoutItems.itemType }).from(scoutItems).where(eq(scoutItems.id, itemId)).get();
+  if (!existing) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
+  if (existing.itemType === 'note') {
+    throw new ValidationError('Notes must be converted to tasks before being claimed', 'NOTE_REQUIRES_TRIAGE');
+  }
+
   return db.transaction((tx) => {
     // Atomic: only claim if status=new AND unassigned
     const result = tx.update(scoutItems)
@@ -278,6 +288,9 @@ export function updateItemStatus(
 ) {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
   if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
+  if (item.itemType === 'note' && newStatus !== 'cancelled') {
+    throw new ValidationError('Notes must be converted to tasks before workflow transitions', 'NOTE_REQUIRES_TRIAGE');
+  }
 
   validateTransition(item.status as ItemStatus, newStatus);
   requireHandoffEvidence(item, newStatus, extra?.evidence);
@@ -317,22 +330,29 @@ export function addItemEvidence(itemId: string, user: User, evidence: ItemEviden
 }
 
 export function updateItem(itemId: string, data: {
+  itemType?: ItemType;
   message?: string;
   assigneeId?: string | null;
   priority?: ItemPriority;
   labels?: string[];
-}) {
+}, user?: User) {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
   if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
 
   const updates: Record<string, unknown> = { updatedAt: now() };
+  if (data.itemType !== undefined) updates.itemType = data.itemType;
   if (data.message !== undefined) updates.message = data.message;
   if (data.assigneeId !== undefined) updates.assigneeId = data.assigneeId;
   if (data.priority !== undefined) updates.priority = data.priority;
   if (data.labels !== undefined) updates.labels = JSON.stringify(data.labels);
 
-  db.update(scoutItems).set(updates).where(eq(scoutItems.id, itemId)).run();
-  return db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
+  return db.transaction((tx) => {
+    tx.update(scoutItems).set(updates).where(eq(scoutItems.id, itemId)).run();
+    if (user && data.itemType !== undefined && item.itemType !== data.itemType) {
+      addAutoNote(tx, itemId, user.id, JSON.stringify({ type: 'type_change', from: item.itemType, to: data.itemType }), 'type_change');
+    }
+    return tx.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get()!;
+  });
 }
 
 export function reopenItem(
@@ -346,6 +366,9 @@ export function reopenItem(
 ) {
   const item = db.select().from(scoutItems).where(eq(scoutItems.id, itemId)).get();
   if (!item) throw new NotFoundError('Item', 'ITEM_NOT_FOUND');
+  if (item.itemType === 'note' && targetStatus !== 'new') {
+    throw new ValidationError('Notes must be converted to tasks before workflow transitions', 'NOTE_REQUIRES_TRIAGE');
+  }
 
   validateTransition(item.status as ItemStatus, 'new');
 

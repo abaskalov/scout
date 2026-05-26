@@ -103,16 +103,26 @@ When the user asks to work from Scout:
 1. Identify the item id from the prompt.
 2. If no item id is given, use `SCOUT_PROJECT_SLUG` or the user's project name to find the relevant project, then inspect the candidate queue before choosing work.
 3. Fetch the full item before editing code.
-4. Read the item message, status, priority, labels, created date, URL, route, component hints, selector, element text/HTML, screenshot path, session recording path, existing notes, assignee, branch, and PR link.
+4. Read the item type (`bug`, `note`, `task`), source, message, status, priority, labels, created date, URL, route, component hints, selector, element text/HTML, screenshot path, session recording path, existing notes, assignee, branch, and PR link.
 5. Decide whether the item is actionable now.
 6. If actionable, leave a concise Scout note that you are taking it and what local repo/branch you will use.
 7. Claim the item or move it to `in_progress` only when you are actually starting work.
+
+## Scout Item Types
+
+Scout has three intentionally simple work item types. Treat type as a workflow decision, not cosmetic metadata.
+
+- `bug`: something is broken. Reproduce, diagnose, fix, verify, and move through workflow when evidence supports it.
+- `task`: committed project work. Clarify acceptance from the item, implement the smallest complete change, verify, and move through workflow when evidence supports it.
+- `note`: a lightweight observation captured during testing. Do not claim, implement, or move it through engineering workflow as-is. Triage it first: ask a focused question, link it to related work, cancel it if not useful, or convert it to `task` only when the desired work is clear and worth doing.
+
+When selecting the next actionable item, prefer `bug` and `task`. Include `note` only when the user explicitly asks for triage/inbox cleanup or when no actionable bug/task exists and the note can be safely clarified without code changes. If an API call rejects a note with `NOTE_REQUIRES_TRIAGE`, add a concise Scout note explaining the needed triage action instead of forcing the workflow.
 
 ## Queue Triage
 
 When selecting work from a project rather than a specific item, first inspect the queue like a bug triage owner, not like a FIFO script.
 
-1. List open items across relevant statuses: `new`, `in_progress`, `review`, and `testing` when appropriate. Prefer one `/api/items/list` call with `statuses` when Scout supports it; otherwise make separate status calls.
+1. List open items across relevant statuses: `new`, `in_progress`, `review`, and `testing` when appropriate. Prefer one `/api/items/list` call with `statuses` when Scout supports it; otherwise make separate status calls. Filter or de-prioritize `itemType: note` unless the requested work is triage.
 2. Sort by severity and urgency first, then age:
    - `critical`: production outage, data loss/corruption, security/privacy issue, broken core workflow.
    - `high`: major user-visible failure, blocked important workflow, strong business impact.

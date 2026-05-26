@@ -39,14 +39,15 @@ function enrichItem(item: typeof scoutItems.$inferSelect) {
 }
 
 function getItemPermissions(item: typeof scoutItems.$inferSelect, user: typeof users.$inferSelect, apiKey: ApiKey | null) {
+  const isNote = item.itemType === 'note';
   const canWorkflow = hasProjectPermission(user.id, user.role, item.projectId, 'workflow', apiKey);
   const canTriage = hasProjectPermission(user.id, user.role, item.projectId, 'triage', apiKey);
   const canComment = hasProjectPermission(user.id, user.role, item.projectId, 'comment', apiKey);
   const canCancelOwnNew = item.status === 'new' && item.reporterId === user.id && canComment;
   return {
-    canClaim: item.status === 'new' && canWorkflow,
-    canUpdateStatus: canWorkflow,
-    canResolve: canWorkflow,
+    canClaim: !isNote && item.status === 'new' && canWorkflow,
+    canUpdateStatus: !isNote && canWorkflow,
+    canResolve: !isNote && canWorkflow,
     canCancel: canTriage || canCancelOwnNew,
     canReopen: canTriage,
     canUpdate: canTriage,
@@ -113,7 +114,7 @@ export const itemRoutes = new Hono()
       requireProjectPermission(user.id, user.role, data.projectId, 'create_item', c.get('apiKey'));
 
       const item = createItem({ ...data, reporterId: user.id });
-      logAudit({ userId: user.id, action: 'create_item', entityType: 'item', entityId: item.id, details: { projectId: data.projectId, priority: data.priority }, ipAddress: getClientIp(c) });
+      logAudit({ userId: user.id, action: 'create_item', entityType: 'item', entityId: item.id, details: { projectId: data.projectId, itemType: data.itemType, source: data.source, priority: data.priority }, ipAddress: getClientIp(c) });
       dispatchWebhooks(data.projectId, 'item.created', { item }).catch(() => {});
       eventBus.publish({ type: 'item.created', projectId: data.projectId, payload: { item } });
       return c.json({ data: item }, 201);
@@ -123,7 +124,7 @@ export const itemRoutes = new Hono()
   .post('/list',
     zValidator('json', listItemsSchema),
     async (c) => {
-      const { projectId, status, statuses, priority, assigneeId, search, page, perPage } = c.req.valid('json');
+      const { projectId, itemType, status, statuses, priority, assigneeId, search, page, perPage } = c.req.valid('json');
       const user = c.get('user');
 
       // Check project access
@@ -132,6 +133,7 @@ export const itemRoutes = new Hono()
       }
 
       const conditions = [eq(scoutItems.projectId, projectId)];
+      if (itemType) conditions.push(eq(scoutItems.itemType, itemType));
       if (status) conditions.push(eq(scoutItems.status, status));
       else if (statuses) conditions.push(inArray(scoutItems.status, statuses));
       if (priority) conditions.push(eq(scoutItems.priority, priority));
@@ -200,7 +202,7 @@ export const itemRoutes = new Hono()
   .post('/count',
     zValidator('json', countItemsSchema),
     async (c) => {
-      const { projectId } = c.req.valid('json');
+      const { projectId, itemType } = c.req.valid('json');
       const user = c.get('user');
 
       // Check project access
@@ -212,7 +214,11 @@ export const itemRoutes = new Hono()
 
       for (const status of statuses) {
         const [{ total }] = db.select({ total: count() }).from(scoutItems)
-          .where(and(eq(scoutItems.projectId, projectId), eq(scoutItems.status, status)))
+          .where(and(
+            eq(scoutItems.projectId, projectId),
+            eq(scoutItems.status, status),
+            ...(itemType ? [eq(scoutItems.itemType, itemType)] : []),
+          ))
           .all();
         counts[status] = total;
       }
@@ -338,12 +344,13 @@ export const itemRoutes = new Hono()
       requireProjectPermission(user.id, user.role, existing.projectId, 'triage', c.get('apiKey'));
 
       const item = updateItem(data.id, {
+        itemType: data.itemType,
         message: data.message,
         assigneeId: data.assigneeId,
         priority: data.priority,
         labels: data.labels,
-      });
-      logAudit({ userId: user.id, action: 'update_item', entityType: 'item', entityId: data.id, details: { message: data.message, priority: data.priority, labels: data.labels }, ipAddress: getClientIp(c) });
+      }, user);
+      logAudit({ userId: user.id, action: 'update_item', entityType: 'item', entityId: data.id, details: { itemType: data.itemType, message: data.message, priority: data.priority, labels: data.labels }, ipAddress: getClientIp(c) });
       eventBus.publish({ type: 'item.updated', projectId: existing.projectId, payload: { item } });
       return c.json({ data: enrichItem(item) });
     })

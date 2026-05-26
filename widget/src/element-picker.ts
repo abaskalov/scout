@@ -2,6 +2,7 @@ import { generateSelector } from './selector';
 import { t } from './i18n';
 
 export interface PickedElement {
+  itemType?: 'bug' | 'note';
   cssSelector: string;
   elementText: string;
   elementHtml: string;
@@ -59,13 +60,22 @@ export function pickElement(
     bannerText.appendChild(bannerIcon);
     bannerText.appendChild(document.createTextNode(t('picker.hint')));
 
+    const actions = document.createElement('div');
+    actions.className = 'scout-picker-banner-actions';
+
+    const noteBtn = document.createElement('button');
+    noteBtn.className = 'scout-picker-banner-note';
+    noteBtn.textContent = t('picker.note');
+
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'scout-picker-banner-cancel';
     cancelBtn.setAttribute('aria-label', t('picker.cancel'));
     cancelBtn.textContent = t('picker.cancel');
 
     banner.appendChild(bannerText);
-    banner.appendChild(cancelBtn);
+    actions.appendChild(noteBtn);
+    actions.appendChild(cancelBtn);
+    banner.appendChild(actions);
     shadow.appendChild(banner);
 
     // Trigger animation
@@ -75,6 +85,20 @@ export function pickElement(
       e.stopPropagation();
       cleanup();
       resolve(null);
+    });
+
+    noteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cleanup();
+      resolve({
+        itemType: 'note',
+        cssSelector: '',
+        elementText: '',
+        elementHtml: '',
+        pageUrl: window.location.href,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      });
     });
 
     let currentTarget: Element | null = null;

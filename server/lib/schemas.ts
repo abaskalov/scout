@@ -91,8 +91,13 @@ export const listUsersSchema = paginationSchema.extend({
 });
 
 // === Items ===
+const itemTypeSchema = z.enum(['bug', 'note', 'task']);
+const itemSourceSchema = z.enum(['widget', 'dashboard', 'api', 'agent']);
+
 export const createItemSchema = z.object({
   projectId: uuidSchema,
+  itemType: itemTypeSchema.default('bug'),
+  source: itemSourceSchema.default('widget'),
   message: z.string().min(3),
   priority: z.enum(['critical', 'high', 'medium', 'low']).default('medium'),
   labels: z.array(z.string().max(50)).max(10).optional(),
@@ -111,6 +116,7 @@ export const createItemSchema = z.object({
 
 export const listItemsSchema = paginationSchema.extend({
   projectId: uuidSchema,
+  itemType: itemTypeSchema.optional(),
   status: z.enum(['new', 'in_progress', 'review', 'testing', 'done', 'cancelled']).optional(),
   statuses: z.array(z.enum(['new', 'in_progress', 'review', 'testing', 'done', 'cancelled'])).min(1).max(6).optional(),
   priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
@@ -122,6 +128,7 @@ export const getItemSchema = z.object({ id: uuidSchema });
 
 export const countItemsSchema = z.object({
   projectId: uuidSchema,
+  itemType: itemTypeSchema.optional(),
   status: z.enum(['new', 'in_progress', 'review', 'testing', 'done', 'cancelled']).optional(),
 });
 
@@ -150,6 +157,7 @@ export const deleteItemSchema = z.object({ id: uuidSchema });
 
 export const updateItemSchema = z.object({
   id: uuidSchema,
+  itemType: itemTypeSchema.optional(),
   message: z.string().min(3).optional(),
   assigneeId: uuidSchema.nullish(),
   priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),

@@ -51,6 +51,8 @@ export const pivotUsersProjects = sqliteTable('pivot_users_projects', {
 export const scoutItems = sqliteTable('scout_items', {
   id: text('id').primaryKey(),
   projectId: text('project_id').notNull().references(() => projects.id),
+  itemType: text('item_type', { enum: ['bug', 'note', 'task'] }).notNull().default('bug'),
+  source: text('source', { enum: ['widget', 'dashboard', 'api', 'agent'] }).notNull().default('widget'),
   message: text('message').notNull(),
   status: text('status', {
     enum: ['new', 'in_progress', 'review', 'testing', 'done', 'cancelled'],
@@ -80,6 +82,7 @@ export const scoutItems = sqliteTable('scout_items', {
   updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
 }, (table) => [
   index('idx_items_project_status').on(table.projectId, table.status),
+  index('idx_items_project_type').on(table.projectId, table.itemType),
   index('idx_items_project_created').on(table.projectId, table.createdAt),
   index('idx_items_assignee').on(table.assigneeId),
 ]);
@@ -91,7 +94,7 @@ export const scoutItemNotes = sqliteTable('scout_item_notes', {
   userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
   content: text('content').notNull(),
   type: text('type', {
-    enum: ['comment', 'status_change', 'assignment'],
+    enum: ['comment', 'status_change', 'assignment', 'type_change'],
   }).notNull().default('comment'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 }, (table) => [
@@ -192,6 +195,8 @@ export type Webhook = typeof webhooks.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type ItemStatus = NonNullable<ScoutItem['status']>;
 export type ItemPriority = NonNullable<ScoutItem['priority']>;
+export type ItemType = NonNullable<ScoutItem['itemType']>;
+export type ItemSource = NonNullable<ScoutItem['source']>;
 export type UserRole = NonNullable<User['role']>;
 export type ProjectRole = NonNullable<typeof pivotUsersProjects.$inferSelect['role']>;
 

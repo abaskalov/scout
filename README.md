@@ -22,14 +22,15 @@
 
 ## What is Scout?
 
-Scout is a self-hosted bug tracker for teams that want high-quality bug reports and a clean handoff to humans or coding agents. Testers report bugs via an embeddable widget that captures element context, screenshots, and session recordings. Developers and agents work from the dashboard, link related issues, add notes, and move items through the workflow.
+Scout is a self-hosted tracker for teams that want high-quality bug reports and a clean handoff to humans or coding agents. Testers report bugs via an embeddable widget that captures element context, screenshots, and session recordings. While testing, they can also save lightweight notes without turning them into committed work. Developers and agents work from the dashboard, triage notes into tasks, link related items, add comments, and move bugs/tasks through the workflow.
 
 ```
-Tester clicks element  →  Widget captures context + screenshot + recording
+Tester clicks element  →  Widget creates bug with context + screenshot + recording
+Tester saves note     →  Widget stores page-level observation without workflow work
                                 ↓
-                        API creates item (new)
+                        API creates item (new): bug / note / task
                                 ↓
-                        Team or agent triages → fixes → links PR
+                        Team triages notes → tasks; humans/agents fix bugs/tasks
                                 ↓
                         Review → testing → done
 ```
@@ -38,8 +39,8 @@ Tester clicks element  →  Widget captures context + screenshot + recording
 
 | Area | Details |
 |------|---------|
-| **Widget** | Shadow DOM isolation, element picker with instruction banner, html2canvas-pro screenshot with element highlight, rrweb session recording (60s buffer), cross-domain SSO |
-| **Dashboard** | React SPA, rrweb session player, items/projects/users/webhooks management, locale switcher |
+| **Widget** | Bug-first reporting, optional non-bug notes, Shadow DOM isolation, element picker with instruction banner, html2canvas-pro screenshot with element highlight, rrweb session recording (60s buffer), cross-domain SSO |
+| **Dashboard** | React SPA, bug/note/task items, manual creation, note-to-task triage, rrweb session player, items/projects/users/webhooks management, locale switcher |
 | **i18n** | Russian, English, Uzbek (Latin). Dashboard + widget. Server error codes translated on client |
 | **Agent workflows** | Manual agent skill for controlled bug work without background automation |
 | **Auth** | JWT + API keys (`sk_live_*`), system roles (admin/member), project roles (owner/manager/developer/reporter/viewer), cross-domain SSO |
@@ -88,7 +89,9 @@ pnpm dev:all     # API + dashboard + widget (hot reload)
 
 The dashboard shows a ready-to-copy snippet for each project under **Projects** → **Manage integrations**.
 
-**What it captures:** CSS selector, element text/HTML, page URL, viewport size, browser/OS metadata, screenshot (with element highlight), session recording (last 60 seconds).
+**Bug reports capture:** CSS selector, element text/HTML, page URL, viewport size, browser/OS metadata, screenshot (with element highlight), session recording (last 60 seconds).
+
+**Notes:** The widget stays bug-first, but the picker banner and panel include a secondary “not a bug” note flow. Notes save the current page context without requiring an element, priority, screenshot, or session recording. In the dashboard, triagers can convert a note into a task when it becomes committed work.
 
 **SSO:** Users log in once — session shared across all sites via cookie (subdomains) or popup (cross-domain).
 
@@ -106,7 +109,7 @@ The dashboard shows a ready-to-copy snippet for each project under **Projects** 
 
 Responsive React SPA served from the same port as the API.
 
-- **Items** — List with status/priority filters, search, pagination. Detail view with screenshot lightbox, rrweb session player, notes timeline, related items, resolve modal
+- **Items** — Bug/note/task list with type/status/priority filters, search, pagination, manual creation, and note-to-task triage. Detail view with screenshot lightbox, rrweb session player, notes timeline, related items, resolve modal
 - **Projects** — CRUD with allowed origins for CORS/SSO and links to per-project integrations
 - **Users** — CRUD with system roles and per-project role assignment
 - **Webhooks** — Per-project event notifications (Slack-compatible)

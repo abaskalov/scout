@@ -77,6 +77,8 @@ const TABLE_SPECS: TableSpec[] = [
     createSql: `CREATE TABLE scout_items (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
+      item_type TEXT NOT NULL DEFAULT 'bug',
+      source TEXT NOT NULL DEFAULT 'widget',
       message TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'new',
       page_url TEXT,
@@ -105,10 +107,11 @@ const TABLE_SPECS: TableSpec[] = [
     )`,
     indexSql: [
       'CREATE INDEX idx_items_project_status ON scout_items(project_id, status)',
+      'CREATE INDEX idx_items_project_type ON scout_items(project_id, item_type)',
       'CREATE INDEX idx_items_project_created ON scout_items(project_id, created_at)',
       'CREATE INDEX idx_items_assignee ON scout_items(assignee_id)',
     ],
-    copyColumns: ['id', 'project_id', 'message', 'status', 'page_url', 'page_route', 'component_file', 'css_selector', 'element_text', 'element_html', 'viewport_width', 'viewport_height', 'screenshot_path', 'session_recording_path', 'priority', 'labels', 'metadata', 'reporter_id', 'assignee_id', 'resolved_by_id', 'resolution_note', 'branch_name', 'mr_url', 'attempt_count', 'resolved_at', 'created_at', 'updated_at'],
+    copyColumns: ['id', 'project_id', 'item_type', 'source', 'message', 'status', 'page_url', 'page_route', 'component_file', 'css_selector', 'element_text', 'element_html', 'viewport_width', 'viewport_height', 'screenshot_path', 'session_recording_path', 'priority', 'labels', 'metadata', 'reporter_id', 'assignee_id', 'resolved_by_id', 'resolution_note', 'branch_name', 'mr_url', 'attempt_count', 'resolved_at', 'created_at', 'updated_at'],
     primaryKey: ['id'],
   },
   {

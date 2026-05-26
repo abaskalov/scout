@@ -17,7 +17,7 @@ const spec = {
   ],
   tags: [
     { name: 'Auth', description: 'Аутентификация и валидация токенов' },
-    { name: 'Items', description: 'Баг-репорты (создание, управление статусами, заметки)' },
+    { name: 'Items', description: 'Баги, заметки и задачи (создание, управление статусами, комментарии)' },
     { name: 'Projects', description: 'Управление проектами' },
     { name: 'Users', description: 'Управление пользователями и project roles' },
     { name: 'Webhooks', description: 'Вебхуки для проектных интеграций' },
@@ -53,6 +53,14 @@ const spec = {
         type: 'string',
         enum: ['critical', 'high', 'medium', 'low'],
       },
+      ItemType: {
+        type: 'string',
+        enum: ['bug', 'note', 'task'],
+      },
+      ItemSource: {
+        type: 'string',
+        enum: ['widget', 'dashboard', 'api', 'agent'],
+      },
       UserRole: {
         type: 'string',
         enum: ['admin', 'member'],
@@ -75,7 +83,7 @@ const spec = {
       },
       NoteType: {
         type: 'string',
-        enum: ['comment', 'status_change', 'assignment'],
+        enum: ['comment', 'status_change', 'assignment', 'type_change'],
       },
       ItemLinkType: {
         type: 'string',
@@ -141,6 +149,8 @@ const spec = {
         properties: {
           id: { type: 'string', format: 'uuid' },
           projectId: { type: 'string', format: 'uuid' },
+          itemType: { $ref: '#/components/schemas/ItemType' },
+          source: { $ref: '#/components/schemas/ItemSource' },
           message: { type: 'string' },
           status: { $ref: '#/components/schemas/ItemStatus' },
           priority: { $ref: '#/components/schemas/ItemPriority' },
@@ -463,8 +473,8 @@ const spec = {
     '/items/create': {
       post: {
         tags: ['Items'],
-        summary: 'Создать баг-репорт',
-        description: 'Создаёт новый item в проекте. Требуется project permission `create_item` (admin/owner/manager/reporter). Rate limit: 20 req/min.',
+        summary: 'Создать item',
+        description: 'Создаёт баг, заметку или задачу в проекте. Виджет по умолчанию создаёт bug; заметки нужно преобразовать в task перед workflow-работой. Требуется project permission `create_item` (admin/owner/manager/reporter). Rate limit: 20 req/min.',
         security: [{ BearerAuth: [] }],
         requestBody: {
           required: true,
@@ -475,6 +485,8 @@ const spec = {
                 required: ['projectId', 'message'],
                 properties: {
                   projectId: { type: 'string', format: 'uuid' },
+                  itemType: { $ref: '#/components/schemas/ItemType', default: 'bug' },
+                  source: { $ref: '#/components/schemas/ItemSource', default: 'widget' },
                   message: { type: 'string', minLength: 3 },
                   priority: { $ref: '#/components/schemas/ItemPriority', default: 'medium' },
                   labels: { type: 'array', items: { type: 'string', maxLength: 50 }, maxItems: 10 },
@@ -524,6 +536,7 @@ const spec = {
                 required: ['projectId'],
                 properties: {
                   projectId: { type: 'string', format: 'uuid' },
+                  itemType: { $ref: '#/components/schemas/ItemType' },
                   status: { $ref: '#/components/schemas/ItemStatus' },
                   statuses: { type: 'array', items: { $ref: '#/components/schemas/ItemStatus' }, minItems: 1, maxItems: 6, description: 'Filter by multiple statuses, useful for open queue triage. If status is provided, status takes precedence.' },
                   priority: { $ref: '#/components/schemas/ItemPriority' },
@@ -626,6 +639,7 @@ const spec = {
                 required: ['projectId'],
                 properties: {
                   projectId: { type: 'string', format: 'uuid' },
+                  itemType: { $ref: '#/components/schemas/ItemType' },
                   status: { $ref: '#/components/schemas/ItemStatus' },
                 },
               },
@@ -829,7 +843,7 @@ const spec = {
       post: {
         tags: ['Items'],
         summary: 'Обновить item',
-        description: 'Обновляет поля item (message, priority, labels, assigneeId). Требуется project permission `triage` (admin/owner/manager).',
+        description: 'Обновляет поля item (itemType, message, priority, labels, assigneeId). Требуется project permission `triage` (admin/owner/manager).',
         security: [{ BearerAuth: [] }, { ApiKeyAuth: [] }],
         requestBody: {
           required: true,
@@ -840,6 +854,7 @@ const spec = {
                 required: ['id'],
                 properties: {
                   id: { type: 'string', format: 'uuid' },
+                  itemType: { $ref: '#/components/schemas/ItemType' },
                   message: { type: 'string', minLength: 3 },
                   assigneeId: { type: 'string', format: 'uuid', nullable: true },
                   priority: { $ref: '#/components/schemas/ItemPriority' },

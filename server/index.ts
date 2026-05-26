@@ -176,8 +176,6 @@ app.use('/storage/*', storageAuth, serveStatic({ root: './' }));
 
 // SSO bridge — lightweight HTML page for cross-domain token storage via postMessage
 app.get('/auth/sso', (c) => {
-  c.header('X-Frame-Options', '');
-
   // Build allowedOrigins JSON for inline script
   const origins = getAllowedOrigins();
   const originsJson = JSON.stringify([...origins]);

@@ -281,12 +281,12 @@ async function init(): Promise<void> {
       resumeRecording();
       showFab(fab);
     },
-    onSubmitSuccess: () => {
+    onSubmitSuccess: (mode) => {
       currentPicked = null;
       preScreenshot = null;
       resumeRecording();
       showFab(fab);
-      showToast(t('toast.success'));
+      showToast(t(mode === 'note' ? 'toast.noteSuccess' : 'toast.success'));
     },
     onSubmitError: (msg: string) => {
       showToast(msg, true);
@@ -331,10 +331,14 @@ async function init(): Promise<void> {
       return;
     }
 
-    // Pre-capture screenshot with loading indicator (before panel opens)
-    showLoading(t('loading.screenshot'));
-    preScreenshot = await captureScreenshot(picked.cssSelector);
-    hideLoading();
+    if (picked.itemType === 'note') {
+      preScreenshot = null;
+    } else {
+      // Pre-capture screenshot with loading indicator (before panel opens)
+      showLoading(t('loading.screenshot'));
+      preScreenshot = await captureScreenshot(picked.cssSelector);
+      hideLoading();
+    }
 
     currentPicked = picked;
     showPanel(panelElements, picked, preScreenshot);

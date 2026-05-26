@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { api } from '../lib/api';
 import { formatDate, formatDateShort } from '../lib/date';
@@ -12,6 +12,7 @@ import { useSSE } from '../hooks/useSSE';
 import { useTranslation } from '../i18n';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
+import ItemTypeBadge from '../components/ItemTypeBadge';
 import Labels, { parseLabels } from '../components/Labels';
 import Pagination from '../components/Pagination';
 
@@ -23,6 +24,7 @@ interface Project {
 
 interface Item {
   id: string;
+  itemType: string;
   message: string;
   status: string;
   priority: string | null;
@@ -54,6 +56,7 @@ interface Counts {
 }
 
 const STATUSES = ['all', 'new', 'in_progress', 'review', 'testing', 'done', 'cancelled'] as const;
+const ITEM_TYPES = ['all', 'bug', 'note', 'task'] as const;
 
 const STATUS_KEYS: Record<string, string> = {
   all: 'items.statuses.all',
@@ -63,6 +66,13 @@ const STATUS_KEYS: Record<string, string> = {
   testing: 'items.statuses.testing',
   done: 'items.statuses.done',
   cancelled: 'items.statuses.cancelled',
+};
+
+const ITEM_TYPE_KEYS: Record<string, string> = {
+  all: 'items.types.all',
+  bug: 'items.types.bug',
+  note: 'items.types.note',
+  task: 'items.types.task',
 };
 
 const PRIORITIES = ['critical', 'high', 'medium', 'low'] as const;
@@ -78,6 +88,11 @@ function getInitialStatus(params: URLSearchParams) {
 function getInitialPriority(params: URLSearchParams) {
   const priority = params.get('priority');
   return priority && PRIORITIES.includes(priority as (typeof PRIORITIES)[number]) ? priority : '';
+}
+
+function getInitialItemType(params: URLSearchParams) {
+  const type = params.get('type');
+  return type && ITEM_TYPES.includes(type as (typeof ITEM_TYPES)[number]) ? type : 'all';
 }
 
 function getInitialPage(params: URLSearchParams) {
@@ -101,6 +116,7 @@ export default function Items() {
     totalPages: 1,
   });
   const [statusFilter, setStatusFilter] = useState<string>(() => getInitialStatus(searchParams));
+  const [itemTypeFilter, setItemTypeFilter] = useState<string>(() => getInitialItemType(searchParams));
   const [counts, setCounts] = useState<Counts>({
     new: 0,
     in_progress: 0,
@@ -110,6 +126,12 @@ export default function Items() {
     cancelled: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createType, setCreateType] = useState<'bug' | 'note' | 'task'>('task');
+  const [createMessage, setCreateMessage] = useState('');
+  const [createPriority, setCreatePriority] = useState('medium');
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createError, setCreateError] = useState('');
 
   // Search state
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
@@ -142,6 +164,7 @@ export default function Items() {
 
     const next = new URLSearchParams();
     next.set('project', selectedProject);
+    if (itemTypeFilter !== 'all') next.set('type', itemTypeFilter);
     if (statusFilter !== 'all') next.set('status', statusFilter);
     if (pagination.page > 1) next.set('page', String(pagination.page));
     if (search) next.set('q', search);
@@ -152,7 +175,7 @@ export default function Items() {
     if (nextString !== currentSearchParams) {
       setSearchParams(next, { replace: true });
     }
-  }, [selectedProject, statusFilter, pagination.page, search, priorityFilter, assigneeFilter, currentSearchParams, setSearchParams]);
+  }, [selectedProject, itemTypeFilter, statusFilter, pagination.page, search, priorityFilter, assigneeFilter, currentSearchParams, setSearchParams]);
 
   // Load users for assignee filter (admin only)
   useEffect(() => {
@@ -173,6 +196,9 @@ export default function Items() {
       page: pagination.page,
       perPage: 20,
     };
+    if (itemTypeFilter !== 'all') {
+      body.itemType = itemTypeFilter;
+    }
     if (statusFilter !== 'all') {
       body.status = statusFilter;
     }
@@ -190,6 +216,7 @@ export default function Items() {
       api<{ items: Item[]; pagination: PaginationData }>('/api/items/list', body),
       api<{ counts: Counts }>('/api/items/count', {
         projectId: selectedProject,
+        ...(itemTypeFilter !== 'all' ? { itemType: itemTypeFilter } : {}),
       }),
     ])
       .then(([listRes, countRes]) => {
@@ -199,7 +226,7 @@ export default function Items() {
       })
       .catch(() => {})
       .finally(() => { if (showLoading) setLoading(false); });
-  }, [selectedProject, statusFilter, pagination.page, search, assigneeFilter, priorityFilter]);
+  }, [selectedProject, itemTypeFilter, statusFilter, pagination.page, search, assigneeFilter, priorityFilter]);
 
   // Load items + counts when project or filter changes
   useEffect(() => {
@@ -219,6 +246,7 @@ export default function Items() {
     storeSelectedProjectId(projectId);
     setPagination((p) => ({ ...p, page: 1 }));
     setStatusFilter('all');
+    setItemTypeFilter('all');
     setSearch('');
     setSearchInput('');
     setAssigneeFilter('');
@@ -228,6 +256,42 @@ export default function Items() {
   function handleStatusChange(status: string) {
     setStatusFilter(status);
     setPagination((p) => ({ ...p, page: 1 }));
+  }
+
+  function handleItemTypeFilter(e: React.ChangeEvent<HTMLSelectElement>) {
+    setItemTypeFilter(e.target.value);
+    setPagination((p) => ({ ...p, page: 1 }));
+  }
+
+  function openCreateModal() {
+    setCreateType('task');
+    setCreateMessage('');
+    setCreatePriority('medium');
+    setCreateError('');
+    setShowCreateModal(true);
+  }
+
+  async function handleCreateSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!selectedProject || !createMessage.trim()) return;
+    setCreateSaving(true);
+    setCreateError('');
+    try {
+      const created = await api<Item>('/api/items/create', {
+        projectId: selectedProject,
+        itemType: createType,
+        source: 'dashboard',
+        message: createMessage.trim(),
+        priority: createType === 'note' ? 'medium' : createPriority,
+      });
+      setShowCreateModal(false);
+      await fetchData(true);
+      navigate(itemPath(created.id));
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : t('validation.saveError'));
+    } finally {
+      setCreateSaving(false);
+    }
   }
 
   function handleSearchInput(value: string) {
@@ -276,18 +340,28 @@ export default function Items() {
           <h1 className="text-xl font-bold text-gray-900">{t('items.title')}</h1>
           <p className="mt-1 text-sm text-gray-500">{t('items.description')}</p>
         </div>
-        <select
-          name="items-project"
-          value={selectedProject}
-          onChange={handleProjectChange}
-          className={`w-full md:w-auto ${FORM_CONTROL_CLASS}`}
-        >
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-col gap-2 md:flex-row md:items-center">
+          <button
+            type="button"
+            onClick={openCreateModal}
+            disabled={!selectedProject}
+            className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 md:w-auto md:py-1.5"
+          >
+            {t('items.create')}
+          </button>
+          <select
+            name="items-project"
+            value={selectedProject}
+            onChange={handleProjectChange}
+            className={`w-full md:w-auto ${FORM_CONTROL_CLASS}`}
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       {/* Search + assignee filter */}
       <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
@@ -313,6 +387,16 @@ export default function Items() {
             </button>
           )}
         </div>
+        <select
+          name="items-type"
+          value={itemTypeFilter}
+          onChange={handleItemTypeFilter}
+          className={`w-full md:w-40 ${FORM_CONTROL_CLASS}`}
+        >
+          {ITEM_TYPES.map((type) => (
+            <option key={type} value={type}>{t(ITEM_TYPE_KEYS[type]!)}</option>
+          ))}
+        </select>
         <select
           name="items-priority"
           value={priorityFilter}
@@ -371,6 +455,7 @@ export default function Items() {
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
               <th className="px-4 py-3">{t('items.table.message')}</th>
+              <th className="px-4 py-3 w-28">{t('items.table.type')}</th>
               <th className="px-4 py-3 w-28">{t('items.table.status')}</th>
               <th className="px-4 py-3 w-28">{t('items.table.priority')}</th>
               <th className="px-4 py-3 w-36">{t('items.table.labels')}</th>
@@ -382,13 +467,13 @@ export default function Items() {
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                   {t('common.loading')}
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                   {search ? t('items.notFound') : t('items.empty')}
                 </td>
               </tr>
@@ -407,6 +492,9 @@ export default function Items() {
                     >
                       {item.message}
                     </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <ItemTypeBadge itemType={item.itemType} />
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={item.status} />
@@ -457,6 +545,7 @@ export default function Items() {
                   {item.message}
                 </Link>
                 <div className="flex shrink-0 items-center gap-1.5">
+                  <ItemTypeBadge itemType={item.itemType} />
                   <PriorityBadge priority={item.priority} />
                   <StatusBadge status={item.status} />
                 </div>
@@ -480,6 +569,77 @@ export default function Items() {
         totalPages={pagination.totalPages}
         onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
       />
+
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 md:items-center">
+          <form
+            onSubmit={handleCreateSubmit}
+            className="w-full rounded-t-xl border border-gray-200 bg-white p-5 shadow-xl md:max-w-lg md:rounded-lg md:p-6"
+          >
+            <h2 className="text-lg font-semibold text-gray-900">{t('items.create')}</h2>
+            <p className="mt-1 text-sm text-gray-500">{t('items.createDescription')}</p>
+            <label className="mt-4 block">
+              <span className="text-sm font-medium text-gray-700">{t('items.form.type')}</span>
+              <select
+                value={createType}
+                onChange={(e) => setCreateType(e.target.value as 'bug' | 'note' | 'task')}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              >
+                <option value="task">{t('items.types.task')}</option>
+                <option value="note">{t('items.types.note')}</option>
+                <option value="bug">{t('items.types.bug')}</option>
+              </select>
+            </label>
+            <label className="mt-3 block">
+              <span className="text-sm font-medium text-gray-700">{t('items.form.message')}</span>
+              <textarea
+                value={createMessage}
+                onChange={(e) => setCreateMessage(e.target.value)}
+                rows={5}
+                placeholder={t(`items.form.placeholders.${createType}`)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              />
+            </label>
+            {createType !== 'note' && (
+              <label className="mt-3 block">
+                <span className="text-sm font-medium text-gray-700">{t('items.table.priority')}</span>
+                <select
+                  value={createPriority}
+                  onChange={(e) => setCreatePriority(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                >
+                  <option value="critical">{t('items.priorities.critical')}</option>
+                  <option value="high">{t('items.priorities.high')}</option>
+                  <option value="medium">{t('items.priorities.medium')}</option>
+                  <option value="low">{t('items.priorities.low')}</option>
+                </select>
+              </label>
+            )}
+            {createError && (
+              <div className="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {createError}
+              </div>
+            )}
+            <div className="mt-5 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                disabled={createSaving}
+                className="w-full rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 md:w-auto"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="submit"
+                disabled={createSaving || !createMessage.trim()}
+                className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 md:w-auto"
+              >
+                {createSaving ? t('common.saving') : t('common.create')}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,6 +16,10 @@ export const WIDGET_STYLES = `
     box-sizing: border-box;
   }
 
+  .hidden {
+    display: none !important;
+  }
+
   /* FAB */
   .scout-fab {
     position: fixed;
@@ -132,6 +136,12 @@ export const WIDGET_STYLES = `
     gap: 8px;
   }
 
+  .scout-picker-banner-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   .scout-picker-banner-icon {
     width: 18px;
     height: 18px;
@@ -147,6 +157,21 @@ export const WIDGET_STYLES = `
     border-radius: 6px;
     font-size: 13px;
     font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    min-height: 36px;
+  }
+
+  .scout-picker-banner-note {
+    background: #fff;
+    border: none;
+    color: #1e293b;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
     font-family: inherit;
     touch-action: manipulation;
@@ -376,6 +401,24 @@ export const WIDGET_STYLES = `
     color: #9ca3af;
     text-align: right;
     margin-top: 4px;
+  }
+
+  .scout-mode-switch {
+    display: inline-flex;
+    margin: -4px 0 16px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .scout-mode-switch:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
   }
 
   .scout-checkbox {

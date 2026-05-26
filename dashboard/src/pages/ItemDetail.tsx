@@ -9,6 +9,7 @@ import { useSSE, type SSEEventType } from '../hooks/useSSE';
 import { useTranslation } from '../i18n';
 import StatusBadge from '../components/StatusBadge';
 import PriorityBadge from '../components/PriorityBadge';
+import ItemTypeBadge from '../components/ItemTypeBadge';
 import Labels, { parseLabels } from '../components/Labels';
 import SessionPlayer from '../components/SessionPlayer';
 
@@ -73,6 +74,7 @@ interface UserListItem {
 interface ItemData {
   id: string;
   projectId: string;
+  itemType: 'bug' | 'note' | 'task';
   message: string;
   status: string;
   priority: string | null;
@@ -121,6 +123,7 @@ interface RelatedItem {
   createdAt: string;
   item: {
     id: string;
+    itemType: string;
     message: string;
     status: string;
     priority: string | null;
@@ -130,6 +133,7 @@ interface RelatedItem {
 
 interface LinkCandidate {
   id: string;
+  itemType: string;
   message: string;
   status: string;
   priority: string | null;
@@ -282,6 +286,9 @@ function parseAutoNote(content: string): AutoNote | null {
     if (parsed.type === 'assignment') {
       return { key: 'notes.assigned', params: { name: typeof parsed.userName === 'string' ? parsed.userName : '' } };
     }
+    if (parsed.type === 'type_change' && typeof parsed.from === 'string' && typeof parsed.to === 'string') {
+      return { key: 'notes.typeChange', params: { from: parsed.from, to: parsed.to } };
+    }
     if (parsed.type === 'reopen') {
       if (typeof parsed.from !== 'string' || typeof parsed.to !== 'string') return { key: 'notes.reopened' };
       const details = [parsed.reason, parsed.auditResult]
@@ -324,6 +331,7 @@ export default function ItemDetail() {
 
   // Edit mode state
   const [editing, setEditing] = useState(false);
+  const [editItemType, setEditItemType] = useState<'bug' | 'note' | 'task'>('bug');
   const [editMessage, setEditMessage] = useState('');
   const [editPriority, setEditPriority] = useState('medium');
   const [editLabels, setEditLabels] = useState('');
@@ -528,7 +536,7 @@ export default function ItemDetail() {
     try {
       await api('/api/items/reopen', {
         id: item.id,
-        ...(item.status === 'done' ? { status: 'in_progress', reason: 'manual' } : {}),
+        ...(item.itemType !== 'note' && item.status === 'done' ? { status: 'in_progress', reason: 'manual' } : {}),
       });
       await loadItem();
     } catch (err) {
@@ -538,8 +546,22 @@ export default function ItemDetail() {
     }
   }
 
+  async function handleMakeTask() {
+    if (!item || item.itemType !== 'note') return;
+    setActionLoading(true);
+    try {
+      await api('/api/items/update', { id: item.id, itemType: 'task' });
+      await loadItem();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('validation.updateError'));
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   function startEditing() {
     if (!item) return;
+    setEditItemType(item.itemType);
     setEditMessage(item.message);
     setEditPriority(item.priority ?? 'medium');
     setEditLabels(parseLabels(item.labels).join(', '));
@@ -556,6 +578,7 @@ export default function ItemDetail() {
         .filter((l) => l.length > 0);
       await api('/api/items/update', {
         id: item.id,
+        itemType: editItemType,
         message: editMessage.trim(),
         priority: editPriority,
         labels: labelsArr,
@@ -654,6 +677,7 @@ export default function ItemDetail() {
     comment: t('items.detail.notes.types.comment'),
     status_change: t('items.detail.notes.types.status'),
     assignment: t('items.detail.notes.types.assignment'),
+    type_change: t('items.detail.notes.types.typeChange'),
   };
 
   const linkTypeLabels: Record<string, string> = {
@@ -718,6 +742,7 @@ export default function ItemDetail() {
               {item.message}
             </h1>
             <div className="flex flex-wrap items-center gap-2 md:gap-3 text-sm text-gray-500">
+              <ItemTypeBadge itemType={item.itemType} />
               <StatusBadge status={item.status} />
               <PriorityBadge priority={item.priority} />
               <span className="font-mono text-xs">#{item.id.slice(0, 8)}</span>
@@ -737,6 +762,18 @@ export default function ItemDetail() {
                   className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
                 />
                 <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <span className="text-xs font-medium text-gray-500">{t('items.table.type')}</span>
+                    <select
+                      value={editItemType}
+                      onChange={(e) => setEditItemType(e.target.value as 'bug' | 'note' | 'task')}
+                      className="rounded-md border border-gray-300 px-2 py-1 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                    >
+                      <option value="bug">{t('items.types.bug')}</option>
+                      <option value="note">{t('items.types.note')}</option>
+                      <option value="task">{t('items.types.task')}</option>
+                    </select>
+                  </label>
                   <label className="flex items-center gap-2 text-sm text-gray-700">
                     <span className="text-xs font-medium text-gray-500">{t('items.table.priority')}</span>
                     <select
@@ -799,6 +836,15 @@ export default function ItemDetail() {
 
           {/* Action buttons — full-width stacked on mobile, inline on desktop */}
           <div className="flex flex-col gap-2 md:flex-row md:flex-shrink-0 md:flex-wrap">
+            {item.itemType === 'note' && item.permissions.canUpdate && !isTerminal && (
+              <button
+                onClick={handleMakeTask}
+                disabled={actionLoading}
+                className="w-full md:w-auto rounded-md bg-emerald-600 px-3 py-2 md:py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {t('items.detail.actions.makeTask')}
+              </button>
+            )}
             {item.status === 'new' && (item.permissions.canClaim || item.permissions.canCancel) && (
               <>
                 {item.permissions.canClaim && (
@@ -899,7 +945,7 @@ export default function ItemDetail() {
                 </button>
               </>
             )}
-            {isTerminal && item.permissions.canReopen && (
+            {isTerminal && item.permissions.canReopen && (item.itemType !== 'note' || item.status === 'cancelled') && (
               <button
                 onClick={handleReopen}
                 disabled={actionLoading}
@@ -1110,6 +1156,7 @@ export default function ItemDetail() {
                       <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-medium text-gray-700">
                         {linkTypeLabels[link.type] ?? link.type}
                       </span>
+                      <ItemTypeBadge itemType={link.item.itemType} />
                       <StatusBadge status={link.item.status} />
                       <PriorityBadge priority={link.item.priority} />
                       <span className="font-mono text-[11px] text-gray-400">#{link.item.id.slice(0, 8)}</span>
@@ -1166,7 +1213,7 @@ export default function ItemDetail() {
                 ) : (
                   linkCandidates.map((candidate) => (
                     <option key={candidate.id} value={candidate.id}>
-                      #{candidate.id.slice(0, 8)} · {candidate.message}
+                      #{candidate.id.slice(0, 8)} · {t(`items.types.${candidate.itemType || 'bug'}`)} · {candidate.message}
                     </option>
                   ))
                 )}

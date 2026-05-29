@@ -10,12 +10,26 @@ const uuidSchema = z.string().uuid();
 
 const itemEvidenceSchema = z.object({
   kind: z.enum(['handoff', 'verification', 'audit', 'blocker']).default('handoff'),
+  result: z.enum(['pass', 'fail', 'blocked', 'partial']).optional(),
+  level: z.enum([
+    'static',
+    'typecheck',
+    'api_smoke',
+    'browser_smoke',
+    'browser_acceptance',
+    'local_acceptance',
+    'staging_acceptance',
+    'production_acceptance',
+    'user_acceptance',
+  ]).optional(),
+  coverage: z.enum(['item', 'shared_root_cluster', 'route_sweep', 'audit_sample']).optional(),
   environment: z.string().min(1).max(100),
   role: z.string().max(100).optional(),
   url: z.string().max(1000).optional(),
   scenario: z.string().min(1).max(2000),
   action: z.string().min(1).max(2000),
   visibleResult: z.string().min(1).max(2000),
+  acceptanceScope: z.string().max(2000).optional(),
   consoleResult: z.string().max(2000).optional(),
   networkResult: z.string().max(2000).optional(),
   apiResult: z.string().max(2000).optional(),
@@ -25,6 +39,9 @@ const itemEvidenceSchema = z.object({
   commitSha: z.string().max(100).optional(),
   deploySha: z.string().max(100).optional(),
   risks: z.string().max(2000).optional(),
+  uncheckedRisks: z.string().max(2000).optional(),
+  source: z.enum(['agent', 'human', 'ci', 'deploy', 'audit']).optional(),
+  verifiedAt: z.string().datetime().optional(),
 });
 
 // === Auth ===

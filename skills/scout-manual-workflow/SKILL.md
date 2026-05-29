@@ -269,23 +269,30 @@ Scout supports structured evidence records. Treat them as the handoff contract, 
 Before moving an item to `review` or `done`, create or submit evidence with:
 
 1. `environment`: local, staging, production, or another explicit runtime.
-2. `url`: the exact checked URL when the item has a web surface.
-3. `role`: the role/user context without secrets.
-4. `scenario`: the acceptance path derived from the Scout item.
-5. `action`: the actual browser/API/user action performed.
-6. `visibleResult`: the observed user-visible result, or the runtime result for non-UI work.
-7. `consoleResult` and `networkResult` for frontend/admin/widget work.
-8. `apiResult`, `dbResult`, or read-model evidence for backend/data/state-changing work.
-9. `fixture` and `cleanupResult` when disposable staging data was used.
-10. `commitSha`, `deploySha`, and `risks` when relevant.
+2. `result`: `pass`, `fail`, `blocked`, or `partial`.
+3. `level`: the strongest evidence level, such as `browser_acceptance`, `local_acceptance`, `staging_acceptance`, `production_acceptance`, or `user_acceptance`.
+4. `coverage`: `item` by default; use `shared_root_cluster`, `route_sweep`, or `audit_sample` only when that is the honest scope.
+5. `url`: the exact checked URL when the item has a web surface.
+6. `role`: the role/user context without secrets.
+7. `scenario`: the acceptance path derived from the Scout item.
+8. `action`: the actual browser/API/user action performed.
+9. `visibleResult`: the observed user-visible result, or the runtime result for non-UI work.
+10. `acceptanceScope`: what original Scout acceptance condition this evidence covers.
+11. `consoleResult` and `networkResult` for frontend/admin/widget work.
+12. `apiResult`, `dbResult`, or read-model evidence for backend/data/state-changing work.
+13. `fixture` and `cleanupResult` when disposable staging data was used.
+14. `commitSha`, `deploySha`, `risks`, `uncheckedRisks`, `source`, and `verifiedAt` when relevant.
 
 Rules:
 
 1. Do not move user-visible work to `review` or `done` with only `200 OK`, route-smoke, old notes, or code reasoning.
 2. For mutation workflows, evidence must include the action and post-condition: UI state, list/detail/read path, network/API response, and DB/read-model/audit trail where relevant.
-3. For `done`, evidence must match the deployed or accepted environment. Local evidence alone normally supports `review`, not `done`.
-4. If acceptance cannot be safely checked, create `blocker` evidence or a blocker note and keep/reopen the item according to reality. Do not convert blocked work to pass.
-5. When using the API, either call `/api/items/add-evidence` before the status change or include the `evidence` object in `/api/items/update-status` or `/api/items/resolve`.
+3. For `review`, evidence must be `result:"pass"` and include a real `commitSha` or real `mrUrl`; otherwise keep the item in `in_progress` with a blocker/progress note.
+4. For `done`, evidence must be `result:"pass"` with target acceptance: `local_acceptance` only when the item/project/user explicitly accepts local as the target, otherwise `staging_acceptance`, `production_acceptance`, or `user_acceptance`.
+5. Generic route sweeps, cluster checks, and API smoke can support a transition, but cannot replace item-specific acceptance unless `coverage:"shared_root_cluster"` names exactly how this item is covered.
+6. Before moving more than three items in one run, build a per-item readiness matrix: item id, original acceptance, evidence level, coverage, result, unchecked risks, and next honest status.
+7. If acceptance cannot be safely checked, create `blocker` evidence or a blocker note and keep/reopen the item according to reality. Do not convert blocked work to pass.
+8. When using the API, either call `/api/items/add-evidence` before the status change or include the `evidence` object in `/api/items/update-status` or `/api/items/resolve`.
 
 ## Compact Regression Matrix
 
@@ -351,7 +358,7 @@ For batch work, audits, broad sweeps, or any run that must survive session compa
 
 ## Commit And Handoff
 
-For completed code changes from a Scout item, create a focused git commit after final verification unless the user explicitly says not to commit or the repository policy forbids commits.
+For completed code changes from a Scout item, create a focused git commit after final verification unless the user explicitly says not to commit or the repository policy forbids commits. Invoking a Scout execution command such as `/scout-one`, `/scout-all`, or `/scout-review` counts as permission to create the focused commits required for Scout handoff; it does not count as permission to push, deploy, or include unrelated changes.
 
 1. Commit only the files that belong to the Scout item. Do not include unrelated local changes, generated secrets, local env files, private runbooks, or incidental reports.
 2. Keep the commit message in the repository's required language.
@@ -383,6 +390,8 @@ When the user wants to complete many Scout items before deploying, keep local wo
 5. If a later local item reveals a regression in an earlier reviewed item before deploy, move the earlier item back to `in_progress`, explain why in Scout, and update the fix before deploy.
 6. When the user asks to deploy after a batch, treat that as a phase change: deploy the accumulated reviewed work, then verify the `review` and `testing` queues on staging.
 7. Different cases may need different checks. Choose item-specific staging verification from the item's evidence and changed surface instead of forcing one universal checklist.
+8. Do not claim every queued item at batch start. Claim an item only when implementation or active verification for that item or shared-root cluster starts.
+9. Before a batch status update, prepare a readiness matrix and update only rows whose individual evidence satisfies the status gate.
 
 ## Deploy Path Discovery
 
@@ -484,9 +493,9 @@ Status meanings:
 Status transition algorithm for OpenCode:
 
 1. `new` -> `in_progress`: If the item is actionable and the agent is starting now, call `/api/items/claim`. Add or keep a short start note. Do not claim items that are unclear, blocked before ownership, or owned by someone else unless instructed.
-2. `in_progress` -> `review`: Use only after the fix is implemented, final local checks passed, browser/runtime checks passed when relevant, final diff was reviewed, and a commit or PR reference exists unless explicitly skipped. Add inline `evidence` in `/api/items/update-status` with `status:"review"`, then add the Russian handoff note if not already added.
+2. `in_progress` -> `review`: Use only after the fix is implemented, final local checks passed, browser/runtime checks passed when relevant, final diff was reviewed, and a commit or PR reference exists. Add inline `evidence` with `result:"pass"`, an appropriate `level`, `coverage:"item"` or justified cluster coverage, and `commitSha` in `/api/items/update-status` with `status:"review"`, then add the Russian handoff note if not already added.
 3. `review` -> `testing`: Use when target-environment verification is starting or explicitly assigned but not finished. Add a Russian note with environment, URL/route, owner if known, checks planned or in progress, and blockers if any.
-4. `review`/`testing` -> `done`: Use only after canonical deploy or accepted target-environment verification passed. Add inline `evidence` in `/api/items/resolve` with deployed/staging/production environment, URL when applicable, deploy/commit SHA when relevant, and the observed result. Add a Russian completion note with the target environment and remaining risks.
+4. `review`/`testing` -> `done`: Use only after canonical deploy or accepted target-environment verification passed. Add inline `evidence` in `/api/items/resolve` with `result:"pass"`, `level:"staging_acceptance"`, `"production_acceptance"`, `"user_acceptance"`, or explicit `"local_acceptance"`, URL when applicable, deploy/commit SHA when relevant, and the observed result. Add a Russian completion note with the target environment and remaining risks.
 5. `in_progress` -> `done`: Avoid by default. Use only for non-deploy work, explicit user acceptance, or work already verified on the target environment. The same `done` evidence requirements apply. If local-only verification is the strongest evidence, move to `review`, not `done`.
 6. `review`/`testing` -> `in_progress`: If staging/user/reviewer verification fails or the handoff/verification evidence is incomplete, add a failure note, then call `/api/items/update-status` with `status:"in_progress"` when the current status is `review` or `testing`.
 7. `done` or `cancelled` -> `new`/`in_progress`: Never use `/api/items/update-status` for this. Call `/api/items/reopen`; pass `status:"in_progress"` only when the agent is immediately taking ownership, otherwise omit `status` to reopen as `new`. Add the failure/blocker note before or immediately after reopening.
@@ -496,7 +505,7 @@ Hard rules for the agent:
 
 - Never mark `review`, `testing`, or `done` because code was edited, tests passed once, or deploy succeeded by itself.
 - Never mark `done` from local evidence alone unless the task has no deployed/user-visible runtime or the user explicitly accepted the result.
-- Never move an item to `review` or `done` without structured evidence. Prefer passing `evidence` in the same status API call.
+- Never move an item to `review` or `done` without structured evidence that names `result`, `level`, `coverage`, and item-specific `acceptanceScope`. Prefer passing `evidence` in the same status API call.
 - Never use `testing` as a parking status. Use it only when target-environment verification is actively underway or explicitly assigned.
 - If a required precondition is missing, keep the item in the current honest status and add a blocker/progress note. Do not invent evidence to satisfy the gate.
 - If multiple items are covered by one fix, transition each item independently only after its own acceptance condition and evidence are satisfied.
@@ -638,9 +647,10 @@ jq -n \
   --arg scenario "<CHANGE-ME-acceptance-scenario>" \
   --arg action "<CHANGE-ME-action-performed>" \
   --arg visibleResult "<CHANGE-ME-observed-result>" \
+  --arg acceptanceScope "<CHANGE-ME-item-specific-acceptance>" \
   --arg consoleResult "<CHANGE-ME-console-result>" \
   --arg networkResult "<CHANGE-ME-network-result>" \
-  '{itemId:$itemId,kind:"handoff",environment:$environment,role:$role,url:$url,scenario:$scenario,action:$action,visibleResult:$visibleResult,consoleResult:$consoleResult,networkResult:$networkResult}' \
+  '{itemId:$itemId,kind:"handoff",result:"pass",level:"staging_acceptance",coverage:"item",environment:$environment,role:$role,url:$url,scenario:$scenario,action:$action,visibleResult:$visibleResult,acceptanceScope:$acceptanceScope,consoleResult:$consoleResult,networkResult:$networkResult,source:"agent",verifiedAt:now|todateiso8601}' \
 | curl -fsS "$SCOUT_URL/api/items/add-evidence" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
@@ -668,7 +678,7 @@ set +a
 curl -fsS "$SCOUT_URL/api/items/update-status" \
   -H "Authorization: Bearer $SCOUT_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"id":"<CHANGE-ME-item-id>","status":"review","branchName":"<CHANGE-ME-branch>","evidence":{"kind":"handoff","environment":"local","scenario":"<CHANGE-ME-scenario>","action":"<CHANGE-ME-action>","visibleResult":"<CHANGE-ME-result>","consoleResult":"<CHANGE-ME-console>","networkResult":"<CHANGE-ME-network>","commitSha":"<CHANGE-ME-commit>"}}'
+  -d '{"id":"<CHANGE-ME-item-id>","status":"review","branchName":"<CHANGE-ME-branch>","evidence":{"kind":"handoff","result":"pass","level":"browser_acceptance","coverage":"item","environment":"local","scenario":"<CHANGE-ME-scenario>","action":"<CHANGE-ME-action>","visibleResult":"<CHANGE-ME-result>","acceptanceScope":"<CHANGE-ME-item-specific-acceptance>","consoleResult":"<CHANGE-ME-console>","networkResult":"<CHANGE-ME-network>","commitSha":"<CHANGE-ME-commit>","source":"agent","verifiedAt":"<CHANGE-ME-ISO-time>"}}'
 ```
 
 If a PR/MR exists, include `mrUrl` only as the real PR/MR URL, not as a commit label or plain SHA.

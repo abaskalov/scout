@@ -45,13 +45,20 @@ describe('Items routes', () => {
     return body.data;
   }
 
-  function testEvidence(overrides: Record<string, string> = {}) {
+  function testEvidence(overrides: Record<string, unknown> = {}) {
     return {
       kind: 'handoff',
+      result: 'pass',
+      level: 'local_acceptance',
+      coverage: 'item',
       environment: 'local',
       scenario: 'Automated test scenario',
       action: 'Ran the status transition through the API',
       visibleResult: 'The API returned the expected item status',
+      acceptanceScope: 'Single item acceptance path',
+      commitSha: 'abc1234',
+      source: 'agent',
+      verifiedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
       ...overrides,
     };
   }
@@ -234,6 +241,21 @@ describe('Items routes', () => {
   it('POST /resolve — from new fails (invalid transition)', async () => {
     const item = await createTestItem();
     const res = await post('/resolve', { id: item.id }, ctx.developerToken);
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /resolve — rejects weak non-acceptance evidence', async () => {
+    const item = await createTestItem();
+    await post('/claim', { id: item.id }, ctx.developerToken);
+
+    const res = await post('/resolve', {
+      id: item.id,
+      evidence: testEvidence({
+        level: 'api_smoke',
+        scenario: 'Only API smoke was checked',
+      }),
+    }, ctx.developerToken);
+
     expect(res.status).toBe(400);
   });
 
@@ -653,6 +675,28 @@ describe('Items routes', () => {
     const res = await post('/update-status', {
       id: item.id,
       status: 'review',
+    }, ctx.developerToken);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /update-status — review requires commit or MR evidence', async () => {
+    const item = await createTestItem();
+    await post('/claim', { id: item.id }, ctx.developerToken);
+
+    const res = await post('/update-status', {
+      id: item.id,
+      status: 'review',
+      evidence: {
+        kind: 'handoff',
+        result: 'pass',
+        level: 'browser_acceptance',
+        coverage: 'item',
+        environment: 'local',
+        scenario: 'Move item to review without commit evidence',
+        action: 'Checked UI path',
+        visibleResult: 'UI path passes',
+      },
     }, ctx.developerToken);
 
     expect(res.status).toBe(400);

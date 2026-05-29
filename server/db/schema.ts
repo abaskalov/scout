@@ -109,12 +109,18 @@ export const scoutItemEvidence = sqliteTable('scout_item_evidence', {
   kind: text('kind', {
     enum: ['handoff', 'verification', 'audit', 'blocker'],
   }).notNull().default('handoff'),
+  result: text('result', { enum: ['pass', 'fail', 'blocked', 'partial'] }),
+  level: text('level', {
+    enum: ['static', 'typecheck', 'api_smoke', 'browser_smoke', 'browser_acceptance', 'local_acceptance', 'staging_acceptance', 'production_acceptance', 'user_acceptance'],
+  }),
+  coverage: text('coverage', { enum: ['item', 'shared_root_cluster', 'route_sweep', 'audit_sample'] }),
   environment: text('environment').notNull(),
   role: text('role'),
   url: text('url'),
   scenario: text('scenario').notNull(),
   action: text('action').notNull(),
   visibleResult: text('visible_result').notNull(),
+  acceptanceScope: text('acceptance_scope'),
   consoleResult: text('console_result'),
   networkResult: text('network_result'),
   apiResult: text('api_result'),
@@ -124,6 +130,9 @@ export const scoutItemEvidence = sqliteTable('scout_item_evidence', {
   commitSha: text('commit_sha'),
   deploySha: text('deploy_sha'),
   risks: text('risks'),
+  uncheckedRisks: text('unchecked_risks'),
+  source: text('source', { enum: ['agent', 'human', 'ci', 'deploy', 'audit'] }),
+  verifiedAt: text('verified_at'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 }, (table) => [
   index('idx_evidence_item_created').on(table.itemId, table.createdAt),

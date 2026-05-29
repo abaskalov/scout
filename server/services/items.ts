@@ -26,12 +26,16 @@ const VALID_TRANSITIONS: Record<ItemStatus, ItemStatus[]> = {
 
 type ItemEvidenceInput = {
   kind?: 'handoff' | 'verification' | 'audit' | 'blocker';
+  result?: 'pass' | 'fail' | 'blocked' | 'partial';
+  level?: 'static' | 'typecheck' | 'api_smoke' | 'browser_smoke' | 'browser_acceptance' | 'local_acceptance' | 'staging_acceptance' | 'production_acceptance' | 'user_acceptance';
+  coverage?: 'item' | 'shared_root_cluster' | 'route_sweep' | 'audit_sample';
   environment: string;
   role?: string;
   url?: string;
   scenario: string;
   action: string;
   visibleResult: string;
+  acceptanceScope?: string;
   consoleResult?: string;
   networkResult?: string;
   apiResult?: string;
@@ -41,7 +45,17 @@ type ItemEvidenceInput = {
   commitSha?: string;
   deploySha?: string;
   risks?: string;
+  uncheckedRisks?: string;
+  source?: 'agent' | 'human' | 'ci' | 'deploy' | 'audit';
+  verifiedAt?: string;
 };
+
+const DONE_EVIDENCE_LEVELS = new Set<ItemEvidenceInput['level']>([
+  'local_acceptance',
+  'staging_acceptance',
+  'production_acceptance',
+  'user_acceptance',
+]);
 
 function now(): string {
   return new Date().toISOString();
@@ -75,12 +89,16 @@ function addEvidence(
     itemId,
     userId,
     kind: evidence.kind ?? 'handoff',
+    result: evidence.result,
+    level: evidence.level,
+    coverage: evidence.coverage,
     environment: evidence.environment,
     role: evidence.role,
     url: evidence.url,
     scenario: evidence.scenario,
     action: evidence.action,
     visibleResult: evidence.visibleResult,
+    acceptanceScope: evidence.acceptanceScope,
     consoleResult: evidence.consoleResult,
     networkResult: evidence.networkResult,
     apiResult: evidence.apiResult,
@@ -90,35 +108,54 @@ function addEvidence(
     commitSha: evidence.commitSha,
     deploySha: evidence.deploySha,
     risks: evidence.risks,
+    uncheckedRisks: evidence.uncheckedRisks,
+    source: evidence.source,
+    verifiedAt: evidence.verifiedAt,
     createdAt: now(),
   }).run();
   return id;
 }
 
-function hasFreshEvidence(itemId: string, itemUpdatedAt: string): boolean {
+function hasFreshEvidence(itemId: string, itemUpdatedAt: string, newStatus: ItemStatus, mrUrl?: string): boolean {
   const updatedAt = Date.parse(itemUpdatedAt);
   if (Number.isNaN(updatedAt)) return false;
 
-  const evidence = db.select({ createdAt: scoutItemEvidence.createdAt })
+  const evidence = db.select()
     .from(scoutItemEvidence)
     .where(eq(scoutItemEvidence.itemId, itemId))
     .all();
 
   return evidence.some((entry) => {
     const createdAt = Date.parse(entry.createdAt);
-    return !Number.isNaN(createdAt) && createdAt >= updatedAt;
+    return !Number.isNaN(createdAt) && createdAt >= updatedAt && isEvidenceStrongEnough(newStatus, entry, mrUrl);
   });
+}
+
+function isEvidenceStrongEnough(
+  newStatus: ItemStatus,
+  evidence: { result?: ItemEvidenceInput['result'] | null; level?: ItemEvidenceInput['level'] | null; commitSha?: string | null },
+  mrUrl?: string,
+): boolean {
+  if (newStatus !== 'review' && newStatus !== 'done') return true;
+  if (evidence.result !== 'pass') return false;
+  if (!evidence.level) return false;
+  if (newStatus === 'review') return Boolean(evidence.commitSha || mrUrl);
+  return DONE_EVIDENCE_LEVELS.has(evidence.level);
 }
 
 function requireHandoffEvidence(
   item: typeof scoutItems.$inferSelect,
   newStatus: ItemStatus,
   evidence?: ItemEvidenceInput,
+  extra?: { mrUrl?: string },
 ): void {
   if (newStatus !== 'review' && newStatus !== 'done') return;
-  if (evidence) return;
-  if (hasFreshEvidence(item.id, item.updatedAt)) return;
-  throw new ValidationError('Fresh structured evidence is required before moving item to review or done', 'EVIDENCE_REQUIRED');
+  if (evidence && isEvidenceStrongEnough(newStatus, evidence, extra?.mrUrl)) return;
+  if (hasFreshEvidence(item.id, item.updatedAt, newStatus, extra?.mrUrl)) return;
+  if (newStatus === 'review') {
+    throw new ValidationError('Review requires fresh passing structured evidence with a commit SHA or MR URL', 'REVIEW_EVIDENCE_REQUIRED');
+  }
+  throw new ValidationError('Done requires fresh passing target-acceptance evidence', 'DONE_EVIDENCE_REQUIRED');
 }
 
 function saveFile(base64: string, dir: string, ext: string): string {
@@ -293,7 +330,7 @@ export function updateItemStatus(
   }
 
   validateTransition(item.status as ItemStatus, newStatus);
-  requireHandoffEvidence(item, newStatus, extra?.evidence);
+  requireHandoffEvidence(item, newStatus, extra?.evidence, extra);
 
   return db.transaction((tx) => {
     const updateData: Record<string, unknown> = {

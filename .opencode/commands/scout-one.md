@@ -13,6 +13,8 @@ Arguments: `$ARGUMENTS` is optional hint only: item id, item URL, project, or sh
 
 Use the skill as the source of truth for intake, related-item checks, implementation, verification, commit/deploy decisions, structured evidence, Russian Scout notes, and status transitions.
 
+This command explicitly allows focused local commits required for Scout handoff. Do not push or deploy unless the repository workflow or user request explicitly allows it.
+
 Boundaries:
 - Do not start a second unrelated Scout item.
 - If related items share the same root cause, link/update them only when their own acceptance condition can be checked.

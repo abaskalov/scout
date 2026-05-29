@@ -23,8 +23,18 @@ When this skill is active, OpenCode is the operator of the Scout item lifecycle.
 4. Prefer one atomic Scout status API call that includes the `evidence` object when moving to `review` or `done`. Use `/api/items/add-evidence` before the status call only when the evidence must exist independently before the transition.
 5. Treat `note` items as AI-triage input, not as developer chores. Convert actionable notes to `task` yourself when the desired work is clear enough; otherwise link, cancel, or ask one focused Scout question.
 6. Keep user-facing chat short. Durable operational detail belongs in Scout notes and structured evidence, not in chat.
-7. Treat Scout slash commands as mode selectors. The skill is the source of truth; do not duplicate long command checklists in chat, Scout notes, or final summaries.
-8. For batch work, process one cohesive item or shared-root cluster at a time when evidence supports clustering. Status transitions, evidence, and notes still remain item-specific.
+7. Treat `/scout` as the only Scout execution command. The first responsibility of the agent is to infer the correct mode from arguments and live queue state, not to ask the user to choose a mode.
+8. For full-queue work, process one cohesive item or shared-root cluster at a time when evidence supports clustering. Status transitions, evidence, and notes still remain item-specific.
+
+## Single Command Mode Selection
+
+The slash command surface is intentionally one command: `/scout`. Optimize this workflow for AI-agent execution, not for human runbook readability.
+
+1. If the user provides a Scout item id or item URL, run single-item mode: fetch that item, inspect related items, and handle the item end-to-end. Include related items only when evidence shows the same root cause or a direct blocker.
+2. If no item id or URL is provided, run full active queue mode. Continue through all actionable `testing`, `review`, `in_progress`, `new`, and triage-worthy `note` items until no item can honestly move further with the available access and safety constraints.
+3. Full active queue mode replaces old one/all/review/readiness commands. Always build the readiness matrix internally; do not expose it unless it affects the final decision, a blocker, or the user's understanding.
+4. Audit `done` items only when the user's request explicitly asks to recheck completed/closed/done work. Normal `/scout` work does not disturb closed items.
+5. When the user's request is ambiguous, prefer full active queue mode. Ask the user only if acting could reopen done work, perform destructive actions, or choose between conflicting product outcomes.
 
 ## Professional Ownership Mode
 
@@ -104,14 +114,16 @@ Use that prefix only inside the command process. Do not echo `SCOUT_API_KEY`, to
 
 When the user asks to work from Scout:
 
-1. Identify the item id from the prompt.
-2. If no item id is given, use `SCOUT_PROJECT_SLUG` or the user's project name to find the relevant project, then inspect the candidate queue before choosing work.
-3. Fetch the full item before editing code.
-4. Read the item type (`bug`, `note`, `task`), source, message, status, priority, labels, created date, URL, route, component hints, selector, element text/HTML, screenshot path, session recording path, existing notes, assignee, branch, and PR link.
-5. If the item is a `note`, run `AI Note Triage Algorithm` before any code work. Do not claim a note directly.
-6. Decide whether the resulting item is actionable now.
-7. If actionable, leave a concise Scout note that you are taking it and what local repo/branch you will use.
-8. Claim the item or move it to `in_progress` only when you are actually starting work.
+1. Detect whether the prompt contains a Scout item id or item URL.
+2. If an item id or URL is present, fetch that item first and run single-item mode.
+3. If no item id or URL is present, use `SCOUT_PROJECT_SLUG` or the user's project name to find the relevant project, then run full active queue mode.
+4. In full active queue mode, inspect `testing`, `review`, `in_progress`, `new`, and triage-worthy `note` items before choosing work. Do not stop after one item unless the remaining queue is honestly blocked, waiting on target verification, not actionable, or unsafe.
+5. For every item that may move, fetch the full item before editing code or changing status.
+6. Read the item type (`bug`, `note`, `task`), source, message, status, priority, labels, created date, URL, route, component hints, selector, element text/HTML, screenshot path, session recording path, existing notes, assignee, branch, PR link, evidence, and related items.
+7. If the item is a `note`, run `AI Note Triage Algorithm` before any code work. Do not claim a note directly.
+8. Decide whether the resulting item is actionable now and what the furthest honest next status can be.
+9. If actionable, leave a concise Scout note that you are taking it and what local repo/branch you will use.
+10. Claim the item or move it to `in_progress` only when you are actually starting active implementation or verification for that item or shared-root cluster.
 
 ## Scout Item Types
 
@@ -168,11 +180,14 @@ When selecting work from a project rather than a specific item, first inspect th
 
 Recommended selection order:
 
-1. Critical items, oldest first, grouped by suspected root cause.
-2. High priority regressions or blockers, oldest first.
-3. Actionable notes related to critical/high work, converted to tasks before implementation.
-4. Related clusters where one fix may resolve multiple open items.
-5. Remaining oldest actionable bugs, tasks, or convertible notes within the requested scope.
+1. `testing` items whose target-environment verification can be completed now: finish to `done`, return failures to `in_progress`, or record exact blockers.
+2. `review` items: verify accepted target environment when available; otherwise leave with explicit blocker or keep ready for target verification.
+3. Active or abandoned `in_progress` items owned by this agent/user context: continue, fix, verify, and hand off or document blockers.
+4. Critical items, oldest first, grouped by suspected root cause.
+5. High priority regressions or blockers, oldest first.
+6. Actionable notes related to critical/high work, converted to tasks before implementation.
+7. Related clusters where one fix may resolve multiple open items.
+8. Remaining oldest actionable bugs, tasks, or convertible notes within the requested scope.
 
 ## Related Items And Duplicate Work
 
@@ -208,15 +223,16 @@ Rules for handling clusters:
 8. If items conflict, link them as `conflicts`, stop, and ask a product/owner question in Scout instead of choosing arbitrarily.
 9. If no related items are found, say that in the completion note so the absence of links is intentional.
 
-## Batch Efficiency
+## Full Queue Efficiency
 
-When a user asks for many Scout items, optimize for correct throughput, not mechanical item-by-item repetition.
+When `/scout` runs without a specific item id or URL, optimize for correct full-queue throughput, not mechanical item-by-item repetition.
 
 1. Build the live queue once at the start of the batch, then refresh it after a status-changing batch or when new information could change priority. Do not refetch the whole queue after every read-only step.
 2. Cluster items only with evidence: same route, component, root cause, deploy target, or acceptance path. Keep unrelated items separate even if they are close in the UI.
 3. For a shared-root cluster, make one cohesive code change and one verification matrix, then write item-specific evidence/notes/statuses for each covered Scout item.
 4. Avoid status noise: do not claim every candidate just because it was listed. Claim an item when implementation or active verification starts.
 5. Keep the ledger as the durable progress source for batch state. Do not paste full queue snapshots or every API response into chat or Scout notes.
+6. Continue until every active item in scope is either `done`, `review`, `testing`, `in_progress` with an exact blocker/failure, `cancelled`, or left as a non-actionable `note` with one focused question/blocker.
 
 ## Triage
 
@@ -358,7 +374,7 @@ For batch work, audits, broad sweeps, or any run that must survive session compa
 
 ## Commit And Handoff
 
-For completed code changes from a Scout item, create a focused git commit after final verification unless the user explicitly says not to commit or the repository policy forbids commits. Invoking a Scout execution command such as `/scout-one`, `/scout-all`, or `/scout-review` counts as permission to create the focused commits required for Scout handoff; it does not count as permission to push, deploy, or include unrelated changes.
+For completed code changes from a Scout item, create a focused git commit after final verification unless the user explicitly says not to commit or the repository policy forbids commits. Invoking `/scout` counts as permission to create the focused commits required for Scout handoff; it does not count as permission to push, deploy, or include unrelated changes.
 
 1. Commit only the files that belong to the Scout item. Do not include unrelated local changes, generated secrets, local env files, private runbooks, or incidental reports.
 2. Keep the commit message in the repository's required language.

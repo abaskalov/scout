@@ -12,7 +12,7 @@ fi
 
 mkdir -p "$target_dir"
 
-for stale_command in scout-resume.md scout-triage.md; do
+for stale_command in scout-resume.md scout-triage.md scout-one.md scout-all.md scout-review.md scout-audit.md scout-readiness.md; do
   rm -f "$target_dir/$stale_command"
 done
 

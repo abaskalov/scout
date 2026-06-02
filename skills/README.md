@@ -8,14 +8,9 @@ Use this skill when an AI coding agent should take a Scout item and handle it ma
 
 ## OpenCode Commands
 
-Scout also ships simple OpenCode slash commands in `.opencode/commands/`. These commands are thin entrypoints into `scout-manual-workflow`; keep lifecycle rules in the skill and keep commands focused on invocation mode.
+Scout ships one OpenCode slash command in `.opencode/commands/`: `/scout`. It is a thin entrypoint into `scout-manual-workflow`; keep lifecycle rules in the skill and let the agent infer single-item, full active queue, review/testing verification, or done-audit mode from arguments and live queue state.
 
-- `/scout-one`: finish one Scout item completely, or choose the next actionable item when no item is specified.
-- `/scout-all`: finish all actionable Scout items in scope until they are done, waiting for unavailable/ongoing target verification, or honestly blocked.
-- `/scout-review`: finish items already waiting in review/testing by verifying the target environment, closing passing items, and fixing/reopening failures.
-- `/scout-audit`: audit completed items with fresh evidence and repair or reopen anything that is not actually accepted.
-
-All commands work without arguments. Any text after the command is only an optional hint, not the primary interface.
+The command works without arguments. Any text after `/scout` is an optional hint, item id, item URL, project, branch, deploy target, or scope, not a separate mode selector.
 
 Install the commands globally for use in any repository:
 

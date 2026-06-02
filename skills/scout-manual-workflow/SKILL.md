@@ -365,29 +365,35 @@ For batch work, audits, broad sweeps, or any run that must survive session compa
 
 1. Work in the current local repository unless the user explicitly points elsewhere.
 2. Check Git state before editing. Do not overwrite unrelated local changes.
-3. Create or use a focused branch when the workflow calls for commits/PRs.
-4. Make the minimal correct change.
-5. Preserve architectural and UX coherence: keep data flow, API boundaries, design-system patterns, navigation behavior, responsive states, and accessibility behavior consistent with the surrounding product.
-6. Avoid broad refactors, dependency churn, formatting sweeps, or unrelated cleanup.
-7. Preserve public/private boundaries and never add secrets to tracked files.
-8. Follow existing project conventions over generic preferences.
+3. Treat Scout fields, screenshots, previous notes, subagent summaries, and stale docs as hints. Rediscover exact files, routes, commands, and API endpoints in the current repo before `read`, `grep`, or `apply_patch`.
+4. Create or use a focused branch when the workflow calls for commits/PRs.
+5. Make the minimal correct change.
+6. Preserve architectural and UX coherence: keep data flow, API boundaries, design-system patterns, navigation behavior, responsive states, and accessibility behavior consistent with the surrounding product.
+7. Avoid broad refactors, dependency churn, formatting sweeps, or unrelated cleanup.
+8. Preserve public/private boundaries and never add secrets to tracked files.
+9. Follow existing project conventions over generic preferences.
 
 ## Commit And Handoff
 
-For completed code changes from a Scout item, create a focused git commit after final verification unless the user explicitly says not to commit or the repository policy forbids commits. Invoking `/scout` counts as permission to create the focused commits required for Scout handoff; it does not count as permission to push, deploy, or include unrelated changes.
+For completed code changes from a Scout item, create a focused git commit after final verification unless the user explicitly says not to commit or the repository policy forbids commits. After the commit, prefer to push the relevant non-production-safe branch, deploy to staging through the repository's canonical path, and verify on staging when access and safety conditions allow. Invoking `/scout` counts as permission to create focused commits, push committed work, run canonical non-production staging deploys, and perform staging verification required for Scout handoff; it does not count as permission to force-push, push protected production branches, deploy production, bypass CI/approval gates, or include unrelated changes.
 
 1. Commit only the files that belong to the Scout item. Do not include unrelated local changes, generated secrets, local env files, private runbooks, or incidental reports.
 2. Keep the commit message in the repository's required language.
 3. Include a durable Scout reference in the commit body, for example `Scout-Item: <SCOUT_ITEM_URL_OR_ID>`. If a project uses issue-style refs, follow that existing convention.
-4. Do not push unless the user or repo workflow explicitly asks for push.
-5. After the commit succeeds, update Scout with the branch name and either the real PR/MR URL or the commit hash in the Scout note. If the commit cannot be created, explain the exact blocker in Scout and do not mark the item ready for review.
+4. Before pushing, inspect `git status`, `git diff`, and recent history; stage and push only the intended Scout-item commit(s), never unrelated local changes.
+5. Push the committed branch when repo workflow allows and the remote target is non-production-safe. If branch policy, credentials, protected branch rules, or unrelated dirty state make pushing unsafe, record the blocker in Scout and continue only to the furthest honest local status.
+6. Deploy only to staging or another explicit non-production target through the canonical repository path when available. Never treat production as staging, and never invent a manual deploy fallback when the canonical path is absent or failing.
+7. After the commit, push, deploy, or verification step succeeds, update Scout with the branch name and either the real PR/MR URL or the commit hash in the Scout note. If the commit cannot be created, explain the exact blocker in Scout and do not mark the item ready for review.
 
-Default local completion flow:
+Default completion flow with staging preference:
 
 1. Run the repo-required local checks and the narrowest relevant runtime/browser checks.
 2. Commit the fix with a Scout item reference.
-3. Add structured evidence for the checked path, then a Russian completion note with root cause, changed behavior, verification, commit hash, and remaining risks.
-4. Move the item to `review`, not `done`. `review` means locally fixed and ready for deploy/staging validation.
+3. Push the committed branch when repo workflow and branch safety allow it.
+4. Discover and run the canonical staging deploy when a safe staging path exists and the required access is available.
+5. Verify the item-specific acceptance path on staging. For user-visible work, use browser evidence for the reported journey; API or health checks are supporting evidence only.
+6. If staging acceptance passes, add structured staging evidence, write a Russian completion note with commit/deploy reference, and move the item to `done`.
+7. If staging is not relevant, cannot be attempted, or cannot be completed safely, add structured evidence, write a Russian handoff/blocker note, and move the item only to the status supported by the exact evidence and blocker. Local-only `done` is allowed only for non-deploy work, explicit user acceptance, or another status-rule exception.
 
 When updating Scout status after a local commit:
 
@@ -395,43 +401,44 @@ When updating Scout status after a local commit:
 2. If there is only a local commit SHA and no PR/MR, do not pass the SHA in `mrUrl`.
 3. Put the commit SHA in the Scout note, then call `update-status` with `branchName` and without `mrUrl`.
 
-## Batch Work Before Deploy
+## Batch Work And Staging
 
-When the user wants to complete many Scout items before deploying, keep local work and deployment as separate phases.
+When `/scout` handles many items, keep local work atomic but do not stop at local handoff when safe staging verification can be completed.
 
-1. Process one item or one evidence-backed shared-root cluster at a time through the normal local lifecycle: claim only active items, diagnose, fix, verify locally, commit with Scout reference, add Russian notes, and move covered items to `review` individually.
-2. Do not deploy after each item unless the user explicitly asks or the item is an urgent hotfix.
-3. Maintain clear verification queues: every item in `review` must have a commit/branch/PR reference, local verification evidence, and a Russian handoff note; every item in `testing` must have an active target-environment verification owner or a recorded blocker.
-4. If several items share one root cause, one cohesive commit may reference multiple Scout items. Add notes to each covered item and verify each item's acceptance condition.
-5. If a later local item reveals a regression in an earlier reviewed item before deploy, move the earlier item back to `in_progress`, explain why in Scout, and update the fix before deploy.
-6. When the user asks to deploy after a batch, treat that as a phase change: deploy the accumulated reviewed work, then verify the `review` and `testing` queues on staging.
+1. Process one item or one evidence-backed shared-root cluster at a time: claim only active items, diagnose, fix, verify locally, commit with Scout reference, and add Russian notes/evidence for each covered item.
+2. After a completed item, shared-root cluster, or small safe batch, push and deploy to staging when the canonical staging path exists and batching does not hide item-specific acceptance. Avoid one deploy per trivial item only when a short batch reduces churn without delaying critical work.
+3. Maintain clear verification queues: every item in `review` must have a commit/branch/PR reference, local verification evidence, and a Russian handoff or staging blocker note; every item in `testing` must have active target-environment verification underway or a recorded blocker.
+4. If several items share one root cause, one cohesive commit may reference multiple Scout items. Add notes to each covered item and verify each item's acceptance condition locally and, when possible, on staging.
+5. If a later local item reveals a regression in an earlier reviewed item before staging acceptance, move the earlier item back to `in_progress`, explain why in Scout, and update the fix before deploy.
+6. After a staging deploy, verify the `review` and `testing` items linked to the deployed branch/commit/PR, then move only individually passing items to `done`.
 7. Different cases may need different checks. Choose item-specific staging verification from the item's evidence and changed surface instead of forcing one universal checklist.
 8. Do not claim every queued item at batch start. Claim an item only when implementation or active verification for that item or shared-root cluster starts.
 9. Before a batch status update, prepare a readiness matrix and update only rows whose individual evidence satisfies the status gate.
 
 ## Deploy Path Discovery
 
-Before any deploy or target-environment verification, discover the one canonical path for the current repository instead of trying ad hoc commands.
+Before any push, deploy, or target-environment verification, discover the one canonical path for the current repository instead of trying ad hoc commands.
 
 1. Read repo rules first: `AGENTS.md`, README/deploy docs, package scripts, CI workflow files, and existing release notes when present.
 2. If the repo defines a branch order, workflow name, health check, environment, or approval gate, follow that exact path.
-3. For GitHub Actions deploys, use `gh` to inspect workflow definitions, dispatch or monitor the documented workflow, and wait for the relevant run/check conclusion before claiming deploy success.
-4. Do not SSH, run server-side builds, restart services, or choose a manual docker/pm2/systemctl fallback unless repo docs explicitly say that is canonical or the user approves that fallback for the incident.
-5. If the canonical path is missing, ambiguous, unavailable, or fails, stop deploy work, record the blocker in Scout, and leave items in `review`, `testing`, or `in_progress` according to the status rules.
+3. Treat staging and production as separate targets. If the repo exposes only a production deploy path, do not use it as the default staging path; require an explicit user request plus repo-policy approval.
+4. For GitHub Actions deploys, use `gh` to inspect workflow definitions, dispatch or monitor the documented workflow, and wait for the relevant run/check conclusion before claiming deploy success.
+5. Do not SSH, run server-side builds, restart services, or choose a manual docker/pm2/systemctl fallback unless repo docs explicitly say that is canonical or the user approves that fallback for the incident.
+6. If the canonical staging path is missing, ambiguous, unavailable, or fails, stop deploy work, record the blocker in Scout, and leave items in `review`, `testing`, or `in_progress` according to the status rules.
 
 ## Deploy And Staging Verification
 
-When the user explicitly asks to deploy and close verified work, handle the verification queues after a successful deploy.
+When completed work has a commit and the repository provides a canonical non-production staging path, `/scout` should push, deploy to staging, and verify there without waiting for a separate user prompt. Production deploys still require explicit user intent and repo-policy approval.
 
-1. Deploy only through the repository's canonical deploy path and wait for deploy health checks to pass. If the canonical path fails, stop and report the failed run, command, or check; do not invent a manual fallback unless the user explicitly approves it for that incident.
-2. Discover all `review` and `testing` items in scope. If the user says "all review tasks", inspect all `review` and `testing` items for the relevant Scout project; otherwise limit to items linked to the deployed branch/commit/PR.
+1. Deploy only through the repository's canonical staging deploy path and wait for deploy health checks to pass. If the canonical path fails, stop and report the failed run, command, or check; do not invent a manual fallback unless the user explicitly approves it for that incident.
+2. Discover the `review` and `testing` items linked to the deployed branch/commit/PR. If the user says "all review tasks", inspect all `review` and `testing` items for the relevant Scout project.
 3. For each verification item, fetch the full item, notes, evidence, commit/branch/PR fields, related items, and acceptance hints before testing.
 4. Verify on staging, not local: use the deployed staging URL, staging API, browser checks for user-visible work, and targeted API/runtime checks for backend work. For user-visible work, the staging browser check must cover the acceptance path from User Journey Verification; API/curl evidence is support only.
 5. Keep checks item-specific. Do not replace targeted staging verification with a noisy full sweep unless the item itself requires broad coverage.
-6. If staging verification passes, add a Russian staging note with environment, URL, commit/deploy SHA, exact checks, and result; then move the item to `done`.
+6. If staging verification passes, add structured staging evidence and a Russian staging note with environment, URL, commit/deploy SHA, exact checks, and result; then move the item to `done`.
 7. If target verification starts but will continue beyond the current atomic check, move `review` -> `testing` and record what is being tested, by whom, and what evidence is still needed.
 8. If staging verification fails, add a Russian failure note with repro steps, expected/actual behavior, console/network/API evidence, and suspected cause; move the item back to `in_progress` and fix it end-to-end.
-9. After fixing a staging failure, repeat the normal lifecycle: local verification, commit referencing the same Scout item, Scout note, `review`, deploy, staging verification, then `done` only after staging passes.
+9. After fixing a staging failure, repeat the normal lifecycle: local verification, commit referencing the same Scout item, Scout note, push, staging deploy, staging verification, then `done` only after staging passes.
 10. If verification is blocked by access, missing data, unsafe destructive action, or ambiguous expected behavior, leave the item in `review`, `testing`, or `in_progress` according to reality and record the exact blocker in Scout.
 11. Do not mark unrelated review/testing items as `done` just because the deploy succeeded.
 
@@ -444,7 +451,7 @@ Use Scout notes for durable, useful communication:
 - Related items found: item ids and relationship type only when the link matters.
 - Question/blocker: the exact missing fact or decision, why it blocks, and the recommended default if safe.
 - Verification result: checks run and pass/fail result.
-- Handoff: changed behavior, verification, commit/branch/PR, status, and remaining risk.
+- Handoff: changed behavior, verification, commit/branch/PR/deploy, status, and remaining risk.
 - Failure: why it cannot be completed, evidence, and the next owner/action.
 
 Write Scout notes in Russian by default, unless the Scout item or project explicitly uses another language. Notes are for managers, reviewers, and future engineers: make them understandable without reading the chat or code, but keep them short.
@@ -490,7 +497,7 @@ Completion note format:
 ```text
 Итог: <что исправлено или что заблокировано>
 Проверка: <самые важные checks и результат>
-Статус: <review/testing/done/in_progress>, <commit/PR/branch>, <риск или "рисков не вижу">
+Статус: <review/testing/done/in_progress>, <commit/PR/branch/deploy>, <риск или "рисков не вижу">
 ```
 
 ## Status Handling
@@ -501,7 +508,7 @@ Status meanings:
 
 - `new`: not owned by the agent now, or reopened for later triage.
 - `in_progress`: the agent owns the item and is actively working, investigating, fixing, or waiting on a direct blocker after taking ownership.
-- `review`: local work is complete and ready for target-environment verification: final local verification is fresh, a focused commit or PR reference exists, structured evidence exists, and a Russian handoff note exists.
+- `review`: local work is complete and ready for target-environment verification, or staging could not be attempted safely yet: final local verification is fresh, a focused commit or PR reference exists, structured evidence exists, and a Russian handoff or staging blocker note exists.
 - `testing`: target-environment verification has started or is actively assigned: the item has left handoff, but acceptance has not passed yet.
 - `done`: target-environment acceptance passed: staging/production/deployed verification or explicit user acceptance exists, structured evidence exists for that environment, and a Russian completion note exists.
 - `cancelled`: the agent determined the item is duplicate, invalid, not applicable, intentionally abandoned, or outside scope, and recorded why in Scout.
@@ -509,10 +516,10 @@ Status meanings:
 Status transition algorithm for OpenCode:
 
 1. `new` -> `in_progress`: If the item is actionable and the agent is starting now, call `/api/items/claim`. Add or keep a short start note. Do not claim items that are unclear, blocked before ownership, or owned by someone else unless instructed.
-2. `in_progress` -> `review`: Use only after the fix is implemented, final local checks passed, browser/runtime checks passed when relevant, final diff was reviewed, and a commit or PR reference exists. Add inline `evidence` with `result:"pass"`, an appropriate `level`, `coverage:"item"` or justified cluster coverage, and `commitSha` in `/api/items/update-status` with `status:"review"`, then add the Russian handoff note if not already added.
+2. `in_progress` -> `review`: Use only after the fix is implemented, final local checks passed, browser/runtime checks passed when relevant, final diff was reviewed, and a commit or PR reference exists, and only when staging deployment/verification cannot be completed safely in the same run. Add inline `evidence` with `result:"pass"`, an appropriate `level`, `coverage:"item"` or justified cluster coverage, and `commitSha` in `/api/items/update-status` with `status:"review"`, then add the Russian handoff or staging blocker note if not already added.
 3. `review` -> `testing`: Use when target-environment verification is starting or explicitly assigned but not finished. Add a Russian note with environment, URL/route, owner if known, checks planned or in progress, and blockers if any.
 4. `review`/`testing` -> `done`: Use only after canonical deploy or accepted target-environment verification passed. Add inline `evidence` in `/api/items/resolve` with `result:"pass"`, `level:"staging_acceptance"`, `"production_acceptance"`, `"user_acceptance"`, or explicit `"local_acceptance"`, URL when applicable, deploy/commit SHA when relevant, and the observed result. Add a Russian completion note with the target environment and remaining risks.
-5. `in_progress` -> `done`: Avoid by default. Use only for non-deploy work, explicit user acceptance, or work already verified on the target environment. The same `done` evidence requirements apply. If local-only verification is the strongest evidence, move to `review`, not `done`.
+5. `in_progress` -> `done`: Use only for non-deploy work, explicit user acceptance, or work already pushed, deployed, and verified on the target environment in the same run. The same `done` evidence requirements apply. If local-only verification is the strongest evidence, move to `review`, not `done`.
 6. `review`/`testing` -> `in_progress`: If staging/user/reviewer verification fails or the handoff/verification evidence is incomplete, add a failure note, then call `/api/items/update-status` with `status:"in_progress"` when the current status is `review` or `testing`.
 7. `done` or `cancelled` -> `new`/`in_progress`: Never use `/api/items/update-status` for this. Call `/api/items/reopen`; pass `status:"in_progress"` only when the agent is immediately taking ownership, otherwise omit `status` to reopen as `new`. Add the failure/blocker note before or immediately after reopening.
 8. Any status -> `cancelled`: Use only when the item should not be implemented. Add a Russian note explaining duplicate/invalid/out-of-scope/not-reproducible rationale and link related items when relevant, then call `/api/items/cancel` if the API transition is valid.
@@ -521,6 +528,7 @@ Hard rules for the agent:
 
 - Never mark `review`, `testing`, or `done` because code was edited, tests passed once, or deploy succeeded by itself.
 - Never mark `done` from local evidence alone unless the task has no deployed/user-visible runtime or the user explicitly accepted the result.
+- Do not stop at `review` solely out of habit when a safe canonical staging deploy and item-specific staging acceptance can be completed now.
 - Never move an item to `review` or `done` without structured evidence that names `result`, `level`, `coverage`, and item-specific `acceptanceScope`. Prefer passing `evidence` in the same status API call.
 - Never use `testing` as a parking status. Use it only when target-environment verification is actively underway or explicitly assigned.
 - If a required precondition is missing, keep the item in the current honest status and add a blocker/progress note. Do not invent evidence to satisfy the gate.
@@ -548,7 +556,8 @@ Before handoff:
 5. For frontend/user-visible changes, verify in a browser against the local app when feasible, matching the reported user journey instead of only checking the inferred root cause.
 6. For backend/API changes, verify with tests and a targeted runtime/API check when feasible.
 7. For data/deploy changes, verify with fresh state evidence and safe backups when relevant.
-8. If a check cannot run, document why and what evidence was used instead.
+8. After a completed commit, push and staging-verify when the canonical staging path is available and safe; if not, document the exact missing path, access, safety approval, or failure.
+9. If a check cannot run, document why and what evidence was used instead.
 
 ## Definition Of Done
 
@@ -559,8 +568,9 @@ Do not present the item as complete until all of these are true:
 3. Fresh verification evidence exists after the final edit: commands, browser checks, API checks, or a documented reason why a check cannot run.
 4. Frontend, dashboard, widget, or other user-visible changes have browser verification of the reported user journey or acceptance path when feasible; API/curl-only evidence is insufficient for UI bugs.
 5. A focused commit exists for completed code changes and references the Scout item, unless explicitly skipped with a documented reason.
-6. Scout has structured evidence plus Russian notes covering start, root cause when relevant, completion or blocker, verification, commit/branch/PR, status change, and remaining risks.
-7. The Scout status reflects reality: `in_progress` while working or blocked on clarification, `review` only when committed and ready for deploy/staging verification, `testing` only while target verification is underway, `done` only after acceptance or documented staging pass, and no silent "left for later" work.
+6. Push, staging deploy, and staging acceptance were completed when a safe canonical staging path existed; otherwise the exact blocker is recorded in Scout.
+7. Scout has structured evidence plus Russian notes covering start, root cause when relevant, completion or blocker, verification, commit/branch/PR/deploy references, status change, and remaining risks.
+8. The Scout status reflects reality: `in_progress` while working or blocked on clarification, `review` only when committed and waiting on a blocked or deferred staging/target verification, `testing` only while target verification is underway, `done` only after acceptance or documented staging pass, and no silent "left for later" work.
 
 Final user response must be short and evidence-based:
 
@@ -569,6 +579,7 @@ Final user response must be short and evidence-based:
 - Verification run after the final change.
 - Scout updates made.
 - Commit created and Scout item reference used, or exact reason no commit was created.
+- Push, deploy, and staging verification performed, or exact reason each was not possible.
 - Anything not completed, with the exact blocker. If nothing remains, say so explicitly.
 
 ## Scout API Reference
